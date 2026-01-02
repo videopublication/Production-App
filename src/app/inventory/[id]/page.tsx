@@ -33,7 +33,7 @@ export default function ItemDetailsPage() {
             if (!params.id) return;
 
             const items = await storage.getEquipment();
-            const found = items.find(i => i.id === params.id);
+            const found = items.find(i => i.id === params.id || i.barcode === params.id);
 
             if (found) {
                 setItem(found);

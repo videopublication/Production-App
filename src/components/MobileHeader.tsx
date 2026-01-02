@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 
 const pageNames: Record<string, string> = {
@@ -20,6 +20,7 @@ const pageNames: Record<string, string> = {
 export const MobileHeader = () => {
     const { user } = useAuth();
     const pathname = usePathname();
+    const router = useRouter();
 
     if (!user) return null;
 
@@ -49,8 +50,20 @@ export const MobileHeader = () => {
 
             {/* Content */}
             <div className="relative flex items-center justify-between h-11 px-4 pt-safe-top">
-                {/* Left spacer for centering */}
-                <div className="w-[72px]" />
+                {/* Left Action / Spacer */}
+                <div className="w-[72px] flex items-center">
+                    {pathname === '/profile' && (
+                        <button
+                            onClick={() => router.back()}
+                            className="flex items-center text-[#0071e3] active:opacity-50 transition-opacity -ml-2"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                            </svg>
+                            <span className="text-[17px] font-normal leading-none pb-[1px]">Back</span>
+                        </button>
+                    )}
+                </div>
 
                 {/* Centered title */}
                 <h1 className="text-[17px] font-semibold text-[#1d1d1f] tracking-[-0.4px] absolute left-1/2 transform -translate-x-1/2">

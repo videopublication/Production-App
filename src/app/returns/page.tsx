@@ -11,7 +11,7 @@ import { useToast } from '@/lib/toast-context';
 
 export default function ReturnsPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const [checkedOutItems, setCheckedOutItems] = useState<Equipment[]>([]);
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -25,13 +25,28 @@ export default function ReturnsPage() {
     }, [user]);
 
     useEffect(() => {
-        if (user && !['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
+        if (authLoading) return;
+
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+
+        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
             router.push('/');
             return;
         }
 
         loadCheckedOutItems();
-    }, [user, router, loadCheckedOutItems]);
+    }, [user, router, loadCheckedOutItems, authLoading]);
+
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     const toggleSelection = (id: string) => {
         if (selectedItems.includes(id)) {

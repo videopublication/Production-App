@@ -10,7 +10,7 @@ import { useAuth } from '@/lib/auth';
 
 export default function DashboardPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const [stats, setStats] = useState({
         total: 0,
         available: 0,
@@ -36,14 +36,29 @@ export default function DashboardPage() {
     }, []);
 
     useEffect(() => {
-        if (user && !['MANAGER', 'ADMIN'].includes(user.role)) {
+        if (authLoading) return;
+
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+
+        if (!['MANAGER', 'ADMIN'].includes(user.role)) {
             router.push('/');
             return;
         }
 
         // eslint-disable-next-line react-hooks/set-state-in-effect
         loadDashboardData();
-    }, [user, router, loadDashboardData]);
+    }, [user, router, loadDashboardData, authLoading]);
+
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-5 sm:space-y-8 animate-fade-in">

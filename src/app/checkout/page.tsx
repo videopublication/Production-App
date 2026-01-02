@@ -16,7 +16,7 @@ import { generateTransactionId } from '@/lib/id';
 
 export default function CheckoutPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
 
@@ -61,10 +61,25 @@ export default function CheckoutPage() {
 
     // Redirect if not authorized
     useEffect(() => {
-        if (user && !['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
+        if (authLoading) return;
+
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+
+        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
             router.push('/');
         }
-    }, [user, router]);
+    }, [user, router, authLoading]);
+
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     // Fetch equipment and users on mount
     useEffect(() => {

@@ -14,21 +14,31 @@ import { useAuth } from '@/lib/auth';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
+import { Skeleton } from '@/components/Skeleton';
 
 export default function InventoryPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
     const [items, setItems] = useState<Equipment[]>([]);
     const [users, setUsers] = useState<Record<string, string>>({});
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL'>('ALL');
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+        if (typeof window !== 'undefined') {
+            return (sessionStorage.getItem('inventoryViewMode') as 'grid' | 'list') || 'grid';
+        }
+        return 'grid';
+    });
     const [sortConfig, setSortConfig] = useState<{ key: keyof Equipment | 'assignedToName'; direction: 'asc' | 'desc' } | null>(null);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [isGeneratingQR, setIsGeneratingQR] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        sessionStorage.setItem('inventoryViewMode', viewMode);
+    }, [viewMode]);
 
     const loadData = async () => {
         const [equipmentData, usersData] = await Promise.all([
@@ -45,12 +55,22 @@ export default function InventoryPage() {
     };
 
     useEffect(() => {
+        if (authLoading) return;
+
         if (!user) {
             router.push('/login');
             return;
         }
         loadData();
-    }, [user, router]);
+    }, [user, router, authLoading]);
+
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     const getUserName = (id: string | undefined) => {
         if (!id) return null;
@@ -73,7 +93,8 @@ export default function InventoryPage() {
             result = result.filter(item =>
                 item.name.toLowerCase().includes(q) ||
                 item.barcode.toLowerCase().includes(q) ||
-                item.category.toLowerCase().includes(q)
+                item.category.toLowerCase().includes(q) ||
+                item.serialNumber?.toLowerCase().includes(q) || false
             );
         }
 
@@ -207,7 +228,7 @@ export default function InventoryPage() {
         }
     };
 
-    const handleBulkDownloadQR = async () => {
+    const handleBulkDownloadQR = async (size: 'standard' | 'small') => {
         if (selectedItems.size === 0) {
             alert('Please select at least one item');
             return;
@@ -226,13 +247,23 @@ export default function InventoryPage() {
             const pageWidth = 210;
             const pageHeight = 297;
 
-            const cols = 4;
-            const rows = 5;
-            const qrSize = 35;
+            // Configuration based on size
+            const isSmall = size === 'small';
+            const cols = isSmall ? 7 : 4;
+            const rows = isSmall ? 9 : 5;
+            const qrSize = isSmall ? 16 : 32; // ~50% reduction
+            const fontSize = isSmall ? 6 : 9;
+            const serialFontSize = isSmall ? 7 : 10;
+
             const cellWidth = pageWidth / cols;
             const cellHeight = (pageHeight - 20) / rows;
             const marginTop = 10;
-            const marginLeft = (cellWidth - qrSize) / 2;
+
+            // Calculate offsets to center content in cell
+            // Content width = serialWidth (approx 5mm) + qrSize
+            const serialWidth = isSmall ? 4 : 6;
+            const contentWidth = serialWidth + qrSize;
+            const marginLeft = (cellWidth - contentWidth) / 2;
 
             const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
             const itemsPerPage = cols * rows;
@@ -247,18 +278,55 @@ export default function InventoryPage() {
                     pdf.addPage();
                 }
 
-                const x = col * cellWidth + marginLeft;
-                const y = marginTop + row * cellHeight;
+                const cellX = col * cellWidth;
+                const cellY = marginTop + row * cellHeight;
 
+                // Center everything vertically in the cell
+                // QR Height + Barcode Text Height approx qrSize + 5
+                const contentHeight = qrSize + 5;
+                const startY = cellY + (cellHeight - contentHeight) / 2;
+
+                // 1. Draw Serial Number (Rotated 90deg on the left)
+                if (item.serialNumber) {
+                    // Check if text fits in the height provided (qrSize)
+                    pdf.setFont('helvetica', 'bold');
+                    let currentFontSize = serialFontSize;
+                    pdf.setFontSize(currentFontSize);
+
+                    const textWidth = pdf.getTextWidth(item.serialNumber);
+                    const availableHeight = qrSize; // It's rotated, so width matches height constraint
+
+                    if (textWidth > availableHeight) {
+                        // Scale down to fit
+                        currentFontSize = Math.floor(currentFontSize * (availableHeight / textWidth) * 10) / 10;
+                        // Set hard minimums
+                        const minSize = isSmall ? 3 : 4;
+                        if (currentFontSize < minSize) currentFontSize = minSize;
+                        pdf.setFontSize(currentFontSize);
+                    }
+
+                    // Position: Left of QR, vertically centered relative to QR
+                    const serialX = cellX + marginLeft + 2;
+                    const serialY = startY + qrSize; // align bottom with QR bottom
+                    pdf.text(item.serialNumber, serialX, serialY, { angle: 90 });
+                }
+
+                // 2. Draw QR Code
+                const qrX = cellX + marginLeft + serialWidth;
+                const qrY = startY;
                 const qrUrl = await QRCode.toDataURL(item.barcode, { width: 300, margin: 1 });
-                pdf.addImage(qrUrl, 'PNG', x, y, qrSize, qrSize);
+                pdf.addImage(qrUrl, 'PNG', qrX, qrY, qrSize, qrSize);
 
-                pdf.setFontSize(8);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text(item.barcode, x + qrSize / 2, y + qrSize + 5, { align: 'center' });
+                // 3. Draw Barcode Text (Below QR)
+                pdf.setFontSize(fontSize);
+                pdf.setFont('helvetica', 'normal');
+                // Center text relative to the QR code
+                const textX = qrX + (qrSize / 2);
+                const textY = qrY + qrSize + (isSmall ? 3 : 4);
+                pdf.text(item.barcode, textX, textY, { align: 'center' });
             }
 
-            downloadFile(pdf.output('blob'), `QR_Codes_${selectedItems.size}_items.pdf`, 'application/pdf');
+            downloadFile(pdf.output('blob'), `QR_Codes_${size}_${selectedItems.size}_items.pdf`, 'application/pdf');
             setSelectedItems(new Set());
         } catch (err) {
             console.error('Bulk QR Gen Failed', err);
@@ -357,39 +425,50 @@ export default function InventoryPage() {
                         </label>
                     </div>
                     {selectedItems.size > 0 && (
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={handleBulkDownloadQR}
-                            disabled={isGeneratingQR}
-                            className="gap-2"
-                        >
-                            {isGeneratingQR ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                    </svg>
-                                    Download QR Codes ({selectedItems.size})
-                                </>
-                            )}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleBulkDownloadQR('standard')}
+                                disabled={isGeneratingQR}
+                                className="gap-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                </svg>
+                                Standard QR
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleBulkDownloadQR('small')}
+                                disabled={isGeneratingQR}
+                                className="gap-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Small QR
+                            </Button>
+                        </div>
                     )}
                 </div>
             )}
 
             <PullToRefresh onRefresh={loadData}>
-                {viewMode === 'grid' ? (
+                {isLoading ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        {Array.from({ length: 12 }).map((_, i) => (
+                            <Skeleton key={i} className="h-[280px] w-full rounded-2xl" />
+                        ))}
+                    </div>
+                ) : viewMode === 'grid' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {filteredItems.map((item) => (
-                            <Link key={item.id} href={`/inventory/${item.id}`}>
-                                <div className="group bg-white rounded-xl p-4 border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
+                            <Link key={item.id} href={`/inventory/${item.barcode}`} className="block h-full">
+                                <div className="group bg-white rounded-xl p-4 border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all cursor-pointer h-full flex flex-col">
                                     <div className="flex items-start justify-between gap-2 mb-2">
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 pr-6">
                                             <h3 className="text-[14px] font-semibold text-gray-900 truncate group-hover:text-primary transition-colors">
                                                 {item.name}
                                             </h3>
@@ -402,13 +481,23 @@ export default function InventoryPage() {
                                         </Badge>
                                     </div>
 
-                                    <div className="flex items-center justify-between text-[11px] text-gray-500">
-                                        <span>{item.category}</span>
-                                        <span className="font-mono text-gray-400">{item.barcode}</span>
+                                    <div className="flex-1">
+                                        {item.serialNumber && (
+                                            <div className="mb-3">
+                                                <span className="text-[11px] font-mono font-medium text-foreground/80 bg-secondary/80 px-1.5 py-0.5 rounded border border-border/50">
+                                                    {item.serialNumber}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-auto">
+                                            <span>{item.category}</span>
+                                            <span className="font-mono text-muted-foreground/60">{item.barcode}</span>
+                                        </div>
                                     </div>
 
                                     {item.status !== 'AVAILABLE' && item.assignedTo && (
-                                        <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-50">
+                                        <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-50 mt-auto">
                                             <div className="w-4 h-4 rounded-full bg-gradient-to-br from-primary to-cyan-500 flex items-center justify-center">
                                                 <span className="text-[8px] font-bold text-white">
                                                     {getUserName(item.assignedTo)?.charAt(0).toUpperCase()}
@@ -458,51 +547,85 @@ export default function InventoryPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredItems.map((item) => (
-                                        <tr
-                                            key={item.id}
-                                            onClick={() => router.push(`/inventory/${item.id}`)}
-                                            className={`border-b border-border hover:bg-secondary/50 transition-colors cursor-pointer ${selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
-                                        >
-                                            <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedItems.has(item.id)}
-                                                    onChange={(e) => toggleSelect(e, item.id)}
-                                                    className="w-4 h-4 rounded border-border accent-primary"
-                                                />
-                                            </td>
-                                            <td className="px-6 py-4 font-medium text-foreground">{item.name}</td>
-                                            <td className="px-6 py-4 text-muted-foreground">{item.category}</td>
-                                            <td className="px-6 py-4 font-mono text-muted-foreground">{item.barcode}</td>
-                                            <td className="px-6 py-4">
-                                                <Badge variant={getStatusVariant(item.status)}>
-                                                    {item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <button
-                                                    onClick={(e) => handlePrintQR(e, item)}
-                                                    className="text-primary hover:text-primary/80 transition-colors"
-                                                    title="Print QR"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                                    </svg>
-                                                </button>
-                                            </td>
-                                            <td className="px-6 py-4 text-muted-foreground">{item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}</td>
-                                        </tr>
-                                    ))}
+                                    {isLoading ? (
+                                        Array.from({ length: 8 }).map((_, i) => (
+                                            <tr key={i} className="border-b border-border bg-background/50">
+                                                <td className="px-4 py-4"><Skeleton className="w-4 h-4 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-48 h-5 rounded" /><Skeleton className="w-24 h-3 mt-1 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-24 h-4 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-28 h-4 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-20 h-6 rounded-full" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-5 h-5 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-32 h-4 rounded" /></td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        filteredItems.map((item) => (
+                                            <tr
+                                                key={item.id}
+                                                onClick={() => router.push(`/inventory/${item.barcode}`)}
+                                                className={`border-b border-border hover:bg-secondary/50 transition-colors cursor-pointer ${selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
+                                            >
+                                                <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedItems.has(item.id)}
+                                                        onChange={(e) => toggleSelect(e, item.id)}
+                                                        className="w-4 h-4 rounded border-border accent-primary"
+                                                    />
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-medium text-foreground">{item.name}</div>
+                                                    {item.serialNumber && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.serialNumber}</div>}
+                                                </td>
+                                                <td className="px-6 py-4 text-muted-foreground">{item.category}</td>
+                                                <td className="px-6 py-4 font-mono text-muted-foreground">{item.barcode}</td>
+                                                <td className="px-6 py-4">
+                                                    <Badge variant={getStatusVariant(item.status)}>
+                                                        {item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <button
+                                                        onClick={(e) => handlePrintQR(e, item)}
+                                                        className="text-primary hover:text-primary/80 transition-colors"
+                                                        title="Print QR"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                                        </svg>
+                                                    </button>
+                                                </td>
+                                                <td className="px-6 py-4 text-muted-foreground">{item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}</td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     </Card>
                 )}
 
-                {filteredItems.length === 0 && (
-                    <div className="col-span-full text-center py-12 text-muted-foreground bg-secondary/20 rounded-xl border border-dashed border-border">
-                        <p>No items found matching your criteria.</p>
+                {filteredItems.length === 0 && !isLoading && (
+                    <div className="col-span-full flex flex-col items-center justify-center p-12 text-center bg-white rounded-xl border border-dashed border-gray-200">
+                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">No items found</h3>
+                        <p className="text-gray-500 mt-1 mb-6 max-w-sm">
+                            We couldn't find any items matching your current filters. Try adjusting your search criteria.
+                        </p>
+                        {(search || statusFilter !== 'ALL') && (
+                            <Button
+                                variant="outline"
+                                onClick={() => { setSearch(''); setStatusFilter('ALL'); }}
+                                className="bg-white hover:bg-gray-50"
+                            >
+                                Clear all filters
+                            </Button>
+                        )}
                     </div>
                 )}
             </PullToRefresh>

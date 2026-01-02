@@ -116,9 +116,10 @@ export default function BulkAddPage() {
     };
 
     const getPreviewBarcode = (row: BulkRow, rowIndex: number) => {
-        if (!row.model) return null;
+        // Removed early exit for missing model to allow fallback to serial number
+
         const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
-        const normalizedModel = normalizeModel(row.model);
+        const normalizedModel = normalizeModel(row.model || row.serialNumber || 'GEN');
         const baseBarcode = `${prefix}-${normalizedModel}`;
 
         // Count existing items with this base barcode
@@ -131,7 +132,7 @@ export default function BulkAddPage() {
         for (let i = 0; i < rowIndex; i++) {
             const prevRow = rows[i];
             const prevPrefix = CATEGORY_PREFIXES[prevRow.category] || prevRow.category.substring(0, 3).toUpperCase() || 'ITEM';
-            const prevNormalizedModel = normalizeModel(prevRow.model);
+            const prevNormalizedModel = prevRow.model ? normalizeModel(prevRow.model) : (prevRow.serialNumber ? normalizeModel(prevRow.serialNumber) : 'UNKNOWN');
             const prevBase = `${prevPrefix}-${prevNormalizedModel}`;
             if (prevBase === baseBarcode) pendingCount++;
         }
@@ -141,7 +142,7 @@ export default function BulkAddPage() {
     };
 
     const getPreviewName = (row: BulkRow) => {
-        if (!row.company && !row.model) return null;
+        if (!row.company && !row.model) return row.category;
         return `${row.company} ${row.model}`.trim();
     };
 
@@ -171,6 +172,7 @@ export default function BulkAddPage() {
             const text = event.target?.result as string;
             const lines = text.split(/\r\n|\n/);
             const newRows: BulkRow[] = [];
+            const duplicateSerials: string[] = [];
 
             // Heuristic to skip header: check if first row matches known headers
             const firstLine = lines[0]?.toLowerCase() || '';
@@ -195,6 +197,15 @@ export default function BulkAddPage() {
                 const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
 
                 if (serialNumber) {
+                    // Check if serial already exists in inventory or in current batch
+                    const isDuplicateInInventory = existingItems.some(item => item.serialNumber === serialNumber);
+                    const isDuplicateInBatch = newRows.some(row => row.serialNumber === serialNumber);
+
+                    if (isDuplicateInInventory || isDuplicateInBatch) {
+                        duplicateSerials.push(`${serialNumber} (${company} ${model})`);
+                        continue; // Skip processing this row
+                    }
+
                     newRows.push({
                         id: uuid(),
                         category: normalizedCategory,
@@ -206,6 +217,10 @@ export default function BulkAddPage() {
                 }
             }
 
+            if (duplicateSerials.length > 0) {
+                alert(`Warning: ${duplicateSerials.length} items were skipped because their Serial Numbers already exist:\n\n${duplicateSerials.slice(0, 5).join('\n')}${duplicateSerials.length > 5 ? '\n...' : ''}`);
+            }
+
             if (newRows.length > 0) {
                 let currentRows = [...rows];
                 // If only one empty row exists, replace it
@@ -213,7 +228,7 @@ export default function BulkAddPage() {
                     currentRows = [];
                 }
                 setRows([...currentRows, ...newRows]);
-            } else {
+            } else if (duplicateSerials.length === 0) {
                 alert('No valid rows found in CSV. Make sure each row has: Category, Company, Model, Serial Number, Location');
             }
         };
@@ -229,10 +244,14 @@ export default function BulkAddPage() {
 
             // Pre-calculate existing counts for each base barcode
             for (const row of rows) {
-                if (!row.model || !row.company) continue;
+                // Modified: Allow rows without model/company if they have serial
+                if (!row.category && !row.serialNumber) continue;
 
                 const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
-                const normalizedModel = normalizeModel(row.model);
+                // Fallback: If no model, use full Serial Number or 'GEN' (Generic)
+                // We use the full serial to ensure each item gets its own unique base barcode (1-to-1)
+                const modelStr = row.model || row.serialNumber || 'GEN';
+                const normalizedModel = normalizeModel(modelStr);
                 const baseBarcode = `${prefix}-${normalizedModel}`;
 
                 if (!baseCounts.has(baseBarcode)) {
@@ -242,17 +261,20 @@ export default function BulkAddPage() {
             }
 
             for (const row of rows) {
-                if (!row.model || !row.company) continue;
+                // Modified: Allow rows without model/company if they have serial
+                if (!row.category && !row.serialNumber) continue;
 
                 const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
-                const normalizedModel = normalizeModel(row.model);
+                // Fallback: Use model OR Serial Number for barcode uniqueness
+                const modelStr = row.model || row.serialNumber || 'GEN';
+                const normalizedModel = normalizeModel(modelStr);
                 const baseBarcode = `${prefix}-${normalizedModel}`;
 
                 const currentCount = (baseCounts.get(baseBarcode) || 0) + 1;
                 baseCounts.set(baseBarcode, currentCount);
 
                 const barcode = `${baseBarcode}-${currentCount}`;
-                const name = `${row.company} ${row.model}`.trim();
+                const name = row.company || row.model ? `${row.company} ${row.model}`.trim() : row.category;
 
                 newEquipment.push({
                     id: uuid(),
@@ -521,7 +543,7 @@ export default function BulkAddPage() {
                         <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                             Total: <span className="font-medium text-foreground">{rows.length}</span> items
                         </div>
-                        <Button onClick={handleSave} disabled={saving || rows.some(r => !r.serialNumber || !r.company)} size="sm" className="flex-1 sm:flex-none">
+                        <Button onClick={handleSave} disabled={saving || rows.some(r => !r.serialNumber)} size="sm" className="flex-1 sm:flex-none">
                             {saving ? 'Saving...' : 'Import All'}
                         </Button>
                     </div>

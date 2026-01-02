@@ -13,7 +13,7 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 
 export default function TransactionsPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [equipment, setEquipment] = useState<Equipment[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -22,12 +22,28 @@ export default function TransactionsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (user && !['MANAGER', 'ADMIN'].includes(user.role)) {
+        if (authLoading) return;
+
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+
+        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
             router.push('/');
             return;
         }
+
         loadData();
-    }, [user, router]);
+    }, [user, router, authLoading]);
+
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     const loadData = async () => {
         setLoading(true);
@@ -37,7 +53,9 @@ export default function TransactionsPage() {
                 storage.getEquipment(),
                 storage.getUsers(),
             ]);
-            setTransactions(txns.reverse()); // Most recent first
+            setTransactions(txns.sort((a, b) =>
+                new Date(b.timestampOut).getTime() - new Date(a.timestampOut).getTime()
+            ));
             setEquipment(equip);
             setUsers(usersData);
         } catch (error) {
@@ -125,7 +143,7 @@ _Generated via Production App_`;
         }
     };
 
-    if (!user || !['MANAGER', 'ADMIN'].includes(user.role)) {
+    if (!user) {
         return null;
     }
 

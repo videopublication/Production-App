@@ -36,6 +36,11 @@ export default function TransactionDetailPage() {
     const [showQRScanner, setShowQRScanner] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
 
+    // Multi-select states
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+    const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
+
     useEffect(() => {
         if (user && !['MANAGER', 'ADMIN'].includes(user.role)) {
             router.push('/');
@@ -228,6 +233,149 @@ export default function TransactionDetailPage() {
         }
     };
 
+    const handleForceReturn = async (itemId: string) => {
+        const item = equipment.find(e => e.id === itemId);
+        if (!item) {
+            showToast('Item not found', 'error');
+            return;
+        }
+
+        // Only allow force return for items that are checked out
+        if (item.status !== 'CHECKED_OUT') {
+            showToast(`Item is not checked out (Status: ${item.status})`, 'error');
+            return;
+        }
+
+        const isConfirmed = await confirm({
+            title: 'Force Return Item?',
+            message: `This will mark "${item.name}" as returned and available on behalf of ${transactionUser?.name || 'the user'}.`,
+            confirmLabel: 'Force Return',
+            variant: 'danger'
+        });
+
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            // Update item status directly to AVAILABLE (admin/manager verified return)
+            await storage.updateEquipment(itemId, {
+                status: 'AVAILABLE',
+                lastActivity: new Date().toISOString()
+            });
+
+            // Log the force return
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'RETURN',
+                entityId: transaction!.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Verified by ${user!.name}`,
+            });
+
+            await loadData(true);
+            showToast(`${item.name} force-returned. Awaiting verification.`, 'success');
+        } catch (error) {
+            console.error('Error force returning item:', error);
+            showToast('Failed to force return item', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Multi-select handlers
+    const toggleItemSelection = (itemId: string) => {
+        setSelectedItems(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(itemId)) {
+                newSet.delete(itemId);
+            } else {
+                newSet.add(itemId);
+            }
+            return newSet;
+        });
+    };
+
+    const getCheckedOutItems = () => {
+        return transaction?.items.filter(itemId => {
+            const item = equipment.find(e => e.id === itemId);
+            return item?.status === 'CHECKED_OUT';
+        }) || [];
+    };
+
+    const selectAllCheckedOut = () => {
+        const checkedOutItems = getCheckedOutItems();
+        setSelectedItems(new Set(checkedOutItems));
+    };
+
+    const clearSelection = () => {
+        setSelectionMode(false);
+        setSelectedItems(new Set());
+    };
+
+    const handleLongPressStart = (itemId: string) => {
+        longPressTimer.current = setTimeout(() => {
+            setSelectionMode(true);
+            setSelectedItems(new Set([itemId]));
+        }, 500); // 500ms for long press
+    };
+
+    const handleLongPressEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+
+    const handleForceReturnSelected = async () => {
+        if (selectedItems.size === 0) return;
+
+        const itemNames = Array.from(selectedItems)
+            .map(id => equipment.find(e => e.id === id)?.name)
+            .filter(Boolean)
+            .join(', ');
+
+        const isConfirmed = await confirm({
+            title: `Force Return ${selectedItems.size} Items?`,
+            message: `This will mark the following items as returned:\n${itemNames}`,
+            confirmLabel: 'Return All',
+            variant: 'danger'
+        });
+
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            for (const itemId of selectedItems) {
+                const item = equipment.find(e => e.id === itemId);
+                if (!item || item.status !== 'CHECKED_OUT') continue;
+
+                await storage.updateEquipment(itemId, {
+                    status: 'PENDING_VERIFICATION',
+                    lastActivity: new Date().toISOString()
+                });
+
+                await storage.addLog({
+                    id: crypto.randomUUID(),
+                    action: 'RETURN',
+                    entityId: transaction!.id,
+                    userId: user!.id,
+                    timestamp: new Date().toISOString(),
+                    details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Pending verification`,
+                });
+            }
+
+            await loadData(true);
+            showToast(`${selectedItems.size} items force-returned. Awaiting verification.`, 'success');
+            clearSelection();
+        } catch (error) {
+            console.error('Error bulk force returning:', error);
+            showToast('Failed to force return items', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const filteredAvailableItems = availableEquipment.filter(item => {
         if (!searchQuery) return true;
         const query = searchQuery.toLowerCase();
@@ -359,21 +507,71 @@ export default function TransactionDetailPage() {
 
             {/* Items List */}
             <Card>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                    <h2 className="text-lg font-semibold">Checked Out Items</h2>
-                    {transaction.status === 'OPEN' && (
-                        <Button
-                            size="sm"
-                            onClick={() => setShowAddItem(!showAddItem)}
-                            disabled={saving}
-                        >
-                            <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                            </svg>
-                            Add Item
-                        </Button>
-                    )}
-                </div>
+                {/* Selection Mode Toolbar */}
+                {selectionMode ? (
+                    <div className="flex items-center justify-between gap-2 mb-4 px-4 py-2.5 bg-gray-100 dark:bg-gray-800/80 backdrop-blur rounded-2xl border border-border">
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={clearSelection}
+                                className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                            >
+                                <svg className="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                                {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                onClick={selectAllCheckedOut}
+                                className="px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors whitespace-nowrap"
+                            >
+                                All ({getCheckedOutItems().length})
+                            </button>
+                            <button
+                                onClick={handleForceReturnSelected}
+                                disabled={selectedItems.size === 0 || saving}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary hover:bg-primary/90 disabled:opacity-50 text-white transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                </svg>
+                                Return
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <h2 className="text-lg font-semibold">Checked Out Items</h2>
+                        <div className="flex items-center gap-2">
+                            {transaction.status === 'OPEN' && getCheckedOutItems().length > 1 && (
+                                <button
+                                    onClick={() => {
+                                        setSelectionMode(true);
+                                        selectAllCheckedOut();
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                                >
+                                    Select
+                                </button>
+                            )}
+                            {transaction.status === 'OPEN' && (
+                                <Button
+                                    size="sm"
+                                    onClick={() => setShowAddItem(!showAddItem)}
+                                    disabled={saving}
+                                >
+                                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Add Item Section - Premium UI */}
                 {showAddItem && transaction.status === 'OPEN' && (
@@ -498,30 +696,116 @@ export default function TransactionDetailPage() {
                             const item = getItemDetails(itemId);
                             if (!item) return null;
 
+                            const isCheckedOut = item.status === 'CHECKED_OUT';
+                            const isPendingVerification = item.status === 'PENDING_VERIFICATION';
+
+                            const isSelected = selectedItems.has(itemId);
+                            const canSelect = isCheckedOut && transaction.status === 'OPEN';
+
                             return (
                                 <div
                                     key={itemId}
-                                    className="flex items-center gap-3 p-3 bg-card rounded-xl border border-border group hover:border-muted-foreground/30 transition-colors"
+                                    className={`p-3 bg-card rounded-xl border-2 transition-all cursor-pointer ${isSelected
+                                        ? 'border-primary bg-primary/5 shadow-sm'
+                                        : 'border-transparent hover:border-border hover:shadow-sm'
+                                        }`}
+                                    onTouchStart={() => canSelect && handleLongPressStart(itemId)}
+                                    onTouchEnd={handleLongPressEnd}
+                                    onMouseDown={() => canSelect && handleLongPressStart(itemId)}
+                                    onMouseUp={handleLongPressEnd}
+                                    onMouseLeave={handleLongPressEnd}
+                                    onClick={() => {
+                                        if (selectionMode && canSelect) {
+                                            toggleItemSelection(itemId);
+                                        }
+                                    }}
                                 >
-                                    <div className="w-8 h-8 rounded-lg bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center text-sm font-bold shrink-0">
-                                        {index + 1}
+                                    {/* Top Row - Checkbox/Number + Item Info */}
+                                    <div className="flex items-start gap-3">
+                                        {/* Checkbox (selection mode) or Number Badge */}
+                                        {selectionMode && canSelect ? (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleItemSelection(itemId);
+                                                }}
+                                                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${isSelected
+                                                    ? 'bg-primary text-white'
+                                                    : 'bg-muted border-2 border-muted-foreground/30'
+                                                    }`}
+                                            >
+                                                {isSelected && (
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                            </button>
+                                        ) : (
+                                            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                                                {index + 1}
+                                            </div>
+                                        )}
+
+                                        {/* Item Info - Full width */}
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className="font-semibold text-sm text-foreground leading-tight">{item.name}</h3>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                {item.category} • {item.barcode}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-sm text-foreground truncate">{item.name}</h3>
-                                        <p className="text-xs text-muted-foreground truncate">
-                                            {item.category} • {item.barcode} • <span className="font-medium">{transaction.preCheckoutConditions[itemId] || item.condition}</span>
-                                        </p>
-                                    </div>
-                                    {transaction.status === 'OPEN' && (
-                                        <button
-                                            onClick={() => handleRemoveItem(itemId)}
-                                            disabled={saving}
-                                            className="w-8 h-8 rounded-lg flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors shrink-0 opacity-60 group-hover:opacity-100"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
+
+                                    {/* Bottom Row - Status + Actions (hide in selection mode) */}
+                                    {!selectionMode && (
+                                        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/50">
+                                            {/* Status Badge */}
+                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isCheckedOut
+                                                ? 'bg-orange-500 text-white'
+                                                : isPendingVerification
+                                                    ? 'bg-blue-500 text-white'
+                                                    : 'bg-green-500 text-white'
+                                                }`}>
+                                                {isCheckedOut ? 'Checked Out' : isPendingVerification ? 'Pending Verify' : 'Returned'}
+                                            </span>
+
+                                            {/* Actions */}
+                                            <div className="flex items-center gap-2">
+                                                {/* Force Return button - only for checked out items */}
+                                                {transaction.status === 'OPEN' && isCheckedOut && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleForceReturn(itemId);
+                                                        }}
+                                                        disabled={saving}
+                                                        title="Force return this item"
+                                                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white transition-colors flex items-center gap-1.5"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                                        </svg>
+                                                        Return
+                                                    </button>
+                                                )}
+
+                                                {/* Remove button - only for open transactions */}
+                                                {transaction.status === 'OPEN' && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveItem(itemId);
+                                                        }}
+                                                        disabled={saving}
+                                                        title="Remove from transaction"
+                                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                             );
