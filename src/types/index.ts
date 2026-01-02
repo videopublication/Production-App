@@ -23,6 +23,7 @@ export interface User {
     email: string;
     active?: boolean; // Deprecated, kept for immediate backward compat during refactor
     status: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+    fcmToken?: string | null;
 }
 
 export interface Equipment {

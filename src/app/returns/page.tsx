@@ -68,14 +68,12 @@ export default function ReturnsPage() {
         if (selectedItems.length === 0) return;
 
         // Process updates sequentially or in parallel
-        // Process updates sequentially or in parallel
         await Promise.all(selectedItems.map(async (id) => {
             await storage.updateEquipment(id, {
                 status: 'PENDING_VERIFICATION',
                 condition: conditions[id]
             });
 
-            // Log the return submission
             if (user) {
                 await storage.addLog({
                     id: crypto.randomUUID(),
@@ -88,10 +86,37 @@ export default function ReturnsPage() {
             }
         }));
 
+        // Send Push Notification to Managers
+        try {
+            const allUsers = await storage.getUsers();
+            const managers = allUsers.filter(u =>
+                (u.role === 'MANAGER' || u.role === 'ADMIN') && u.fcmToken
+            );
+
+            if (managers.length > 0) {
+                const tokens = managers.map(m => m.fcmToken).filter(Boolean) as string[];
+                // Send to each manager (in simpler setup; could be topic messaging later)
+                await Promise.all(tokens.map(token =>
+                    fetch('/api/send-notification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            token,
+                            title: 'Items Returned',
+                            message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
+                            link: '/verification' // Deep link to verification page
+                        })
+                    })
+                ));
+            }
+        } catch (e) {
+            console.error("Failed to send notifications", e);
+        }
+
+        showToast('Items submitted for verification', 'success');
+
         // Refresh list
-        const items = await storage.getEquipment();
-        const myItems = items.filter(i => i.status === 'CHECKED_OUT' && i.assignedTo === user?.id);
-        setCheckedOutItems(myItems);
+        loadCheckedOutItems();
         setSelectedItems([]);
         setConditions({});
     };

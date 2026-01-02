@@ -11,6 +11,8 @@
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
+    "firebase": "^12.7.0",
+    "firebase-admin": "^13.6.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^3.0.4",
     "next": "^16.0.7",

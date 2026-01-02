@@ -4,11 +4,13 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import useFcmToken from '@/hooks/useFcmToken';
 import { Button } from './Button';
 
 export const Navbar = () => {
     const pathname = usePathname();
     const { user, logout } = useAuth();
+    const { notificationPermission } = useFcmToken(); // Initialize FCM
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const isActive = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
@@ -76,6 +78,26 @@ export const Navbar = () => {
 
                     <div className="flex items-center space-x-4">
                         <div className="hidden md:flex items-center space-x-4">
+                            {/* Notification Icon */}
+                            {user && (
+                                <button
+                                    className={`relative p-2 rounded-full transition-colors ${notificationPermission === 'granted' ? 'text-primary bg-primary/10' : 'text-gray-400 hover:text-gray-600'}`}
+                                    title={notificationPermission === 'granted' ? 'Notifications Active' : 'Enable Notifications'}
+                                    onClick={() => {
+                                        if (notificationPermission !== 'granted') {
+                                            Notification.requestPermission();
+                                        }
+                                    }}
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    {notificationPermission === 'granted' && (
+                                        <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
+                                    )}
+                                </button>
+                            )}
+
                             {user ? (
                                 <div className="flex items-center space-x-4">
                                     <div className="text-sm text-right">

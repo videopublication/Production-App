@@ -12,7 +12,29 @@ class StorageService {
             console.error('Error fetching users:', error);
             return [];
         }
-        return data as User[];
+        return data.map((u: any) => ({
+            ...u,
+            fcmToken: u.fcm_token
+        })) as User[];
+    }
+
+    async updateUser(id: string, updates: Partial<User>): Promise<void> {
+        const dbUpdates: any = { ...updates };
+        if (updates.fcmToken !== undefined) {
+            dbUpdates.fcm_token = updates.fcmToken;
+            delete dbUpdates.fcmToken;
+        }
+        // Remove known non-db fields if any, though User interface is clean
+
+        const { error } = await supabase
+            .from('users')
+            .update(dbUpdates)
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error updating user:', error);
+            throw error;
+        }
     }
 
     // Equipment
