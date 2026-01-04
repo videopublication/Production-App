@@ -1,10 +1,10 @@
-notifications:1 Unchecked runtime.lastError: The message port closed before a response was received.
+login?:1 Unchecked runtime.lastError: The message port closed before a response was received.
 manifest.json:1 Manifest: Line: 1, column: 1, Syntax error.
-forward-logs-shared.ts:95 Download the React DevTools for a better development experience: https://react.dev/link/react-devtools
-forward-logs-shared.ts:95 [HMR] connected
-useFcmToken.ts:45 [FCM] Service worker registered
-useFcmToken.ts:49 [FCM] Service worker is ready
-useFcmToken.ts:63 [FCM] Notification permission: granted
-useFcmToken.ts:72 [FCM] Token received: dGysSNNEliMzqnUwj0Db...
 manifest.json:1 Manifest: Line: 1, column: 1, Syntax error.
-useFcmToken.ts:80 [FCM] Token saved to database
+firebase-messaging-sw.js:19 [firebase-messaging-sw.js] Firebase initialized successfully
+firebase-messaging-sw.js:77 [firebase-messaging-sw.js] Service worker loaded
+3b6fc81a78dcf64d.js:4 [FCM] Service worker registered
+3b6fc81a78dcf64d.js:4 [FCM] Service worker is ready
+3b6fc81a78dcf64d.js:4 [FCM] Notification permission: granted
+3b6fc81a78dcf64d.js:4 [FCM] Token received: eBpVwLSZK6yr3VLeSA_T...
+3b6fc81a78dcf64d.js:4 [FCM] Token saved to database
