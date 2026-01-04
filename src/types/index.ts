@@ -79,3 +79,13 @@ export interface Log {
     oldValue?: unknown;
     newValue?: unknown;
 }
+
+export interface Notification {
+    id: string;
+    userId: string;
+    title: string;
+    message: string;
+    link?: string;
+    read: boolean;
+    createdAt: string;
+}

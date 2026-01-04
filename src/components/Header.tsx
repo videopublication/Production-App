@@ -1,12 +1,61 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
+import { storage } from '@/lib/storage';
+import { Notification as AppNotification } from '@/types';
+import useFcmToken from '@/hooks/useFcmToken';
 
 export const Header = () => {
     const { user } = useAuth();
     const { isCollapsed } = useSidebar();
+    const { notificationPermission } = useFcmToken();
+    const router = useRouter();
+
+    // Notification State
+    const [notifications, setNotifications] = useState<AppNotification[]>([]);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    const loadNotifications = async () => {
+        if (!user) return;
+        try {
+            const data = await storage.getNotifications(user.id);
+            setNotifications(data);
+            setUnreadCount(data.filter((n: any) => !n.read).length);
+        } catch (error) {
+            console.error("Error loading notifications in Header:", error);
+        }
+    };
+
+    useEffect(() => {
+        if (user) {
+            loadNotifications();
+            // Poll every 30 seconds
+            const interval = setInterval(loadNotifications, 30000);
+            return () => clearInterval(interval);
+        }
+    }, [user]);
+
+    const handleNotificationClick = async (notif: AppNotification) => {
+        if (!notif.read) {
+            await storage.markNotificationRead(notif.id);
+            setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        }
+        setShowNotifications(false);
+        // Navigate to the notification detail page
+        router.push(`/notifications/${notif.id}`);
+    };
+
+    const markAllRead = async () => {
+        await Promise.all(notifications.filter(n => !n.read).map(n => storage.markNotificationRead(n.id)));
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        setUnreadCount(0);
+    };
 
     if (!user) return null;
 
@@ -20,12 +69,65 @@ export const Header = () => {
             </div>
 
             <div className="flex items-center gap-2">
-                <button className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors relative">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                    <span className="absolute top-2 right-2 w-2 h-2 bg-[#ff3b30] rounded-full"></span>
-                </button>
+                <div className="relative">
+                    <button
+                        onClick={() => {
+                            if (notificationPermission !== 'granted' && Notification.permission !== 'denied') {
+                                Notification.requestPermission();
+                            }
+                            setShowNotifications(!showNotifications);
+                        }}
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors relative"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        {unreadCount > 0 && (
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-[#ff3b30] rounded-full"></span>
+                        )}
+                    </button>
+
+                    {/* Notification Dropdown */}
+                    {showNotifications && (
+                        <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50">
+                            <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                                <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+                                {unreadCount > 0 && (
+                                    <button onClick={markAllRead} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Mark all read</button>
+                                )}
+                            </div>
+                            <div className="max-h-80 overflow-y-auto">
+                                {notifications.length === 0 ? (
+                                    <div className="p-6 text-center text-gray-500 text-sm">No notifications</div>
+                                ) : (
+                                    <div>
+                                        {notifications.slice(0, 5).map((n, i) => (
+                                            <div
+                                                key={n.id}
+                                                className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${i !== Math.min(4, notifications.length - 1) ? 'border-b border-gray-100' : ''} ${!n.read ? 'bg-blue-50/50' : ''}`}
+                                                onClick={() => handleNotificationClick(n)}
+                                            >
+                                                <div className="flex gap-2">
+                                                    <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-blue-500'}`} />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className={`text-sm leading-snug truncate ${!n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
+                                                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{n.message}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="px-4 py-2.5 border-t border-gray-100 text-center">
+                                <Link href="/notifications" onClick={() => setShowNotifications(false)} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                                    View all
+                                </Link>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 <button className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />

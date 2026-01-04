@@ -178,6 +178,9 @@ export default function DashboardPage() {
                             <Button className="w-full justify-start text-sm sm:text-base" variant="outline" size="sm" onClick={() => router.push('/inventory')}>
                                 <span className="mr-2">🔍</span> Search Inventory
                             </Button>
+                            <Button className="w-full justify-start text-sm sm:text-base" variant="outline" size="sm" onClick={() => router.push('/admin/notifications')}>
+                                <span className="mr-2">📢</span> Send Notification
+                            </Button>
                         </div>
                     </Card>
 

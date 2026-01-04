@@ -1,0 +1,10 @@
+notifications:1 Unchecked runtime.lastError: The message port closed before a response was received.
+manifest.json:1 Manifest: Line: 1, column: 1, Syntax error.
+forward-logs-shared.ts:95 Download the React DevTools for a better development experience: https://react.dev/link/react-devtools
+forward-logs-shared.ts:95 [HMR] connected
+useFcmToken.ts:45 [FCM] Service worker registered
+useFcmToken.ts:49 [FCM] Service worker is ready
+useFcmToken.ts:63 [FCM] Notification permission: granted
+useFcmToken.ts:72 [FCM] Token received: dGysSNNEliMzqnUwj0Db...
+manifest.json:1 Manifest: Line: 1, column: 1, Syntax error.
+useFcmToken.ts:80 [FCM] Token saved to database

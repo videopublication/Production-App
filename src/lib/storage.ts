@@ -251,6 +251,77 @@ class StorageService {
         await supabase.from('equipment').delete().neq('id', '0');
         await supabase.from('transactions').delete().neq('id', '0');
         await supabase.from('logs').delete().neq('id', '0');
+        await supabase.from('notifications').delete().neq('id', '0');
+    }
+
+    // Notifications
+    async getNotifications(userId: string): Promise<any[]> {
+        const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (error) {
+            console.error('Error fetching notifications:', error);
+            // Log full error details for debugging
+            console.dir(error);
+            return [];
+        }
+
+        return data.map((n: any) => ({
+            id: n.id,
+            userId: n.user_id,
+            title: n.title,
+            message: n.message,
+            link: n.link,
+            read: n.read,
+            createdAt: n.created_at
+        }));
+    }
+
+    async addNotification(notification: { userId: string, title: string, message: string, link?: string }): Promise<void> {
+        const dbNotification = {
+            user_id: notification.userId,
+            title: notification.title,
+            message: notification.message,
+            link: notification.link,
+            read: false
+        };
+
+        const { error } = await supabase
+            .from('notifications')
+            .insert(dbNotification);
+
+        if (error) console.error('Error adding notification:', error);
+    }
+
+    async markNotificationRead(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', id);
+
+        if (error) console.error('Error marking notification read:', error);
+    }
+
+    async deleteNotification(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('notifications')
+            .delete()
+            .eq('id', id);
+
+        if (error) console.error('Error deleting notification:', error);
+    }
+
+    async deleteAllNotifications(userId: string): Promise<void> {
+        const { error } = await supabase
+            .from('notifications')
+            .delete()
+            .eq('user_id', userId);
+
+        if (error) console.error('Error deleting all notifications:', error);
     }
 }
 
