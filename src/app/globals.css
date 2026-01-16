@@ -563,3 +563,17 @@ textarea:focus {
     border-radius: 0;
   }
 }
+
+/* ===== LOADING SPINNER ===== */
+.loading-spinner {
+  border: 3px solid rgba(0, 113, 227, 0.15);
+  border-top-color: var(--primary, #0071e3);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

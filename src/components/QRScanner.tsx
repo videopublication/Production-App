@@ -14,11 +14,25 @@ interface QRScannerProps {
 export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuous = true }) => {
     const [isScanning, setIsScanning] = useState(false);
     const [error, setError] = useState<string>('');
+    const [torchOn, setTorchOn] = useState(false);
     const scannerRef = useRef<Html5Qrcode | null>(null);
     const isInitialized = useRef(false);
     const [scannerId] = useState(() => `qr-reader-${Date.now()}-${Math.floor(Math.random() * 10000)}`);
     const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
     const lastScannedRef = useRef<{ text: string; time: number } | null>(null);
+
+    const toggleTorch = async () => {
+        if (scannerRef.current) {
+            try {
+                await scannerRef.current.applyVideoConstraints({
+                    advanced: [{ torch: !torchOn } as any]
+                });
+                setTorchOn(!torchOn);
+            } catch (err) {
+                console.error("Failed to toggle torch", err);
+            }
+        }
+    };
 
     const startScanning = async () => {
         if (!isSecureContext) {
@@ -29,6 +43,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
         }
         try {
             setError('');
+            setTorchOn(false);
 
             if (scannerRef.current && isInitialized.current) {
                 try {
@@ -109,9 +124,22 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     <h3 className="text-lg font-semibold w-full sm:w-auto text-center sm:text-left">QR Code Scanner</h3>
                     {isScanning ? (
-                        <Button variant="danger" onClick={stopScanning} size="sm" className="w-full sm:w-auto">
-                            Stop Camera
-                        </Button>
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
+                            <Button
+                                onClick={toggleTorch}
+                                size="sm"
+                                variant="outline"
+                                className={torchOn ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary" : ""}
+                                title="Toggle Flashlight"
+                            >
+                                <svg className="w-4 h-4" fill={torchOn ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </Button>
+                            <Button variant="danger" onClick={stopScanning} size="sm">
+                                Stop Camera
+                            </Button>
+                        </div>
                     ) : (
                         <Button onClick={startScanning} size="sm" className="w-full sm:w-auto">
                             <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -192,11 +220,26 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
     const [isScanning, setIsScanning] = useState(false);
     const [error, setError] = useState<string>('');
     const [scanCount, setScanCount] = useState(0);
+    const [torchOn, setTorchOn] = useState(false);
     const scannerRef = useRef<Html5Qrcode | null>(null);
     const isInitialized = useRef(false);
     const [scannerId] = useState(() => `mobile-qr-${Date.now()}-${Math.floor(Math.random() * 10000)}`);
     const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
     const lastScannedRef = useRef<{ text: string; time: number } | null>(null);
+
+    const toggleTorch = async () => {
+        if (scannerRef.current) {
+            try {
+                await scannerRef.current.applyVideoConstraints({
+                    advanced: [{ torch: !torchOn } as any]
+                });
+                setTorchOn(!torchOn);
+            } catch (err) {
+                console.error("Failed to toggle torch", err);
+                // Torch might not be supported on this device
+            }
+        }
+    };
 
     const startScanning = async () => {
         if (!isSecureContext) {
@@ -208,6 +251,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
 
         try {
             setError('');
+            setTorchOn(false); // Reset torch state
 
             if (scannerRef.current && isInitialized.current) {
                 try {
@@ -327,10 +371,6 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             {isScanning && (
                 <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px]">
-                        <div className="absolute top-0 left-0 w-12 h-12 border-white rounded-tl-3xl opacity-90 shadow-sm" style={{ borderWidth: '6px 0 0 6px' }} />
-                        <div className="absolute top-0 right-0 w-12 h-12 border-white rounded-tr-3xl opacity-90 shadow-sm" style={{ borderWidth: '6px 6px 0 0' }} />
-                        <div className="absolute bottom-0 left-0 w-12 h-12 border-white rounded-bl-3xl opacity-90 shadow-sm" style={{ borderWidth: '0 0 6px 6px' }} />
-                        <div className="absolute bottom-0 right-0 w-12 h-12 border-white rounded-br-3xl opacity-90 shadow-sm" style={{ borderWidth: '0 6px 6px 0' }} />
                         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-[#0071e3] to-transparent animate-scan-line rounded-full shadow-[0_0_15px_rgba(0,113,227,0.8)]" />
                     </div>
                     {/* Darker backdrop outside scan area */}
@@ -343,27 +383,48 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
 
             {/* Scan count indicator */}
             {scanCount > 0 && (
-                <div className="absolute top-safe-offset left-5 mt-5 px-4 py-2 bg-[#34c759]/90 backdrop-blur-md rounded-full shadow-lg border border-white/10 z-50">
+                <div className="absolute top-0 left-3 mt-3 px-4 py-2 bg-[#34c759]/90 backdrop-blur-md rounded-full shadow-lg border border-white/10 z-50">
                     <span className="text-white text-[14px] font-bold tracking-wide">{scanCount} scanned</span>
                 </div>
             )}
 
-            {/* Close button */}
-            {onClose && (
-                <div className="absolute top-safe-offset right-5 mt-5 z-50">
+            {/* Controls Container */}
+            <div className="absolute top-0 right-3 mt-3 z-50 flex items-center gap-3">
+                {/* Torch Button */}
+                {isScanning && (
+                    <button
+                        onClick={toggleTorch}
+                        className={`w-10 h-10 backdrop-blur-xl rounded-full flex items-center justify-center transition-all shadow-lg border border-white/10 active:scale-90 ${torchOn ? 'bg-white text-black' : 'bg-black/40 text-white hover:bg-black/60'}`}
+                        aria-label="Toggle Flashlight"
+                    >
+                        {torchOn ? (
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2a1 1 0 011 1v6a1 1 0 11-2 0V3a1 1 0 011-1zm0 13a3 3 0 100 6 3 3 0 000-6zm-5-3a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1zm10 0a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z" />
+                                <path fillRule="evenodd" d="M12 9a1 1 0 00-1 1v.268a2 2 0 01-.895 1.789l-.667.333a2 2 0 00-.895 1.789V16a1 1 0 001 1h5a1 1 0 001-1v-1.82a2 2 0 00-.895-1.79l-.667-.333A2 2 0 0113 10.268V10a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                        ) : (
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        )}
+                    </button>
+                )}
+
+                {/* Close Button */}
+                {onClose && (
                     <button
                         onClick={() => {
                             stopScanning();
                             onClose();
                         }}
-                        className="w-12 h-12 bg-black/40 backdrop-blur-xl rounded-full flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg border border-white/10 hover:bg-black/60"
+                        className="w-10 h-10 bg-black/40 backdrop-blur-xl rounded-full flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg border border-white/10 hover:bg-black/60"
                     >
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
-                </div>
-            )}
+                )}
+            </div>
 
             {/* Loading state */}
             {!isScanning && !error && (

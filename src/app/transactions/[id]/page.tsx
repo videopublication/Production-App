@@ -42,7 +42,7 @@ export default function TransactionDetailPage() {
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        if (user && !['MANAGER', 'ADMIN'].includes(user.role)) {
+        if (user && !['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
             router.push('/');
             return;
         }
@@ -386,7 +386,7 @@ export default function TransactionDetailPage() {
         );
     });
 
-    if (!user || !['MANAGER', 'ADMIN'].includes(user.role)) {
+    if (!user || !['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
         return null;
     }
 
@@ -836,7 +836,7 @@ export default function TransactionDetailPage() {
                                         {log.details || log.action}
                                     </p>
                                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                        {new Date(log.timestamp).toLocaleString()}
+                                        {new Date(log.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                     </p>
                                 </div>
                             </div>

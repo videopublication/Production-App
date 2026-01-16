@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Equipment, Transaction, User } from '@/types';
+import { Equipment, Transaction, User, Shoot } from '@/types';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card } from '@/components/Card';
@@ -24,6 +24,7 @@ export default function CheckoutPage() {
     const [scanInput, setScanInput] = useState('');
     const [project, setProject] = useState('');
     const [notes, setNotes] = useState('');
+    const [selectedShootId, setSelectedShootId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
 
@@ -57,6 +58,7 @@ export default function CheckoutPage() {
 
     const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
     const [users, setUsers] = useState<User[]>([]);
+    const [shoots, setShoots] = useState<Shoot[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
     // Redirect if not authorized
@@ -81,11 +83,15 @@ export default function CheckoutPage() {
         );
     }
 
-    // Fetch equipment and users on mount
+    // Fetch equipment, users, and shoots on mount
     useEffect(() => {
         const fetchData = async () => {
             const items = await storage.getEquipment();
             setEquipmentList(items);
+
+            // Fetch shoots for selection
+            const allShoots = await storage.getShoots();
+            setShoots(allShoots);
 
             if (user && ['MANAGER', 'ADMIN'].includes(user.role)) {
                 const userList = await storage.getUsers();
@@ -94,6 +100,18 @@ export default function CheckoutPage() {
         };
         fetchData();
     }, [user]);
+
+    // Filter to active and upcoming shoots only
+    const availableShoots = useMemo(() => {
+        const now = new Date();
+        return shoots.filter(shoot => {
+            // Exclude cancelled shoots
+            if (shoot.status === 'CANCELLED') return false;
+            // Include shoots that haven't ended yet
+            if (shoot.endTime && new Date(shoot.endTime) < now) return false;
+            return true;
+        }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    }, [shoots]);
 
     // Initialize/Load State (Session Persistence)
     useEffect(() => {
@@ -107,6 +125,9 @@ export default function CheckoutPage() {
 
         const savedNotes = sessionStorage.getItem('checkout-notes');
         if (savedNotes) setNotes(savedNotes);
+
+        const savedShootId = sessionStorage.getItem('checkout-shoot');
+        if (savedShootId) setSelectedShootId(savedShootId);
 
         const savedUsers = sessionStorage.getItem('checkout-users');
         if (savedUsers) {
@@ -139,6 +160,11 @@ export default function CheckoutPage() {
     useEffect(() => {
         if (selectedUserIds.length > 0) sessionStorage.setItem('checkout-users', JSON.stringify(selectedUserIds));
     }, [selectedUserIds]);
+
+    useEffect(() => {
+        if (selectedShootId) sessionStorage.setItem('checkout-shoot', selectedShootId);
+        else sessionStorage.removeItem('checkout-shoot');
+    }, [selectedShootId]);
 
     const lastProcessedRef = React.useRef<{ code: string; time: number } | null>(null);
 
@@ -210,7 +236,8 @@ export default function CheckoutPage() {
         }
 
         if (cart.find(i => i.id === item.id)) {
-            showToast(`Item "${item.name}" is already in cart`, 'info');
+            const serialInfo = item.serialNumber ? ` (S/N: ${item.serialNumber})` : '';
+            showToast(`Item "${item.name}"${serialInfo} is already in cart`, 'info');
             playErrorSound();
             lastProcessedRef.current = { code: normalizedBarcode, time: now };
             return;
@@ -297,6 +324,7 @@ export default function CheckoutPage() {
                 items: cart.map(i => i.id),
                 timestampOut: new Date().toISOString(),
                 project: project.trim(),
+                shootId: selectedShootId || undefined,
                 notes: notes.trim(),
                 preCheckoutConditions: cart.reduce((acc, item) => ({
                     ...acc,
@@ -309,6 +337,7 @@ export default function CheckoutPage() {
 
             const primaryUser = users.find(u => u.id === selectedUserIds[0]);
             const primaryName = primaryUser ? primaryUser.name : (user?.id === selectedUserIds[0] ? user.name : 'Selected User');
+            const shootInfo = selectedShootId ? shoots.find(s => s.id === selectedShootId)?.title : null;
 
             await storage.addLog({
                 id: crypto.randomUUID(),
@@ -316,7 +345,7 @@ export default function CheckoutPage() {
                 entityId: transaction.id,
                 userId: user.id,
                 timestamp: new Date().toISOString(),
-                details: `Checkout [${transaction.id}]: ${cart.length} items for "${project.trim()}" (To: ${primaryName})`
+                details: `Checkout [${transaction.id}]: ${cart.length} items for "${project.trim()}"${shootInfo ? ` (Shoot: ${shootInfo})` : ''} (To: ${primaryName})`
             });
 
             await Promise.all(cart.map(item =>
@@ -328,10 +357,12 @@ export default function CheckoutPage() {
             ));
 
             setCart([]);
+            setSelectedShootId('');
             sessionStorage.removeItem('checkout-cart');
             sessionStorage.removeItem('checkout-project');
             sessionStorage.removeItem('checkout-notes');
             sessionStorage.removeItem('checkout-users');
+            sessionStorage.removeItem('checkout-shoot');
 
             showToast('Checkout successful!', 'success');
             router.push('/transactions');
@@ -399,6 +430,9 @@ export default function CheckoutPage() {
                                                 className="w-full px-4 py-3 text-left hover:bg-[#f2f2f7] transition-colors border-b border-[#f2f2f7] last:border-0 flex items-center justify-between group"
                                             >
                                                 <div className="flex-1 min-w-0 pr-4">
+                                                    {item.serialNumber && (
+                                                        <p className="text-[10px] text-[#007aff] font-medium">S/N: {item.serialNumber}</p>
+                                                    )}
                                                     <p className="font-medium text-sm truncate">{item.name}</p>
                                                     <p className="text-xs text-[#8e8e93] truncate">{item.barcode} • {item.category}</p>
                                                 </div>
@@ -439,6 +473,9 @@ export default function CheckoutPage() {
                                                     {index + 1}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
+                                                    {item.serialNumber && (
+                                                        <p className="text-[10px] text-[#007aff] font-medium mb-0.5">S/N: {item.serialNumber}</p>
+                                                    )}
                                                     <h3 className="font-semibold truncate">{item.name}</h3>
                                                     <p className="text-sm text-[#8e8e93] truncate">{item.barcode} • {item.category}</p>
                                                 </div>
@@ -473,6 +510,66 @@ export default function CheckoutPage() {
                                             label: `${u.name} (${u.role})`
                                         }))}
                                     />
+                                )}
+
+                                {/* Shoot Selector - Premium Card */}
+                                {availableShoots.length > 0 && (
+                                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 border border-indigo-100">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                                                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p className="text-[13px] font-bold text-indigo-900">Link to Shoot</p>
+                                                <p className="text-[11px] text-indigo-600/70">Optional • Auto-fills project name</p>
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <select
+                                                value={selectedShootId}
+                                                onChange={(e) => {
+                                                    const shootId = e.target.value;
+                                                    setSelectedShootId(shootId);
+                                                    if (shootId) {
+                                                        const shoot = availableShoots.find(s => s.id === shootId);
+                                                        if (shoot && !project.trim()) {
+                                                            setProject(shoot.title);
+                                                        }
+                                                    }
+                                                }}
+                                                className={`w-full h-11 px-4 pr-10 border-0 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-indigo-400 transition-all appearance-none cursor-pointer ${selectedShootId
+                                                    ? 'bg-white text-indigo-900 shadow-sm'
+                                                    : 'bg-white/60 text-[#8e8e93]'
+                                                    }`}
+                                            >
+                                                <option value="">Select a shoot...</option>
+                                                {availableShoots.map(shoot => (
+                                                    <option key={shoot.id} value={shoot.id}>
+                                                        📽 {shoot.title} — {new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {shoot.location ? `@ ${shoot.location}` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        {selectedShootId && (
+                                            <div className="flex items-center gap-2 mt-2.5 px-1">
+                                                <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                                                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                                <p className="text-xs font-medium text-green-700">
+                                                    Equipment will be linked to this shoot
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
 
                                 <div>
@@ -517,7 +614,7 @@ export default function CheckoutPage() {
             </div>
 
             {/* Mobile Layout */}
-            <div className="md:hidden flex flex-col min-h-[calc(100vh-140px)] -mx-4">
+            <div className="md:hidden flex flex-col min-h-[calc(100vh-140px)]">
                 {/* Project Brief */}
                 {/* Project Details Section - Premium Mobile Card */}
                 <div className="px-5 pt-4 pb-0 relative z-20 animate-in slide-in-from-top-4 duration-300 mb-6">
@@ -536,6 +633,66 @@ export default function CheckoutPage() {
                             </div>
                         )}
                         <div className="p-4">
+                            {/* Shoot Selector for Mobile - Premium Card */}
+                            {availableShoots.length > 0 && (
+                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 border border-indigo-100 mb-4">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p className="text-[14px] font-bold text-indigo-900">Link to Shoot</p>
+                                            <p className="text-[11px] text-indigo-600/70">Optional • Auto-fills project name</p>
+                                        </div>
+                                    </div>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedShootId}
+                                            onChange={(e) => {
+                                                const shootId = e.target.value;
+                                                setSelectedShootId(shootId);
+                                                if (shootId) {
+                                                    const shoot = availableShoots.find(s => s.id === shootId);
+                                                    if (shoot && !project.trim()) {
+                                                        setProject(shoot.title);
+                                                    }
+                                                }
+                                            }}
+                                            className={`w-full h-12 px-4 pr-10 border-0 rounded-xl text-[15px] font-medium focus:ring-2 focus:ring-indigo-400 transition-all appearance-none cursor-pointer ${selectedShootId
+                                                    ? 'bg-white text-indigo-900 shadow-sm'
+                                                    : 'bg-white/60 text-[#8e8e93]'
+                                                }`}
+                                        >
+                                            <option value="">Select a shoot...</option>
+                                            {availableShoots.map(shoot => (
+                                                <option key={shoot.id} value={shoot.id}>
+                                                    📽 {shoot.title} — {new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                    {selectedShootId && (
+                                        <div className="flex items-center gap-2 mt-3 px-1">
+                                            <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                            <p className="text-[13px] font-medium text-green-700">
+                                                Equipment will be linked to this shoot
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wide mb-2 block pl-1">
                                 Project / Shoot Name <span className="text-red-500">*</span>
                             </label>
@@ -583,21 +740,16 @@ export default function CheckoutPage() {
                                 placeholder="Search or type barcode..."
                                 value={scanInput}
                                 onChange={(e) => handleInputChange(e.target.value)}
-                                className="flex-1 h-14 px-5 bg-[#f2f2f7] border-0 rounded-2xl text-[16px] focus:bg-white focus:ring-2 focus:ring-[#0071e3] transition-all shadow-sm"
+                                className="flex-1 min-w-0 h-14 px-5 bg-[#f2f2f7] border-0 rounded-2xl text-[16px] focus:bg-white focus:ring-2 focus:ring-[#0071e3] transition-all shadow-sm"
                             />
                             <button
                                 onClick={toggleScanner}
-                                className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-[#f2f2f7] text-[#1d1d1f]' : 'bg-[#1d1d1f] text-white shadow-[#1d1d1f]/30'}`}
+                                className={`h-14 px-6 shrink-0 rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-[#f2f2f7] text-[#1d1d1f]' : 'bg-[#0071e3] text-white shadow-[#0071e3]/30'}`}
                             >
-                                {showScanner ? (
-                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                ) : (
-                                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M4 6h2v2H4V6zm3 0h2v2H7V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-18 3h2v2H4V9zm3 0h2v2H7V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zM4 18h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z" />
-                                    </svg>
-                                )}
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M4 6h2v2H4V6zm3 0h2v2H7V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-18 3h2v2H4V9zm3 0h2v2H7V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zM4 18h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z" />
+                                </svg>
+                                <span className="font-bold text-[16px]">{showScanner ? 'Close' : 'Scan'}</span>
                             </button>
                         </div>
 
@@ -615,6 +767,9 @@ export default function CheckoutPage() {
                                             </svg>
                                         </div>
                                         <div className="flex-1 min-w-0">
+                                            {item.serialNumber && (
+                                                <p className="text-[10px] text-[#007aff] font-medium">S/N: {item.serialNumber}</p>
+                                            )}
                                             <p className="font-bold truncate text-[16px]">{item.name}</p>
                                             <p className="text-sm text-[#8e8e93] truncate">{item.barcode}</p>
                                         </div>
@@ -635,6 +790,9 @@ export default function CheckoutPage() {
                                         {index + 1}
                                     </div>
                                     <div className="flex-1 min-w-0">
+                                        {item.serialNumber && (
+                                            <p className="text-[10px] text-[#007aff] font-medium mb-0.5">S/N: {item.serialNumber}</p>
+                                        )}
                                         <p className="font-bold truncate">{item.name}</p>
                                         <p className="text-sm text-[#8e8e93] truncate">{item.barcode}</p>
                                     </div>

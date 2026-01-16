@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { User, Equipment, Transaction, Log } from '@/types';
+import { User, Equipment, Transaction, Log, Shoot, Assignment } from '@/types';
 
 class StorageService {
     // Users
@@ -228,6 +228,27 @@ class StorageService {
         })) as Log[];
     }
 
+    async getLogsByEntity(entityId: string): Promise<Log[]> {
+        const { data, error } = await supabase
+            .from('logs')
+            .select('*')
+            .eq('entity_id', entityId)
+            .order('timestamp', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching logs for entity:', error);
+            return [];
+        }
+
+        return data.map((l: any) => ({
+            ...l,
+            entityId: l.entity_id,
+            userId: l.user_id,
+            oldValue: l.old_value,
+            newValue: l.new_value
+        })) as Log[];
+    }
+
     async addLog(log: Log): Promise<void> {
         const dbLog = {
             id: log.id,
@@ -322,6 +343,109 @@ class StorageService {
             .eq('user_id', userId);
 
         if (error) console.error('Error deleting all notifications:', error);
+    }
+
+    // Shoots
+    async getShoots(): Promise<Shoot[]> {
+        const { data, error } = await supabase
+            .from('shoots')
+            .select('*')
+            .order('start_time', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching shoots:', error);
+            return [];
+        }
+
+        return data.map((s: any) => ({
+            id: s.id,
+            title: s.title,
+            description: s.description,
+            location: s.location,
+            status: s.status,
+            startTime: s.start_time,
+            endTime: s.end_time,
+            pocName: s.poc_name,
+            pocContact: s.poc_contact,
+            requiredRoles: s.required_roles, // JSONB
+            createdBy: s.created_by
+        })) as Shoot[];
+    }
+
+    async saveShoot(shoot: Shoot): Promise<void> {
+        const dbShoot = {
+            id: shoot.id,
+            title: shoot.title,
+            description: shoot.description,
+            location: shoot.location,
+            status: shoot.status,
+            start_time: shoot.startTime,
+            end_time: shoot.endTime,
+            poc_name: shoot.pocName,
+            poc_contact: shoot.pocContact,
+            required_roles: shoot.requiredRoles,
+            created_by: shoot.createdBy
+        };
+
+        const { error } = await supabase
+            .from('shoots')
+            .upsert(dbShoot);
+
+        if (error) console.error('Error saving shoot:', error);
+    }
+
+    async deleteShoot(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('shoots')
+            .delete()
+            .eq('id', id);
+
+        if (error) console.error('Error deleting shoot:', error);
+    }
+
+    // Assignments
+    async getAssignments(): Promise<Assignment[]> {
+        const { data, error } = await supabase
+            .from('assignments')
+            .select('*');
+
+        if (error) {
+            console.error('Error fetching assignments:', error);
+            return [];
+        }
+
+        return data.map((a: any) => ({
+            id: a.id,
+            shootId: a.shoot_id,
+            userId: a.user_id,
+            role: a.role,
+            status: a.status
+        })) as Assignment[];
+    }
+
+    async saveAssignments(assignments: Assignment[]): Promise<void> {
+        const dbAssignments = assignments.map(a => ({
+            id: a.id,
+            shoot_id: a.shootId,
+            user_id: a.userId,
+            role: a.role,
+            status: a.status
+        }));
+
+        const { error } = await supabase
+            .from('assignments')
+            .upsert(dbAssignments);
+
+        if (error) console.error('Error saving assignments:', error);
+    }
+
+    async deleteAssignment(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('assignments')
+            .delete()
+            .eq('id', id);
+
+        if (error) console.error('Error deleting assignment:', error);
     }
 }
 

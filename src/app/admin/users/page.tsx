@@ -219,104 +219,171 @@ export default function UserManagementPage() {
     if (isLoading) return <div className="p-8 text-center">Loading users...</div>;
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-wrap justify-between items-center gap-4">
-                <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-                    User Management
-                </h1>
-                <div className="flex gap-2">
-                    <Button variant="secondary" onClick={fetchUsers}>
-                        Refresh
-                    </Button>
-                    <Button onClick={() => setShowAddModal(true)}>
-                        Add New User
-                    </Button>
+        <div className="max-w-4xl mx-auto animate-fade-in">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-[#1d1d1f]">
+                        Team Members
+                    </h1>
+                    <p className="text-sm text-[#86868b] mt-1">{users.length} people in your organization</p>
                 </div>
+                <button
+                    onClick={() => setShowAddModal(true)}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-[#007aff] text-white font-semibold text-[15px] rounded-xl shadow-lg shadow-[#007aff]/20 hover:bg-[#0071e3] active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Member
+                </button>
             </div>
 
             {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
-                    <p className="font-medium">Error loading users:</p>
-                    <p className="text-sm">{error}</p>
+                <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl">
+                    <p className="text-red-600 text-sm font-medium">{error}</p>
                 </div>
             )}
 
             <PullToRefresh onRefresh={fetchUsers}>
-                <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
-                                <tr>
-                                    <th className="px-6 py-3">Name</th>
-                                    <th className="px-6 py-3">Email</th>
-                                    <th className="px-6 py-3">Role</th>
-                                    <th className="px-6 py-3">Status</th>
-                                    <th className="px-6 py-3">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {users.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
-                                            {error ? 'Failed to load users' : 'No users found. Click "Add New User" to create one.'}
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    users.map((u) => (
-                                        <tr key={u.id} className="bg-background border-b border-border hover:bg-secondary/20 transition-colors">
-                                            <td className="px-6 py-4 font-medium">{u.name}</td>
-                                            <td className="px-6 py-4">{u.email}</td>
-                                            <td className="px-6 py-4">
-                                                <select
-                                                    className={`bg-transparent border-0 font-medium text-xs focus:ring-0 cursor-pointer rounded px-1 -ml-1 hover:bg-secondary/50 transition-colors ${u.role === 'ADMIN' ? 'text-purple-500' :
-                                                        u.role === 'MANAGER' ? 'text-blue-500' :
-                                                            'text-green-500'
-                                                        }`}
-                                                    value={u.role}
-                                                    disabled={user?.id === u.id}
-                                                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                                                >
-                                                    <option value="CREW">CREW</option>
-                                                    <option value="MANAGER">MANAGER</option>
-                                                    <option value="ADMIN">ADMIN</option>
-                                                </select>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${u.status === 'ACTIVE' ? 'bg-green-500/10 text-green-500' :
-                                                    u.status === 'PENDING' ? 'bg-orange-500/10 text-orange-500' :
-                                                        'bg-red-500/10 text-red-500'
+                {/* User List - Apple Style */}
+                <div className="bg-white rounded-2xl shadow-sm border border-[#e5e5ea] overflow-hidden">
+                    {users.length === 0 ? (
+                        <div className="text-center py-16 px-6">
+                            <div className="w-16 h-16 bg-[#f5f5f7] rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                                </svg>
+                            </div>
+                            <p className="text-[#86868b] font-medium">No team members yet</p>
+                            <p className="text-[#86868b] text-sm mt-1">Add your first member to get started</p>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-[#e5e5ea]">
+                            {users.map((u) => (
+                                <div
+                                    key={u.id}
+                                    className="p-4 sm:p-5 hover:bg-[#f5f5f7]/50 transition-colors"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        {/* Avatar */}
+                                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-white font-semibold text-lg sm:text-xl shrink-0 shadow-lg ${u.role === 'ADMIN' ? 'bg-gradient-to-br from-purple-500 to-purple-600 shadow-purple-500/30' :
+                                                u.role === 'MANAGER' ? 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30' :
+                                                    'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/30'
+                                            }`}>
+                                            {u.name.charAt(0).toUpperCase()}
+                                        </div>
+
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                                <h3 className="font-semibold text-[17px] text-[#1d1d1f] truncate">{u.name}</h3>
+                                                {user?.id === u.id && (
+                                                    <span className="px-2 py-0.5 bg-[#007aff]/10 text-[#007aff] text-[10px] font-bold rounded-full">YOU</span>
+                                                )}
+                                            </div>
+                                            <p className="text-[15px] text-[#86868b] truncate mb-1">{u.email}</p>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                {/* Role Badge */}
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
+                                                        u.role === 'MANAGER' ? 'bg-blue-100 text-blue-700' :
+                                                            'bg-emerald-100 text-emerald-700'
                                                     }`}>
-                                                    {u.status === 'ACTIVE' ? 'Active' : u.status === 'PENDING' ? 'Pending Approval' : 'Suspended'}
+                                                    {u.role}
                                                 </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => openPasswordModal(u)}
-                                                        className="text-primary hover:text-primary/80"
-                                                    >
-                                                        Change Password
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        disabled={user?.id === u.id}
-                                                        onClick={() => handleToggleStatus(u.id, u.status)}
-                                                        className={u.status === 'ACTIVE' ? 'text-red-500 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}
-                                                    >
-                                                        {user?.id === u.id ? 'Signed In' : u.status === 'ACTIVE' ? 'Suspend' : 'Approve / Activate'}
-                                                    </Button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </Card>
+                                                {/* Status Badge */}
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${u.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                                                        u.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                                                            'bg-red-100 text-red-700'
+                                                    }`}>
+                                                    {u.status === 'ACTIVE' ? '● Active' : u.status === 'PENDING' ? '○ Pending' : '● Suspended'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Actions - Desktop */}
+                                        <div className="hidden sm:flex items-center gap-2 shrink-0">
+                                            <select
+                                                className={`bg-[#f5f5f7] border-0 rounded-lg px-3 py-2 text-sm font-semibold cursor-pointer focus:ring-2 focus:ring-[#007aff] ${u.role === 'ADMIN' ? 'text-purple-600' :
+                                                        u.role === 'MANAGER' ? 'text-blue-600' :
+                                                            'text-emerald-600'
+                                                    }`}
+                                                value={u.role}
+                                                disabled={user?.id === u.id}
+                                                onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                            >
+                                                <option value="CREW">Crew</option>
+                                                <option value="MANAGER">Manager</option>
+                                                <option value="ADMIN">Admin</option>
+                                            </select>
+                                            <button
+                                                onClick={() => openPasswordModal(u)}
+                                                className="p-2.5 rounded-xl bg-[#f5f5f7] text-[#86868b] hover:text-[#1d1d1f] hover:bg-[#e8e8ed] transition-colors"
+                                                title="Change Password"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                                                </svg>
+                                            </button>
+                                            {user?.id !== u.id && (
+                                                <button
+                                                    onClick={() => handleToggleStatus(u.id, u.status)}
+                                                    className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 ${u.status === 'ACTIVE'
+                                                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                                                            : 'bg-green-50 text-green-600 hover:bg-green-100'
+                                                        }`}
+                                                >
+                                                    {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Mobile Menu Arrow */}
+                                        <svg className="w-5 h-5 text-[#c7c7cc] sm:hidden shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                        </svg>
+                                    </div>
+
+                                    {/* Mobile Actions */}
+                                    <div className="sm:hidden mt-4 pt-4 border-t border-[#f2f2f7] flex gap-2">
+                                        <select
+                                            className={`flex-1 bg-[#f5f5f7] border-0 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-[#007aff] ${u.role === 'ADMIN' ? 'text-purple-600' :
+                                                    u.role === 'MANAGER' ? 'text-blue-600' :
+                                                        'text-emerald-600'
+                                                }`}
+                                            value={u.role}
+                                            disabled={user?.id === u.id}
+                                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                        >
+                                            <option value="CREW">Crew</option>
+                                            <option value="MANAGER">Manager</option>
+                                            <option value="ADMIN">Admin</option>
+                                        </select>
+                                        <button
+                                            onClick={() => openPasswordModal(u)}
+                                            className="p-3 rounded-xl bg-[#f5f5f7] text-[#007aff]"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                                            </svg>
+                                        </button>
+                                        {user?.id !== u.id && (
+                                            <button
+                                                onClick={() => handleToggleStatus(u.id, u.status)}
+                                                className={`flex-1 py-3 px-4 rounded-xl text-sm font-semibold transition-all active:scale-95 ${u.status === 'ACTIVE'
+                                                        ? 'bg-red-50 text-red-600'
+                                                        : 'bg-green-50 text-green-600'
+                                                    }`}
+                                            >
+                                                {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </PullToRefresh>
 
             {/* Add User Modal */}

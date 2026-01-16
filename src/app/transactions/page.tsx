@@ -109,7 +109,7 @@ export default function TransactionsPage() {
 
         const allNames = [userName, ...additionalNames].join(', ');
         const itemNames = getItemNames(txn.items);
-        const date = new Date(txn.timestampOut).toLocaleString();
+        const date = new Date(txn.timestampOut).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
         return `🎥 *Equipment Checkout Details*
 
@@ -267,7 +267,7 @@ _Generated via Production App_`;
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                     </svg>
-                                                    {new Date(txn.timestampOut).toLocaleString()}
+                                                    {new Date(txn.timestampOut).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                                 </p>
                                                 <p className="flex items-center gap-2">
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

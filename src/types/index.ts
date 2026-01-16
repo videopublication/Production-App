@@ -52,6 +52,7 @@ export interface Transaction {
     timestampOut: string;
     timestampIn?: string;
     project?: string;
+    shootId?: string; // Link to assigned shoot
     preCheckoutConditions: Record<string, Condition>; // ItemID -> Condition
     postReturnConditions?: Record<string, Condition>;
     status: 'OPEN' | 'CLOSED';
@@ -88,4 +89,33 @@ export interface Notification {
     link?: string;
     read: boolean;
     createdAt: string;
+}
+
+export type ShootStatus = 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED';
+
+export interface HumanResourceRequirement {
+    roleName: string;
+    count: number;
+}
+
+export interface Shoot {
+    id: string;
+    title: string;
+    description: string;
+    location: string;
+    status: ShootStatus;
+    startTime: string;
+    endTime?: string;
+    pocName?: string;
+    pocContact?: string;
+    requiredRoles: HumanResourceRequirement[];
+    createdBy: string;
+}
+
+export interface Assignment {
+    id: string;
+    shootId: string;
+    userId: string;
+    role: string;
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
 }
