@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage';
 import { Notification as AppNotification } from '@/types';
 import useFcmToken from '@/hooks/useFcmToken';
+import { useNotifications } from '@/hooks/useNotifications';
 
 const pageNames: Record<string, string> = {
     '/dashboard': 'Dashboard',
@@ -27,44 +28,8 @@ export const MobileHeader = () => {
     const router = useRouter();
     const { notificationPermission } = useFcmToken();
 
-    // Notification State
-    const [notifications, setNotifications] = useState<AppNotification[]>([]);
-    const [showNotifications, setShowNotifications] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
-
-    const loadNotifications = async () => {
-        if (!user) return;
-        try {
-            const data = await storage.getNotifications(user.id);
-            setNotifications(data);
-            setUnreadCount(data.filter((n: any) => !n.read).length);
-        } catch (error) {
-            console.error("Error loading notifications in MobileHeader:", error);
-        }
-    };
-
-    useEffect(() => {
-        if (user) {
-            loadNotifications();
-            const interval = setInterval(loadNotifications, 30000);
-            return () => clearInterval(interval);
-        }
-    }, [user]);
-
-    const handleNotificationClick = async (notif: AppNotification) => {
-        if (!notif.read) {
-            await storage.markNotificationRead(notif.id);
-            setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
-            setUnreadCount(prev => Math.max(0, prev - 1));
-        }
-        setShowNotifications(false);
-    };
-
-    const markAllRead = async () => {
-        await Promise.all(notifications.filter(n => !n.read).map(n => storage.markNotificationRead(n.id)));
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        setUnreadCount(0);
-    };
+    // Notification Hook
+    const { unreadCount } = useNotifications();
 
     if (!user) return null;
 

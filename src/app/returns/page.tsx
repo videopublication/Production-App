@@ -8,39 +8,33 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
+import { useInventory } from '@/hooks/useInventory';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 export default function ReturnsPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
+    const { equipment: allItems, isLoading: isInventoryLoading, updateEquipment } = useInventory(); // Use updateEquipment from hook
     const { showToast } = useToast();
-    const [checkedOutItems, setCheckedOutItems] = useState<Equipment[]>([]);
+    const isOnline = useOnlineStatus();
+
+    // Derive checked out items from cached inventory
+    const checkedOutItems = React.useMemo(() => {
+        if (!user || !allItems) return [];
+        return allItems.filter(i => i.status === 'CHECKED_OUT' && i.assignedTo === user.id);
+    }, [user, allItems]);
+
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
     const [conditions, setConditions] = useState<Record<string, Condition>>({});
-
-    const loadCheckedOutItems = React.useCallback(async () => {
-        if (!user) return;
-        const items = await storage.getEquipment();
-        const myItems = items.filter(i => i.status === 'CHECKED_OUT' && i.assignedTo === user.id);
-        setCheckedOutItems(myItems);
-    }, [user]);
 
     useEffect(() => {
         if (authLoading) return;
 
-        if (!user) {
-            router.push('/login');
-            return;
-        }
+        if (!user) router.push('/login');
+        else if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) router.push('/');
+    }, [user, router, authLoading]);
 
-        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
-            router.push('/');
-            return;
-        }
-
-        loadCheckedOutItems();
-    }, [user, router, loadCheckedOutItems, authLoading]);
-
-    if (authLoading) {
+    if (authLoading || isInventoryLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -67,58 +61,71 @@ export default function ReturnsPage() {
     const handleSubmitReturn = async () => {
         if (selectedItems.length === 0) return;
 
-        // Process updates sequentially or in parallel
-        await Promise.all(selectedItems.map(async (id) => {
-            await storage.updateEquipment(id, {
-                status: 'PENDING_VERIFICATION',
-                condition: conditions[id]
-            });
-
-            if (user) {
-                await storage.addLog({
-                    id: crypto.randomUUID(),
-                    action: 'RETURN',
-                    entityId: id,
-                    userId: user.id,
-                    timestamp: new Date().toISOString(),
-                    details: `Submitted for return (Condition: ${conditions[id] || 'OK'})`
-                });
-            }
-        }));
-
-        // Send Push Notification to Managers
-        try {
-            const allUsers = await storage.getUsers();
-            const managers = allUsers.filter(u =>
-                (u.role === 'MANAGER' || u.role === 'ADMIN') && u.fcmToken
-            );
-
-            if (managers.length > 0) {
-                const tokens = managers.map(m => m.fcmToken).filter(Boolean) as string[];
-                // Send to each manager (in simpler setup; could be topic messaging later)
-                await Promise.all(tokens.map(token =>
-                    fetch('/api/send-notification', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            token,
-                            title: 'Items Returned',
-                            message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
-                            link: '/verification' // Deep link to verification page
-                        })
-                    })
-                ));
-            }
-        } catch (e) {
-            console.error("Failed to send notifications", e);
+        if (!isOnline) {
+            showToast('You are offline. Please connect to the internet to return items.', 'error');
+            return;
         }
 
-        showToast('Items submitted for verification', 'success');
+        try {
+            // Process updates sequentially or in parallel
+            await Promise.all(selectedItems.map(async (id) => {
+                // Use hook's mutation for optimistic updates/invalidation
+                await updateEquipment({
+                    id,
+                    updates: {
+                        status: 'PENDING_VERIFICATION',
+                        condition: conditions[id]
+                    }
+                });
 
-        // Refresh list
-        loadCheckedOutItems();
-        setSelectedItems([]);
-        setConditions({});
+                if (user) {
+                    await storage.addLog({
+                        id: crypto.randomUUID(),
+                        action: 'RETURN',
+                        entityId: id,
+                        userId: user.id,
+                        timestamp: new Date().toISOString(),
+                        details: `Submitted for return (Condition: ${conditions[id] || 'OK'})`
+                    });
+                }
+            }));
+
+            // Send Push Notification to Managers
+            try {
+                const allUsers = await storage.getUsers();
+                const managers = allUsers.filter(u =>
+                    (u.role === 'MANAGER' || u.role === 'ADMIN') && u.fcmToken
+                );
+
+                if (managers.length > 0) {
+                    const tokens = managers.map(m => m.fcmToken).filter(Boolean) as string[];
+                    // Send to each manager (in simpler setup; could be topic messaging later)
+                    await Promise.all(tokens.map(token =>
+                        fetch('/api/send-notification', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                token,
+                                title: 'Items Returned',
+                                message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
+                                link: '/verification' // Deep link to verification page
+                            })
+                        })
+                    ));
+                }
+            } catch (e) {
+                console.error("Failed to send notifications", e);
+            }
+
+            showToast('Items submitted for verification', 'success');
+
+            // Reset local selection state (data updates automatically via Query cache)
+            setSelectedItems([]);
+            setConditions({});
+        } catch (error) {
+            console.error('Submit return failed:', error);
+            showToast('Failed to return items. Please check your connection and try again.', 'error');
+        }
     };
 
     return (
@@ -127,13 +134,24 @@ export default function ReturnsPage() {
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Returns</h1>
                 <Button
                     onClick={handleSubmitReturn}
-                    disabled={selectedItems.length === 0}
+                    disabled={selectedItems.length === 0 || !isOnline}
                     className="w-full sm:w-auto"
                     size="sm"
                 >
-                    Return Selected ({selectedItems.length})
+                    {!isOnline ? 'Offline' : `Return Selected (${selectedItems.length})`}
                 </Button>
             </div>
+
+            {!isOnline && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-amber-800 animate-in slide-in-from-top-2">
+                    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <p className="text-sm font-medium">
+                        You are currently offline. Please connect to the internet to submit returns.
+                    </p>
+                </div>
+            )}
 
             {checkedOutItems.length === 0 ? (
                 <div className="text-center py-10 sm:py-12 border-2 border-dashed border-border rounded-lg text-muted-foreground text-sm">

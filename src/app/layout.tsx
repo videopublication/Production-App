@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
+import QueryProvider from "@/lib/query-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -36,12 +37,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
-      <body className={inter.className}>
-        <AuthProvider>
-          <AppLayout>
-            {children}
-          </AppLayout>
-        </AuthProvider>
+      <body className={inter.className} suppressHydrationWarning>
+        <QueryProvider>
+          <AuthProvider>
+            <AppLayout>
+              {children}
+            </AppLayout>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

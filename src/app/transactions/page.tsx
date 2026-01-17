@@ -10,31 +10,40 @@ import { Input } from '@/components/Input';
 import { useAuth } from '@/lib/auth';
 import { Badge } from '@/components/Badge';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useInventory } from '@/hooks/useInventory';
 
 export default function TransactionsPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [equipment, setEquipment] = useState<Equipment[]>([]);
-    const [users, setUsers] = useState<User[]>([]);
+
+    // Data Hooks (Offline Ready)
+    const { transactions: allTransactions, isLoading: isTxLoading, refresh: refreshTransactions } = useTransactions();
+    const { equipment, users, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
+
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'OPEN' | 'CLOSED'>('OPEN');
-    const [loading, setLoading] = useState(true);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+
+    // Derived State
+    const transactions = React.useMemo(() => {
+        if (!allTransactions) return [];
+        return [...allTransactions].sort((a, b) =>
+            new Date(b.timestampOut).getTime() - new Date(a.timestampOut).getTime()
+        );
+    }, [allTransactions]);
+
+    const loading = isTxLoading || isInventoryLoading;
+
+    // Refresh function for PullToRefresh
+    const handleRefresh = async () => {
+        await Promise.all([refreshTransactions(), refreshInventory()]);
+    };
 
     useEffect(() => {
         if (authLoading) return;
-
-        if (!user) {
-            router.push('/login');
-            return;
-        }
-
-        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
-            router.push('/');
-            return;
-        }
-
-        loadData();
+        if (!user) router.push('/login');
+        else if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) router.push('/');
     }, [user, router, authLoading]);
 
     if (authLoading) {
@@ -44,26 +53,6 @@ export default function TransactionsPage() {
             </div>
         );
     }
-
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const [txns, equip, usersData] = await Promise.all([
-                storage.getTransactions(),
-                storage.getEquipment(),
-                storage.getUsers(),
-            ]);
-            setTransactions(txns.sort((a, b) =>
-                new Date(b.timestampOut).getTime() - new Date(a.timestampOut).getTime()
-            ));
-            setEquipment(equip);
-            setUsers(usersData);
-        } catch (error) {
-            console.error('Error loading data:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const getUserName = (userId: string) => {
         const foundUser = users.find(u => u.id === userId);
@@ -99,7 +88,7 @@ export default function TransactionsPage() {
         return true;
     });
 
-    const [copiedId, setCopiedId] = useState<string | null>(null);
+
 
     const generateMessage = (txn: Transaction) => {
         const userName = getUserName(txn.userId);
@@ -148,7 +137,7 @@ _Generated via Production App_`;
     }
 
     return (
-        <PullToRefresh onRefresh={loadData}>
+        <PullToRefresh onRefresh={handleRefresh}>
             <div className="space-y-3 sm:space-y-5 animate-fade-in">
                 {/* Stats at top - Compact on mobile */}
                 <div className="grid grid-cols-4 gap-2 sm:gap-4">

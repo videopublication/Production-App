@@ -9,10 +9,15 @@ import { Input } from '@/components/Input';
 import { Card } from '@/components/Card';
 import { MultiSelect } from '@/components/MultiSelect';
 import { QRScanner, MobileScanner } from '@/components/QRScanner';
+import { Select } from '@/components/Select';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
 import { generateTransactionId } from '@/lib/id';
+import { useInventory } from '@/hooks/useInventory';
+import { useShoots } from '@/hooks/useShoots';
+
+import { useAssignments } from '@/hooks/useAssignments';
 
 export default function CheckoutPage() {
     const router = useRouter();
@@ -27,6 +32,8 @@ export default function CheckoutPage() {
     const [selectedShootId, setSelectedShootId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
+    const [showNotes, setShowNotes] = useState(false);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
 
     // Handle back button closing scanner
     useEffect(() => {
@@ -56,10 +63,23 @@ export default function CheckoutPage() {
     const [suggestions, setSuggestions] = useState<Equipment[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
 
-    const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
-    const [users, setUsers] = useState<User[]>([]);
-    const [shoots, setShoots] = useState<Shoot[]>([]);
+    // Data Hooks
+    const { equipment: equipmentList, users: allUsers, isLoading: isInventoryLoading } = useInventory();
+    const { shoots, isLoading: isShootsLoading } = useShoots();
+    const { assignments } = useAssignments();
+
+    // Filter users based on role for assignment dropdown
+    const users = useMemo(() => {
+        if (user && ['MANAGER', 'ADMIN'].includes(user.role)) {
+            return allUsers;
+        }
+        return [];
+    }, [user, allUsers]);
+
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+    // Combine loading states
+    const isDataLoading = isInventoryLoading || isShootsLoading;
 
     // Redirect if not authorized
     useEffect(() => {
@@ -74,32 +94,6 @@ export default function CheckoutPage() {
             router.push('/');
         }
     }, [user, router, authLoading]);
-
-    if (authLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
-    }
-
-    // Fetch equipment, users, and shoots on mount
-    useEffect(() => {
-        const fetchData = async () => {
-            const items = await storage.getEquipment();
-            setEquipmentList(items);
-
-            // Fetch shoots for selection
-            const allShoots = await storage.getShoots();
-            setShoots(allShoots);
-
-            if (user && ['MANAGER', 'ADMIN'].includes(user.role)) {
-                const userList = await storage.getUsers();
-                setUsers(userList);
-            }
-        };
-        fetchData();
-    }, [user]);
 
     // Filter to active and upcoming shoots only
     const availableShoots = useMemo(() => {
@@ -165,6 +159,25 @@ export default function CheckoutPage() {
         if (selectedShootId) sessionStorage.setItem('checkout-shoot', selectedShootId);
         else sessionStorage.removeItem('checkout-shoot');
     }, [selectedShootId]);
+
+    // Auto-select users based on shoot assignments
+    useEffect(() => {
+        if (selectedShootId && assignments.length > 0) {
+            const linkedAssignments = assignments.filter(a => a.shootId === selectedShootId);
+            if (linkedAssignments.length > 0) {
+                const userIds = linkedAssignments.map(a => a.userId);
+                const uniqueIds = Array.from(new Set(userIds)); // Deduplicate
+
+                // Only update if different to avoid excess renders/loops
+                setSelectedUserIds(prev => {
+                    const isSame = prev.length === uniqueIds.length && prev.every(id => uniqueIds.includes(id));
+                    return isSame ? prev : uniqueIds;
+                });
+
+                showToast(`Auto-selected ${uniqueIds.length} crew members`, 'info');
+            }
+        }
+    }, [selectedShootId, assignments]);
 
     const lastProcessedRef = React.useRef<{ code: string; time: number } | null>(null);
 
@@ -374,6 +387,14 @@ export default function CheckoutPage() {
         }
     };
 
+    if (authLoading || isDataLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
     return (
         <>
             {/* Desktop Layout */}
@@ -500,19 +521,7 @@ export default function CheckoutPage() {
                             <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-5">Flow Details</h3>
 
                             <div className="space-y-5">
-                                {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
-                                    <MultiSelect
-                                        label="Assign To"
-                                        value={selectedUserIds}
-                                        onChange={setSelectedUserIds}
-                                        options={users.map(u => ({
-                                            value: u.id,
-                                            label: `${u.name} (${u.role})`
-                                        }))}
-                                    />
-                                )}
-
-                                {/* Shoot Selector - Premium Card */}
+                                {/* Shoot Selector - Premium Card (Moved to Top) */}
                                 {availableShoots.length > 0 && (
                                     <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 border border-indigo-100">
                                         <div className="flex items-center gap-3 mb-3">
@@ -526,37 +535,29 @@ export default function CheckoutPage() {
                                                 <p className="text-[11px] text-indigo-600/70">Optional • Auto-fills project name</p>
                                             </div>
                                         </div>
-                                        <div className="relative">
-                                            <select
-                                                value={selectedShootId}
-                                                onChange={(e) => {
-                                                    const shootId = e.target.value;
-                                                    setSelectedShootId(shootId);
-                                                    if (shootId) {
-                                                        const shoot = availableShoots.find(s => s.id === shootId);
-                                                        if (shoot && !project.trim()) {
-                                                            setProject(shoot.title);
-                                                        }
+
+                                        <Select
+                                            value={selectedShootId}
+                                            onChange={(val: string) => {
+                                                setSelectedShootId(val);
+                                                if (val) {
+                                                    const shoot = availableShoots.find(s => s.id === val);
+                                                    if (shoot && !project.trim()) {
+                                                        setProject(shoot.title);
                                                     }
-                                                }}
-                                                className={`w-full h-11 px-4 pr-10 border-0 rounded-xl text-[14px] font-medium focus:ring-2 focus:ring-indigo-400 transition-all appearance-none cursor-pointer ${selectedShootId
-                                                    ? 'bg-white text-indigo-900 shadow-sm'
-                                                    : 'bg-white/60 text-[#8e8e93]'
-                                                    }`}
-                                            >
-                                                <option value="">Select a shoot...</option>
-                                                {availableShoots.map(shoot => (
-                                                    <option key={shoot.id} value={shoot.id}>
-                                                        📽 {shoot.title} — {new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {shoot.location ? `@ ${shoot.location}` : ''}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                                <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                                </svg>
-                                            </div>
-                                        </div>
+                                                }
+                                            }}
+                                            options={[
+                                                { value: '', label: 'Select a shoot...' },
+                                                ...availableShoots.map(shoot => ({
+                                                    value: shoot.id,
+                                                    label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                                }))
+                                            ]}
+                                            placeholder="Select a shoot..."
+                                            className="w-full"
+                                        />
+
                                         {selectedShootId && (
                                             <div className="flex items-center gap-2 mt-2.5 px-1">
                                                 <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
@@ -570,6 +571,18 @@ export default function CheckoutPage() {
                                             </div>
                                         )}
                                     </div>
+                                )}
+
+                                {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
+                                    <MultiSelect
+                                        label="Checkout For"
+                                        value={selectedUserIds}
+                                        onChange={setSelectedUserIds}
+                                        options={users.map(u => ({
+                                            value: u.id,
+                                            label: `${u.name} (${u.role})`
+                                        }))}
+                                    />
                                 )}
 
                                 <div>
@@ -617,21 +630,13 @@ export default function CheckoutPage() {
             <div className="md:hidden flex flex-col min-h-[calc(100vh-140px)]">
                 {/* Project Brief */}
                 {/* Project Details Section - Premium Mobile Card */}
-                <div className="px-5 pt-4 pb-0 relative z-20 animate-in slide-in-from-top-4 duration-300 mb-6">
+                {/* Project Brief */}
+                {/* Project Details Section - Premium Mobile Card */}
+                <div className={`px-0.5 relative z-20 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] overflow-hidden ${(showScanner || isSearchFocused)
+                    ? 'max-h-0 opacity-0 mb-0 pt-0'
+                    : 'max-h-[1200px] opacity-100 pt-4 mb-6'
+                    }`}>
                     <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#e5e5ea]">
-                        {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
-                            <div className="p-4 border-b border-[#f5f5f7]">
-                                <MultiSelect
-                                    label="Checkout For"
-                                    value={selectedUserIds}
-                                    onChange={setSelectedUserIds}
-                                    options={users.map(u => ({
-                                        value: u.id,
-                                        label: `${u.name} (${u.role})`
-                                    }))}
-                                />
-                            </div>
-                        )}
                         <div className="p-4">
                             {/* Shoot Selector for Mobile - Premium Card */}
                             {availableShoots.length > 0 && (
@@ -647,37 +652,29 @@ export default function CheckoutPage() {
                                             <p className="text-[11px] text-indigo-600/70">Optional • Auto-fills project name</p>
                                         </div>
                                     </div>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedShootId}
-                                            onChange={(e) => {
-                                                const shootId = e.target.value;
-                                                setSelectedShootId(shootId);
-                                                if (shootId) {
-                                                    const shoot = availableShoots.find(s => s.id === shootId);
-                                                    if (shoot && !project.trim()) {
-                                                        setProject(shoot.title);
-                                                    }
+
+                                    <Select
+                                        value={selectedShootId}
+                                        onChange={(val: string) => {
+                                            setSelectedShootId(val);
+                                            if (val) {
+                                                const shoot = availableShoots.find(s => s.id === val);
+                                                if (shoot && !project.trim()) {
+                                                    setProject(shoot.title);
                                                 }
-                                            }}
-                                            className={`w-full h-12 px-4 pr-10 border-0 rounded-xl text-[15px] font-medium focus:ring-2 focus:ring-indigo-400 transition-all appearance-none cursor-pointer ${selectedShootId
-                                                    ? 'bg-white text-indigo-900 shadow-sm'
-                                                    : 'bg-white/60 text-[#8e8e93]'
-                                                }`}
-                                        >
-                                            <option value="">Select a shoot...</option>
-                                            {availableShoots.map(shoot => (
-                                                <option key={shoot.id} value={shoot.id}>
-                                                    📽 {shoot.title} — {new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
-                                            </svg>
-                                        </div>
-                                    </div>
+                                            }
+                                        }}
+                                        options={[
+                                            { value: '', label: 'Select a shoot...' },
+                                            ...availableShoots.map(shoot => ({
+                                                value: shoot.id,
+                                                label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                            }))
+                                        ]}
+                                        placeholder="Select a shoot..."
+                                        className="w-full"
+                                    />
+
                                     {selectedShootId && (
                                         <div className="flex items-center gap-2 mt-3 px-1">
                                             <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
@@ -693,6 +690,20 @@ export default function CheckoutPage() {
                                 </div>
                             )}
 
+                            {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
+                                <div className="mb-4">
+                                    <MultiSelect
+                                        label="Checkout For"
+                                        value={selectedUserIds}
+                                        onChange={setSelectedUserIds}
+                                        options={users.map(u => ({
+                                            value: u.id,
+                                            label: `${u.name} (${u.role})`
+                                        }))}
+                                    />
+                                </div>
+                            )}
+
                             <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wide mb-2 block pl-1">
                                 Project / Shoot Name <span className="text-red-500">*</span>
                             </label>
@@ -704,131 +715,190 @@ export default function CheckoutPage() {
                                 className="w-full h-12 px-4 bg-[#f5f5f7] border-0 rounded-2xl text-[16px] text-[#1d1d1f] placeholder:text-[#8e8e93] focus:outline-none focus:ring-2 focus:ring-[#0071e3] focus:bg-white transition-all shadow-inner mb-4"
                             />
 
-                            <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wide mb-2 block pl-1">
-                                Notes / Other Items
-                            </label>
-                            <textarea
-                                placeholder="List any items not in inventory..."
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                className="w-full h-24 p-4 bg-[#f5f5f7] border-0 rounded-2xl text-[16px] text-[#1d1d1f] placeholder:text-[#8e8e93] focus:outline-none focus:ring-2 focus:ring-[#0071e3] focus:bg-white transition-all shadow-inner resize-none appearance-none"
-                            />
-                        </div>
-                    </div>
-                </div>
 
-                {/* Scanner View (Inline) */}
-                <div className={`overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${showScanner ? 'max-h-[500px] opacity-100 mb-6' : 'max-h-0 opacity-0'}`}>
-                    <div className="mx-5 relative z-10">
-                        <div className="h-[360px] rounded-[32px] overflow-hidden shadow-[0_20px_40px_-12px_rgba(0,0,0,0.3)] border border-[#e5e5ea] transform translate-z-0">
-                            {showScanner && (
-                                <MobileScanner
-                                    onScan={handleQRScan}
-                                    onError={(err) => showToast(err, 'error')}
-                                    onClose={() => window.history.back()}
-                                    autoStart={true}
-                                />
-                            )}
+                            {/* Collapsible Notes Section */}
+                            <div className="mt-2">
+                                {!showNotes && !notes ? (
+                                    <button
+                                        onClick={() => setShowNotes(true)}
+                                        className="flex items-center gap-2 text-[14px] font-medium text-[#0071e3] py-2 px-1 transition-opacity active:opacity-60"
+                                    >
+                                        <div className="w-5 h-5 rounded-full bg-[#0071e3]/10 flex items-center justify-center">
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                            </svg>
+                                        </div>
+                                        Add Notes / Other Items...
+                                    </button>
+                                ) : (
+                                    <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="flex justify-between items-center mb-2 pl-1">
+                                            <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wide">
+                                                Notes / Other Items
+                                            </label>
+                                            {!notes && (
+                                                <button onClick={() => setShowNotes(false)} className="text-xs font-medium text-[#8e8e93] py-1 px-2">Cancel</button>
+                                            )}
+                                        </div>
+                                        <textarea
+                                            placeholder="List any items not in inventory..."
+                                            value={notes}
+                                            onChange={(e) => setNotes(e.target.value)}
+                                            autoFocus={!notes}
+                                            className="w-full h-24 p-4 bg-[#f5f5f7] border-0 rounded-2xl text-[16px] text-[#1d1d1f] placeholder:text-[#8e8e93] focus:outline-none focus:ring-2 focus:ring-[#0071e3] focus:bg-white transition-all shadow-inner resize-none appearance-none"
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="flex-1 overflow-auto pb-40">
-                    <div className="px-5 py-2">
-                        <div className="flex gap-3 mb-6">
-                            <input
-                                placeholder="Search or type barcode..."
-                                value={scanInput}
-                                onChange={(e) => handleInputChange(e.target.value)}
-                                className="flex-1 min-w-0 h-14 px-5 bg-[#f2f2f7] border-0 rounded-2xl text-[16px] focus:bg-white focus:ring-2 focus:ring-[#0071e3] transition-all shadow-sm"
-                            />
-                            <button
-                                onClick={toggleScanner}
-                                className={`h-14 px-6 shrink-0 rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-[#f2f2f7] text-[#1d1d1f]' : 'bg-[#0071e3] text-white shadow-[#0071e3]/30'}`}
-                            >
-                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M4 6h2v2H4V6zm3 0h2v2H7V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-18 3h2v2H4V9zm3 0h2v2H7V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zM4 18h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z" />
-                                </svg>
-                                <span className="font-bold text-[16px]">{showScanner ? 'Close' : 'Scan'}</span>
-                            </button>
-                        </div>
-
-                        {showSuggestions && suggestions.length > 0 && (
-                            <div className="mb-6 bg-white rounded-3xl overflow-hidden shadow-xl border border-[#e5e5ea]">
-                                {suggestions.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        onClick={() => processBarcode(item.barcode)}
-                                        className="w-full p-4 flex items-center gap-4 text-left active:bg-[#f2f2f7] border-b border-[#f2f2f7]"
-                                    >
-                                        <div className="w-11 h-11 bg-[#f2f2f7] rounded-xl flex items-center justify-center shrink-0">
-                                            <svg className="w-5 h-5 text-[#8e8e93]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" strokeWidth={2} />
-                                            </svg>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            {item.serialNumber && (
-                                                <p className="text-[10px] text-[#007aff] font-medium">S/N: {item.serialNumber}</p>
-                                            )}
-                                            <p className="font-bold truncate text-[16px]">{item.name}</p>
-                                            <p className="text-sm text-[#8e8e93] truncate">{item.barcode}</p>
-                                        </div>
-                                        <div className="w-7 h-7 rounded-full bg-[#0071e3] flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                <path d="M12 4v16m8-8H4" />
-                                            </svg>
-                                        </div>
-                                    </button>
-                                ))}
+                    {/* Scanner View (Inline) - Moved inside scrollable area to push content down */}
+                    <div className={`overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${showScanner ? 'max-h-[500px] opacity-100 mb-6' : 'max-h-0 opacity-0'}`}>
+                        <div className="mx-5 relative z-10">
+                            <div className="h-[360px] rounded-[32px] overflow-hidden shadow-[0_20px_40px_-12px_rgba(0,0,0,0.3)] border border-[#e5e5ea] transform translate-z-0">
+                                {showScanner && (
+                                    <MobileScanner
+                                        onScan={handleQRScan}
+                                        onError={(err) => showToast(err, 'error')}
+                                        onClose={() => window.history.back()}
+                                        autoStart={true}
+                                    />
+                                )}
                             </div>
-                        )}
+                        </div>
+                    </div>
 
-                        <div className="space-y-3">
-                            {cart.map((item, index) => (
-                                <div key={item.id} className="bg-white p-4 rounded-3xl flex items-center gap-4 shadow-sm border border-[#e5e5ea]/50">
-                                    <div className="w-10 h-10 bg-[#0071e3] text-white rounded-xl flex items-center justify-center font-bold shadow-md">
-                                        {index + 1}
+                    <div className={`sticky top-0 z-30 px-2 pb-2 bg-[#f5f5f7] transition-all duration-300 ${isSearchFocused ? 'pt-4' : 'pt-0'}`}>
+                        <div className="flex gap-2">
+                            <div className="flex-1 bg-white h-12 rounded-xl shadow-sm border border-[#e5e5ea] flex items-center overflow-hidden focus-within:ring-2 focus-within:ring-[#0071e3] transition-all">
+                                <div className="pl-3 text-[#8e8e93]">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                </div>
+                                <input
+                                    placeholder="Search items..."
+                                    value={scanInput}
+                                    onChange={(e) => handleInputChange(e.target.value)}
+                                    onFocus={() => setIsSearchFocused(true)}
+                                    className="flex-1 min-w-0 h-full bg-transparent border-0 px-2 text-[16px] text-[#1d1d1f] placeholder:text-[#8e8e93] focus:ring-0 transition-all"
+                                />
+                                {scanInput && (
+                                    <button
+                                        onClick={() => handleInputChange('')}
+                                        className="pr-3 text-[#8e8e93] hover:text-[#1d1d1f]"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+
+                            {isSearchFocused ? (
+                                <button
+                                    onClick={() => {
+                                        setIsSearchFocused(false);
+                                        // Optional: Blur input
+                                        (document.activeElement as HTMLElement)?.blur();
+                                    }}
+                                    className="h-12 px-5 shrink-0 rounded-xl flex items-center justify-center font-semibold text-[#0071e3] bg-white shadow-sm border border-[#e5e5ea] active:scale-95 transition-all"
+                                >
+                                    Done
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={toggleScanner}
+                                    className={`h-12 px-4 shrink-0 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-white text-[#1d1d1f] border border-[#e5e5ea]' : 'bg-[#0071e3] text-white shadow-[#0071e3]/30'}`}
+                                >
+                                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M4 6h2v2H4V6zm3 0h2v2H7V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-18 3h2v2H4V9zm3 0h2v2H7V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zM4 18h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z" />
+                                    </svg>
+                                    {!showScanner && <span className="text-[15px] font-medium">Scan</span>}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {showSuggestions && suggestions.length > 0 && (
+                        <div className="mb-6 bg-white rounded-3xl overflow-hidden shadow-xl border border-[#e5e5ea]">
+                            {suggestions.map((item) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => processBarcode(item.barcode)}
+                                    className="w-full p-4 flex items-center gap-4 text-left active:bg-[#f2f2f7] border-b border-[#f2f2f7]"
+                                >
+                                    <div className="w-11 h-11 bg-[#f2f2f7] rounded-xl flex items-center justify-center shrink-0">
+                                        <svg className="w-5 h-5 text-[#8e8e93]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" strokeWidth={2} />
+                                        </svg>
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         {item.serialNumber && (
-                                            <p className="text-[10px] text-[#007aff] font-medium mb-0.5">S/N: {item.serialNumber}</p>
+                                            <p className="text-[10px] text-[#007aff] font-medium">S/N: {item.serialNumber}</p>
                                         )}
-                                        <p className="font-bold truncate">{item.name}</p>
+                                        <p className="font-bold truncate text-[16px]">{item.name}</p>
                                         <p className="text-sm text-[#8e8e93] truncate">{item.barcode}</p>
                                     </div>
-                                    <button
-                                        onClick={() => removeFromCart(item.id)}
-                                        className="w-10 h-10 flex items-center justify-center text-[#ff3b30] active:scale-90 transition-all"
-                                    >
-                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                            <path d="M6 18L18 6M6 6l12 12" />
+                                    <div className="w-7 h-7 rounded-full bg-[#0071e3] flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                            <path d="M12 4v16m8-8H4" />
                                         </svg>
-                                    </button>
-                                </div>
+                                    </div>
+                                </button>
                             ))}
                         </div>
-                    </div>
-                </div>
+                    )}
 
-                {/* Mobile Bottom Bar */}
-                <div className="fixed bottom-20 left-0 right-0 p-5 pt-4 bg-white/95 backdrop-blur-2xl border-t border-[#e5e5ea]/50 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
-                    <div className="flex items-center gap-5">
-                        <div>
-                            <p className="text-[12px] font-bold text-[#8e8e93] uppercase">Total</p>
-                            <p className="text-[28px] font-bold text-[#1d1d1f] leading-none">{cart.length}</p>
-                        </div>
-                        <button
-                            onClick={handleCheckout}
-                            disabled={cart.length === 0 || isLoading}
-                            className="flex-1 h-[56px] bg-[#0071e3] text-white rounded-2xl text-[18px] font-bold shadow-xl shadow-[#0071e3]/20 disabled:opacity-40 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
-                        >
-                            {isLoading ? (
-                                <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                            ) : 'Confirm Checkout'}
-                        </button>
+                    <div className="space-y-3">
+                        {cart.map((item, index) => (
+                            <div key={item.id} className="bg-white p-4 rounded-3xl flex items-center gap-4 shadow-sm border border-[#e5e5ea]/50">
+                                <div className="w-10 h-10 bg-[#0071e3] text-white rounded-xl flex items-center justify-center font-bold shadow-md">
+                                    {index + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    {item.serialNumber && (
+                                        <p className="text-[10px] text-[#007aff] font-medium mb-0.5">S/N: {item.serialNumber}</p>
+                                    )}
+                                    <p className="font-bold truncate">{item.name}</p>
+                                    <p className="text-sm text-[#8e8e93] truncate">{item.barcode}</p>
+                                </div>
+                                <button
+                                    onClick={() => removeFromCart(item.id)}
+                                    className="w-10 h-10 flex items-center justify-center text-[#ff3b30] active:scale-90 transition-all"
+                                >
+                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
+
+            {/* Mobile Bottom Bar */}
+            <div className="fixed bottom-20 left-0 right-0 p-5 pt-4 bg-white/95 backdrop-blur-2xl border-t border-[#e5e5ea]/50 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30">
+                <div className="flex items-center gap-5">
+                    <div>
+                        <p className="text-[12px] font-bold text-[#8e8e93] uppercase">Total</p>
+                        <p className="text-[28px] font-bold text-[#1d1d1f] leading-none">{cart.length}</p>
+                    </div>
+                    <button
+                        onClick={handleCheckout}
+                        disabled={cart.length === 0 || isLoading}
+                        className="flex-1 h-[56px] bg-[#0071e3] text-white rounded-2xl text-[18px] font-bold shadow-xl shadow-[#0071e3]/20 disabled:opacity-40 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+                    >
+                        {isLoading ? (
+                            <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        ) : 'Confirm Checkout'}
+                    </button>
+                </div>
+            </div>
+
         </>
     );
 }
