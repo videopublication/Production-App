@@ -1,0 +1,100 @@
+<<<<<<< Updated upstream
+=======
+"Transform this web app into a premium Apple-inspired design with matte finishing and modern aesthetics. Apply these specific design elements:
+GRADIENTS & BACKGROUNDS:
+
+Add subtle mesh gradients on hero sections (soft, blended multi-color gradients - think purple-to-orange, blue-to-pink transitions)
+Use vertical gradient textures for large headlines (swirly, colorful gradient backgrounds clipped to text using background-clip: text with transparent text color)
+Apply soft radial gradients on section backgrounds (not harsh - very subtle, from light gray #f5f5f7 to white)
+Add a gentle top-to-bottom gradient on the entire page (barely noticeable, creates depth)
+Use glassmorphism effect: semi-transparent cards with backdrop-filter: blur(20px) and subtle gradients
+
+TEXT STYLING:
+
+Implement gradient text for headlines using CSS background-clip: text with color: transparent
+Use San Francisco font (SF Pro Display/Text) or fallback to -apple-system, system-ui, Inter
+Massive headlines: 56-80px for hero sections, 600-700 font weight
+Tighter line-height: 1.05-1.1 for headlines
+Body text: 17-19px, 400 weight, 1.5 line-height, color: #1d1d1f
+Secondary text: #86868b (Apple's gray)
+Letter spacing: slightly tighter (-0.5px to -1px) for headlines
+
+CARD DESIGN:
+
+Remove ALL borders - use subtle shadows instead
+Border-radius: 18-24px (much rounder than typical)
+Background: pure white (#ffffff) or very light gray (#fafafa) on white page
+Shadow: box-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 0 1px rgba(0,0,0,0.05)
+Padding: very generous (48-64px on desktop, 24-32px on mobile)
+Hover effect: slight lift with transform: translateY(-4px) and deeper shadow
+Card spacing: 24-32px between cards
+
+BUTTONS:
+
+Primary button: Blue (#0071e3), rounded (28px border-radius), no borders
+Padding: 16px 24px (tall buttons with good breathing room)
+Font: 17px, 400 weight
+Hover: slightly darker blue (#0077ed) with smooth 0.3s transition
+Secondary button: transparent with 1px solid border #d2d2d7, hover: background #f5f5f7
+Remove ALL drop shadows from buttons
+Add gentle scale on hover: transform: scale(1.02)
+
+BADGES & LABELS:
+
+Small, pill-shaped badges
+Border-radius: 12-16px (fully rounded)
+Padding: 4px 12px
+Font-size: 12-14px, 500-600 weight
+Colors: soft pastels or Apple's accent colors
+Subtle gradient backgrounds on feature badges
+No borders, just solid or gradient fills
+
+ALIGNMENT & SPACING:
+
+Everything centered or on a perfect 8px grid system
+Generous white space: minimum 80-120px between major sections
+Container max-width: 980-1200px
+Side padding: 48-80px on desktop, 20px on mobile
+Consistent spacing: use multiples of 8 (16, 24, 32, 48, 64, 80px)
+Elements perfectly aligned both horizontally and vertically
+
+ANIMATIONS & INTERACTIONS:
+
+All transitions: 0.3-0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)
+Smooth scroll behavior
+Parallax effect on scroll (subtle, not overdone)
+Fade-in animations as elements enter viewport
+Hover states: subtle scale (1.02-1.05), opacity changes, or gentle lifts
+Loading states: Apple's spinner style or skeleton loaders
+
+COLORS & FINISHING:
+
+Primary background: #ffffff or #fbfbfd (off-white)
+Text primary: #1d1d1f
+Text secondary: #86868b
+Accent blue: #0071e3
+Dividers: #d2d2d7 (1px, very subtle)
+No harsh black (#000000) - always use #1d1d1f
+Matte finish: reduce shine, saturation slightly lower, avoid pure colors
+Use Apple's color palette: whites, grays, soft blues, and product colors only
+
+OVERALL MATTE FINISH:
+
+Reduce all glossiness - no shiny effects
+Flat design with depth through shadows, not gradients
+Soft, diffused lighting feel
+Clean, crisp edges
+Professional photography style: clean backgrounds, perfect lighting
+Remove texture noise - keep everything smooth and clean
+Anti-aliased everything - smooth curves and text
+
+SPECIFIC ELEMENTS:
+
+Navigation: Fixed top bar, translucent background with backdrop-blur, 44px height
+Footer: Clean, organized columns, generous spacing, light gray background
+Forms: Clean inputs with bottom border only (1px #d2d2d7), no outlines, focus: blue border
+Images: Large, high-quality, rounded corners (12-18px), subtle shadows
+Icons: Simple, line-based, 24px size, consistent stroke width
+
+Make everything feel effortless, breathable, and luxurious. The design should whisper, not shout."**        
+>>>>>>> Stashed changes

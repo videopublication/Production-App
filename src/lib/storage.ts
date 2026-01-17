@@ -394,6 +394,46 @@ class StorageService {
         if (error) console.error('Error saving shoot:', error);
     }
 
+    async updateShoot(id: string, updates: Partial<Shoot>): Promise<void> {
+        const dbUpdates: any = { ...updates };
+        delete dbUpdates.id;
+
+        if (updates.startTime !== undefined) {
+            dbUpdates.start_time = updates.startTime;
+            delete dbUpdates.startTime;
+        }
+        if (updates.endTime !== undefined) {
+            dbUpdates.end_time = updates.endTime;
+            delete dbUpdates.endTime;
+        }
+        if (updates.pocName !== undefined) {
+            dbUpdates.poc_name = updates.pocName;
+            delete dbUpdates.pocName;
+        }
+        if (updates.pocContact !== undefined) {
+            dbUpdates.poc_contact = updates.pocContact;
+            delete dbUpdates.pocContact;
+        }
+        if (updates.requiredRoles !== undefined) {
+            dbUpdates.required_roles = updates.requiredRoles;
+            delete dbUpdates.requiredRoles;
+        }
+        if (updates.createdBy !== undefined) {
+            dbUpdates.created_by = updates.createdBy;
+            delete dbUpdates.createdBy;
+        }
+
+        const { error } = await supabase
+            .from('shoots')
+            .update(dbUpdates)
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error updating shoot:', error);
+            throw error;
+        }
+    }
+
     async deleteShoot(id: string): Promise<void> {
         const { error } = await supabase
             .from('shoots')

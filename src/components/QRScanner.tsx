@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
 import { Button } from './Button';
 import { Card } from './Card';
+// import { Html5Qrcode } from 'html5-qrcode'; // Removed top-level import
 
 interface QRScannerProps {
     onScan: (decodedText: string) => void;
@@ -15,7 +15,8 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
     const [isScanning, setIsScanning] = useState(false);
     const [error, setError] = useState<string>('');
     const [torchOn, setTorchOn] = useState(false);
-    const scannerRef = useRef<Html5Qrcode | null>(null);
+    // Use any for the scanner instance since we are dynamically importing
+    const scannerRef = useRef<any>(null);
     const isInitialized = useRef(false);
     const [scannerId] = useState(() => `qr-reader-${Date.now()}-${Math.floor(Math.random() * 10000)}`);
     const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
@@ -53,6 +54,9 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
                     // Ignore cleanup errors
                 }
             }
+
+            // Dynamic import
+            const { Html5Qrcode } = await import('html5-qrcode');
 
             const scanner = new Html5Qrcode(scannerId);
             scannerRef.current = scanner;
@@ -221,7 +225,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
     const [error, setError] = useState<string>('');
     const [scanCount, setScanCount] = useState(0);
     const [torchOn, setTorchOn] = useState(false);
-    const scannerRef = useRef<Html5Qrcode | null>(null);
+    const scannerRef = useRef<any>(null);
     const isInitialized = useRef(false);
     const [scannerId] = useState(() => `mobile-qr-${Date.now()}-${Math.floor(Math.random() * 10000)}`);
     const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
@@ -261,6 +265,9 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
                     // Ignore cleanup errors
                 }
             }
+
+            // Dynamic import
+            const { Html5Qrcode } = await import('html5-qrcode');
 
             const scanner = new Html5Qrcode(scannerId);
             scannerRef.current = scanner;

@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
 import { storage } from '@/lib/storage';
 import { Notification as AppNotification } from '@/types';
+import { useNotifications } from '@/hooks/useNotifications';
 import useFcmToken from '@/hooks/useFcmToken';
 
 export const Header = () => {
@@ -15,36 +16,13 @@ export const Header = () => {
     const { notificationPermission } = useFcmToken();
     const router = useRouter();
 
-    // Notification State
-    const [notifications, setNotifications] = useState<AppNotification[]>([]);
+    // Notification Hook
+    const { notifications, unreadCount, markAsRead } = useNotifications();
     const [showNotifications, setShowNotifications] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
-
-    const loadNotifications = async () => {
-        if (!user) return;
-        try {
-            const data = await storage.getNotifications(user.id);
-            setNotifications(data);
-            setUnreadCount(data.filter((n: any) => !n.read).length);
-        } catch (error) {
-            console.error("Error loading notifications in Header:", error);
-        }
-    };
-
-    useEffect(() => {
-        if (user) {
-            loadNotifications();
-            // Poll every 30 seconds
-            const interval = setInterval(loadNotifications, 30000);
-            return () => clearInterval(interval);
-        }
-    }, [user]);
 
     const handleNotificationClick = async (notif: AppNotification) => {
         if (!notif.read) {
-            await storage.markNotificationRead(notif.id);
-            setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
-            setUnreadCount(prev => Math.max(0, prev - 1));
+            markAsRead(notif.id);
         }
         setShowNotifications(false);
         // Navigate to the notification detail page
@@ -52,9 +30,8 @@ export const Header = () => {
     };
 
     const markAllRead = async () => {
-        await Promise.all(notifications.filter(n => !n.read).map(n => storage.markNotificationRead(n.id)));
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        setUnreadCount(0);
+        const unread = notifications.filter(n => !n.read);
+        await Promise.all(unread.map(n => markAsRead(n.id)));
     };
 
     if (!user) return null;

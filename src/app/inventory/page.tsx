@@ -15,14 +15,32 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
 import { Skeleton } from '@/components/Skeleton';
+import { useInventory } from '@/hooks/useInventory';
 
 export default function InventoryPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
-    const [items, setItems] = useState<Equipment[]>([]);
-    const [users, setUsers] = useState<Record<string, string>>({});
+
+    // TanStack Query Hook
+    const {
+        equipment: items,
+        users: usersList,
+        isLoading: isInventoryLoading,
+        cleanupAssignments,
+        refresh
+    } = useInventory();
+
+    // Derived state for users map
+    const users = useMemo(() => {
+        const map: Record<string, string> = {};
+        usersList.forEach(u => {
+            map[u.id] = u.name;
+        });
+        return map;
+    }, [usersList]);
+
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL'>('ALL');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
@@ -34,34 +52,18 @@ export default function InventoryPage() {
     const [sortConfig, setSortConfig] = useState<{ key: keyof Equipment | 'assignedToName'; direction: 'asc' | 'desc' } | null>(null);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [isGeneratingQR, setIsGeneratingQR] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    // Local loading state for non-query async actions if needed, though query handles most
+    const [isActionLoading, setIsActionLoading] = useState(false);
 
     useEffect(() => {
         sessionStorage.setItem('inventoryViewMode', viewMode);
     }, [viewMode]);
 
-    const loadData = async () => {
-        const [equipmentData, usersData] = await Promise.all([
-            storage.getEquipment(),
-            storage.getUsers()
-        ]);
-        setItems(equipmentData);
-
-        const userMap: Record<string, string> = {};
-        usersData.forEach(u => {
-            userMap[u.id] = u.name;
-        });
-        setUsers(userMap);
-    };
-
+    // Redirect if not authenticated
     useEffect(() => {
-        if (authLoading) return;
-
-        if (!user) {
+        if (!authLoading && !user) {
             router.push('/login');
-            return;
         }
-        loadData();
     }, [user, router, authLoading]);
 
     if (authLoading) {
@@ -213,18 +215,15 @@ export default function InventoryPage() {
 
         if (!isConfirmed) return;
 
-        setIsLoading(true);
+        setIsActionLoading(true);
         try {
-            await Promise.all(itemsToCleanup.map(item =>
-                storage.updateEquipment(item.id, { assignedTo: null as any })
-            ));
+            await cleanupAssignments(itemsToCleanup);
             showToast('Database cleanup complete!', 'success');
-            await loadData();
         } catch (error) {
             console.error('Cleanup failed:', error);
             showToast('Cleanup failed', 'error');
         } finally {
-            setIsLoading(false);
+            setIsActionLoading(false);
         }
     };
 
@@ -455,8 +454,8 @@ export default function InventoryPage() {
                 </div>
             )}
 
-            <PullToRefresh onRefresh={loadData}>
-                {isLoading ? (
+            <PullToRefresh onRefresh={refresh}>
+                {isActionLoading || isInventoryLoading ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                         {Array.from({ length: 12 }).map((_, i) => (
                             <Skeleton key={i} className="h-[280px] w-full rounded-2xl" />
@@ -547,7 +546,7 @@ export default function InventoryPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {isLoading ? (
+                                    {isInventoryLoading ? (
                                         Array.from({ length: 8 }).map((_, i) => (
                                             <tr key={i} className="border-b border-border bg-background/50">
                                                 <td className="px-4 py-4"><Skeleton className="w-4 h-4 rounded" /></td>
@@ -606,7 +605,7 @@ export default function InventoryPage() {
                     </Card>
                 )}
 
-                {filteredItems.length === 0 && !isLoading && (
+                {filteredItems.length === 0 && !isInventoryLoading && (
                     <div className="col-span-full flex flex-col items-center justify-center p-12 text-center bg-white rounded-xl border border-dashed border-gray-200">
                         <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                             <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
