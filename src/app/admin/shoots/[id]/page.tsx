@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { Shoot, User, Assignment, Log } from '@/types';
+import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 import { isSameDay } from 'date-fns';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -140,7 +141,22 @@ export default function ShootDetailsPage() {
                     </div>
                 </div>
 
+
                 <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
+                    <button
+                        onClick={() => {
+                            const message = formatWhatsAppMessage(shoot, assignments, users);
+                            openWhatsApp(message);
+                        }}
+                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95 bg-[#25D366] hover:bg-[#128C7E] text-white"
+                    >
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                            <polyline points="16 6 12 2 8 6"></polyline>
+                            <line x1="12" y1="2" x2="12" y2="15"></line>
+                        </svg>
+                        Share
+                    </button>
                     <Link href={`/admin/shoots/${id}/edit`} className="flex-1 sm:flex-none">
                         <Button variant="outline" className="w-full sm:w-auto gap-2 bg-white hover:bg-gray-50">
                             <Edit size={16} /> Edit Details
@@ -209,19 +225,21 @@ export default function ShootDetailsPage() {
             </div>
 
             {/* Description (if exists) */}
-            {shoot.description && (
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-xl p-5 shadow-sm">
-                    <h3 className="text-sm font-bold uppercase tracking-widest mb-2 flex items-center gap-2" style={{ color: '#111827' }}>
-                        <svg className="w-4 h-4" style={{ color: '#4b5563' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        About this Shoot
-                    </h3>
-                    <p className="leading-relaxed max-w-4xl text-[15px]" style={{ color: '#1f2937' }}>
-                        {shoot.description}
-                    </p>
-                </div>
-            )}
+            {
+                shoot.description && (
+                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-xl p-5 shadow-sm">
+                        <h3 className="text-sm font-bold uppercase tracking-widest mb-2 flex items-center gap-2" style={{ color: '#111827' }}>
+                            <svg className="w-4 h-4" style={{ color: '#4b5563' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            About this Shoot
+                        </h3>
+                        <p className="leading-relaxed max-w-4xl text-[15px]" style={{ color: '#1f2937' }}>
+                            {shoot.description}
+                        </p>
+                    </div>
+                )
+            }
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Crew List - Main Content */}
@@ -343,6 +361,6 @@ export default function ShootDetailsPage() {
                     </Card>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

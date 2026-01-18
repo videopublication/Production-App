@@ -7,6 +7,7 @@ import { Shoot, Assignment, User } from '@/types';
 import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format, parseISO, isAfter, isBefore, isToday, addDays } from 'date-fns';
 import { Button } from '@/components/Button';
+import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'CONFIRMED' | 'CANCELLED';
@@ -379,16 +380,48 @@ export default function ShootList() {
                                     </div>
 
                                     {/* Footer */}
-                                    <div style={{ borderTop: '1px solid #f3f4f6' }} className="pt-3 flex items-center justify-between">
+                                    <div style={{ borderTop: '1px solid #f3f4f6' }} className="pt-4 flex items-center justify-between mt-auto">
                                         <div className="flex items-center gap-1.5">
                                             <Users size={14} style={{ color: '#9ca3af' }} />
                                             <span style={{ color: '#6b7280' }} className="text-xs font-medium">
                                                 {crewCount} crew
                                             </span>
                                         </div>
-                                        <span style={{ color: '#6b7280' }} className="text-xs">
-                                            by {shoot.createdBy || 'Admin'}
-                                        </span>
+
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    const text = formatWhatsAppMessage(
+                                                        shoot,
+                                                        assignments.filter(a => a.shootId === shoot.id),
+                                                        users
+                                                    );
+                                                    openWhatsApp(text);
+                                                }}
+                                                className="p-2 rounded-full hover:bg-green-50 transition-colors group/share relative z-10"
+                                                title="Share on WhatsApp"
+                                            >
+                                                <svg
+                                                    viewBox="0 0 24 24"
+                                                    width="18"
+                                                    height="18"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    fill="none"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    className="text-gray-400 group-hover/share:text-[#25D366] transition-colors"
+                                                >
+                                                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                                                    <polyline points="16 6 12 2 8 6"></polyline>
+                                                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                                                </svg>
+                                            </button>
+                                            <span style={{ color: '#6b7280' }} className="text-xs">
+                                                by {shoot.createdBy || 'Admin'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </Link>

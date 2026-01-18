@@ -165,9 +165,9 @@ export default function CalendarPage() {
     }
 
     return (
-        <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="p-2 sm:p-6 space-y-6 max-w-7xl mx-auto">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2 sm:px-0">
                 <div>
                     <h1 style={{ color: '#111827' }} className="text-2xl sm:text-3xl font-bold flex items-center gap-3">
                         <CalendarIcon size={28} style={{ color: '#3b82f6' }} />
@@ -184,21 +184,21 @@ export default function CalendarPage() {
                 <div className="lg:col-span-2">
                     <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-2xl shadow-sm overflow-hidden">
                         {/* Calendar Header */}
-                        <div style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }} className="px-6 py-4 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
+                        <div style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }} className="px-3 sm:px-6 py-4 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1 sm:gap-2 flex-1">
                                 <button
                                     onClick={() => navigateMonth('prev')}
-                                    className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-200 transition-colors shrink-0"
                                     style={{ color: '#374151' }}
                                 >
                                     <ChevronLeft size={20} />
                                 </button>
-                                <h2 style={{ color: '#111827' }} className="text-xl font-bold min-w-[200px] text-center">
+                                <h2 style={{ color: '#111827' }} className="text-lg sm:text-xl font-bold flex-1 text-center sm:min-w-[200px]">
                                     {format(currentMonth, 'MMMM yyyy')}
                                 </h2>
                                 <button
                                     onClick={() => navigateMonth('next')}
-                                    className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-200 transition-colors shrink-0"
                                     style={{ color: '#374151' }}
                                 >
                                     <ChevronRight size={20} />
@@ -207,7 +207,7 @@ export default function CalendarPage() {
                             <button
                                 onClick={goToToday}
                                 style={{ backgroundColor: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}
-                                className="px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors"
+                                className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold hover:bg-blue-100 transition-colors shrink-0"
                             >
                                 Today
                             </button>

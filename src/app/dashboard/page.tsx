@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { motion, LayoutGroup } from 'framer-motion';
 
 type UserRole = 'CREW' | 'MANAGER' | 'ADMIN';
 
@@ -103,7 +104,7 @@ const ALL_QUICK_ACTIONS = [
     {
         id: 'activity',
         label: 'Activity',
-        route: '/admin/activity-logs',
+        route: '/admin/logs',
         gradient: 'from-slate-500 to-slate-600',
         shadow: 'shadow-slate-500/25',
         icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -386,71 +387,88 @@ export default function DashboardPage() {
                                 </button>
                             </div>
 
-                            {/* All Actions Grid - only shows actions available to this role */}
+                            {/* All Actions Grid - sorted by order (active first) */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {availableActions.map((action) => {
-                                    const isSelected = selectedActionIds.includes(action.id);
-                                    const index = selectedActionIds.indexOf(action.id);
+                                <LayoutGroup>
+                                    {(() => {
+                                        // Sort actions: Selected ones first (in order), then unselected
+                                        const sortedActions = [
+                                            ...selectedActionIds
+                                                .map(id => availableActions.find(a => a.id === id))
+                                                .filter(Boolean),
+                                            ...availableActions.filter(a => !selectedActionIds.includes(a.id))
+                                        ] as typeof ALL_QUICK_ACTIONS;
 
-                                    return (
-                                        <div
-                                            key={action.id}
-                                            className={`flex items-center gap-3 p-3 rounded-2xl border-2 transition-colors ${isSelected
-                                                ? 'border-[#007aff] bg-[#007aff]/5'
-                                                : 'border-[#e5e5ea] bg-[#f5f5f7]/50'
-                                                }`}
-                                        >
-                                            {/* Icon */}
-                                            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${action.gradient} shadow-lg ${action.shadow} flex items-center justify-center shrink-0`}>
-                                                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d={action.icon} />
-                                                </svg>
-                                            </div>
+                                        return sortedActions.map((action) => {
+                                            const isSelected = selectedActionIds.includes(action.id);
+                                            const index = selectedActionIds.indexOf(action.id);
 
-                                            {/* Label */}
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-[#1d1d1f]">{action.label}</p>
-                                                <p className="text-xs text-[#86868b] truncate">{action.route}</p>
-                                            </div>
-
-                                            {/* Reorder buttons (only for selected) */}
-                                            {isSelected && (
-                                                <div className="flex flex-col gap-1">
-                                                    <button
-                                                        onClick={() => moveAction(action.id, 'up')}
-                                                        disabled={index === 0}
-                                                        className="p-1 rounded bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                                                        </svg>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => moveAction(action.id, 'down')}
-                                                        disabled={index === selectedActionIds.length - 1}
-                                                        className="p-1 rounded bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {/* Toggle */}
-                                            <button
-                                                onClick={() => toggleAction(action.id)}
-                                                className={`w-12 h-7 rounded-full transition-colors relative ${isSelected ? 'bg-[#34c759]' : 'bg-[#e5e5ea]'
-                                                    }`}
-                                            >
-                                                <div
-                                                    className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${isSelected ? 'translate-x-5' : 'translate-x-0.5'
+                                            return (
+                                                <motion.div
+                                                    layout
+                                                    initial={{ opacity: 0, scale: 0.9 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                                    key={action.id}
+                                                    className={`flex items-center gap-3 p-3 rounded-2xl border-2 ${isSelected
+                                                        ? 'border-[#007aff] bg-[#007aff]/5'
+                                                        : 'border-[#e5e5ea] bg-[#f5f5f7]/50'
                                                         }`}
-                                                />
-                                            </button>
-                                        </div>
-                                    );
-                                })}
+                                                >
+                                                    {/* Icon */}
+                                                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${action.gradient} shadow-lg ${action.shadow} flex items-center justify-center shrink-0`}>
+                                                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d={action.icon} />
+                                                        </svg>
+                                                    </div>
+
+                                                    {/* Label */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-semibold text-[#1d1d1f]">{action.label}</p>
+                                                        <p className="text-xs text-[#86868b] truncate">{action.route}</p>
+                                                    </div>
+
+                                                    {/* Reorder buttons (only for selected) */}
+                                                    {isSelected && (
+                                                        <div className="flex flex-col gap-1">
+                                                            <button
+                                                                onClick={() => moveAction(action.id, 'up')}
+                                                                disabled={index === 0}
+                                                                className="p-1 rounded bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                                                                </svg>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => moveAction(action.id, 'down')}
+                                                                disabled={index === selectedActionIds.length - 1}
+                                                                className="p-1 rounded bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Toggle */}
+                                                    <button
+                                                        onClick={() => toggleAction(action.id)}
+                                                        className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${isSelected ? 'bg-[#34c759]' : 'bg-[#e5e5ea]'
+                                                            }`}
+                                                    >
+                                                        <motion.div
+                                                            layout
+                                                            className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow ${isSelected ? 'left-5' : 'left-0.5'}`}
+                                                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                                        />
+                                                    </button>
+                                                </motion.div>
+                                            );
+                                        });
+                                    })()}
+                                </LayoutGroup>
                             </div>
 
                             <p className="text-xs text-[#86868b] text-center mt-4">

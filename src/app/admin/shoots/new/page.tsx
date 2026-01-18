@@ -9,6 +9,8 @@ import { Shoot, User, Assignment } from '@/types';
 import { Button } from '@/components/Button';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
+import { format, parseISO } from 'date-fns';
 
 export default function NewShootPage() {
     const router = useRouter();
@@ -29,7 +31,9 @@ export default function NewShootPage() {
         }
     };
 
-    const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string) => {
+
+
+    const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string, shareOnWhatsApp = false) => {
         setIsLoading(true);
         try {
             const shootId = crypto.randomUUID();
@@ -67,6 +71,11 @@ export default function NewShootPage() {
                 });
             }
 
+            if (shareOnWhatsApp) {
+                const message = formatWhatsAppMessage(newShoot, assignments, users);
+                openWhatsApp(message);
+            }
+
             router.push('/admin/shoots');
         } catch (error) {
             console.error('Failed to create shoot:', error);
@@ -86,12 +95,24 @@ export default function NewShootPage() {
                 <h1 className="text-2xl font-bold text-[#1d1d1f]">New Shoot</h1>
             </div>
 
-            <ShootForm
-                users={users}
-                onSubmit={handleSubmit}
-                isLoading={isLoading}
-                buttonLabel="Create Shoot"
-            />
+            <div className="flex gap-3">
+                <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                        const formElement = document.querySelector('form');
+                        if (formElement) formElement.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                    }}
+                >
+                    Create Shoot Only
+                </Button>
+                <ShootForm
+                    users={users}
+                    onSubmit={(data, crewIds, inchargeId) => handleSubmit(data, crewIds, inchargeId, true)}
+                    isLoading={isLoading}
+                    buttonLabel="Create & Share on WhatsApp"
+                />
+            </div>
         </div>
     );
 }
