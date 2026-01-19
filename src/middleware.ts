@@ -49,29 +49,40 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // If user exists, check their status in the public.users table
+    // If user exists, check their status/role
     if (user) {
-        // If they are on login page, redirect to dashboard/inventory
-        if (path === '/login') {
-            // We can't know their role/status yet without querying, but usually we redirect to dashboard
-            // Let's let the status check below handle it
+        // FAST PATH: Check Custom Claims (JWT) first
+        // If these exist, we save a Database Round-trip!
+        const meta = user.app_metadata || {}
+        const claimRole = meta.role
+        const claimStatus = meta.status
+
+        let role = claimRole
+        let status = claimStatus
+
+        // SLOW PATH: If claims missing, fetch from DB (Legacy/Fallback)
+        if (!role || !status) {
+            console.log("Middleware: Claims missing, fetching from DB (Slow)")
+            const { data: profile } = await supabase
+                .from('users')
+                .select('status, role')
+                .eq('id', user.id)
+                .single()
+
+            if (profile) {
+                role = profile.role
+                status = profile.status
+            }
         }
 
-        // Query status
-        const { data: profile } = await supabase
-            .from('users')
-            .select('status, role')
-            .eq('id', user.id)
-            .single()
-
         // Handle inactive users
-        if (profile) {
-            const isInactive = profile.status === 'PENDING' || profile.status === 'SUSPENDED'
+        if (status) {
+            const isInactive = status === 'PENDING' || status === 'SUSPENDED'
             const isOnInactivePage = path === '/inactive'
 
             // If inactive and NOT on inactive page -> Redirect to inactive
             if (isInactive && !isOnInactivePage) {
-                const reason = profile.status === 'SUSPENDED' ? 'suspended' : 'pending'
+                const reason = status === 'SUSPENDED' ? 'suspended' : 'pending'
                 return NextResponse.redirect(new URL(`/inactive?reason=${reason}`, request.url))
             }
 
@@ -86,7 +97,7 @@ export async function middleware(request: NextRequest) {
             }
 
             // Admin protection for /admin routes
-            if (path.startsWith('/admin') && profile.role !== 'ADMIN') {
+            if (path.startsWith('/admin') && role !== 'ADMIN') {
                 return NextResponse.redirect(new URL('/dashboard', request.url))
             }
         }
