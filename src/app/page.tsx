@@ -16,7 +16,7 @@ export default function Home() {
       if (user.role === 'MANAGER' || user.role === 'ADMIN') {
         router.push('/dashboard');
       } else {
-        router.push('/inventory');
+        router.push('/checkout');
       }
     }
   }, [user, router]);

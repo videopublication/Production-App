@@ -6,6 +6,7 @@ import { User } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { storage } from '@/lib/storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { generateUUID } from '@/lib/id';
 
 interface AuthContextType {
     user: User | null;
@@ -138,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) {
             // Log failed login attempt
             storage.addLog({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 action: 'LOGIN_FAILED',
                 entityId: 'AUTH',
                 timestamp: new Date().toISOString(),
@@ -159,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Log login success ONLY if user is active
         if (data.user && profile?.status === 'ACTIVE') {
             storage.addLog({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 action: 'LOGIN',
                 userId: data.user.id,
                 entityId: 'AUTH',
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (data.user && (profile?.status === 'PENDING' || profile?.status === 'SUSPENDED')) {
             // Log a special entry for inactive login attempts
             storage.addLog({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 action: 'LOGIN_FAILED',
                 userId: data.user.id,
                 entityId: 'AUTH',
@@ -233,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             // Log signup success
             storage.addLog({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 action: 'SIGNUP',
                 userId: authData.user.id,
                 entityId: 'AUTH',
@@ -252,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Log logout
         if (currentUser) {
             storage.addLog({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 action: 'LOGOUT',
                 userId: currentUser.id,
                 entityId: 'AUTH',

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Shoot, ShootStatus, HumanResourceRequirement, User } from '@/types';
+import { Shoot, HumanResourceRequirement, User } from '@/types';
 import { Input } from './Input';
 import { Button } from './Button';
 import { Select } from './Select';
 import { Card } from './Card';
-import { Calendar, MapPin, User as UserIcon, X, Plus, Check } from 'lucide-react';
+import { Calendar, MapPin, User as UserIcon, X, Plus, FileText } from 'lucide-react';
 import { MultiSelect } from './MultiSelect';
 import { format } from 'date-fns';
 
@@ -34,7 +34,6 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         description: '',
         location: '',
         status: 'CONFIRMED',
-
         pocName: '',
         pocContact: '',
         ...initialData,
@@ -45,14 +44,12 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     const [selectedCrewIds, setSelectedCrewIds] = useState<string[]>(initialCrewIds);
     const [inchargeId, setInchargeId] = useState<string>(initialInchargeId);
 
-    // Filter assigned crew for the incharge dropdown
-    // But allowing any user for now, assuming incharge is also part of crew usually or separate
-    // Requirement says: "one option to make incharge from select crew"
-    // So Incharge must be in selectedCrewIds? Or selecting Incharge adds them to crew?
-    // Let's assume selecting Incharge implies they are on the crew.
+    // Toggle states for optional fields
+    const [showDescription, setShowDescription] = useState(!!initialData.description);
+    const [showEndTime, setShowEndTime] = useState(!!initialData.endTime);
+    const [showPOC, setShowPOC] = useState(!!initialData.pocName || !!initialData.pocContact);
 
     useEffect(() => {
-        // Ensure incharge is in crew list if set
         if (inchargeId && !selectedCrewIds.includes(inchargeId)) {
             setSelectedCrewIds(prev => [...prev, inchargeId]);
         }
@@ -74,10 +71,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Auto-calculate requirements based on assignment
         const requiredRoles = calculateRequiredRoles();
-
         await onSubmit({
             ...formData,
             requiredRoles
@@ -91,96 +85,174 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     });
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-6 max-w-4xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
+
+                {/* Shoot Details Card */}
                 <Card className="md:col-span-2 space-y-4">
-                    <h3 className="text-lg font-semibold text-[#1d1d1f]">Basic Verification</h3>
+                    <div className="flex items-center justify-between bg-blue-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-blue-100/50 rounded-t-3xl">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                                <FileText size={16} className="text-blue-600" />
+                            </div>
+                            <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Shoot Details</h3>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowDescription(!showDescription)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-100/50"
+                        >
+                            {showDescription ? 'Hide Description' : 'Add Description'}
+                        </Button>
+                    </div>
 
-                    <Input
-                        label="Shoot Title"
-                        value={formData.title}
-                        onChange={e => setFormData({ ...formData, title: e.target.value })}
-                        placeholder="e.g. Summer Campaign 2024"
-                        required
-                    />
+                    <div className="space-y-4 pt-1">
+                        <Input
+                            label="Shoot Title"
+                            value={formData.title}
+                            onChange={e => setFormData({ ...formData, title: e.target.value })}
+                            placeholder="e.g. Summer Campaign 2024"
+                            required
+                            className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
+                        />
 
-                    <div className="space-y-1">
-                        <label className="block text-sm font-medium text-muted-foreground">Description (Optional)</label>
-                        <textarea
-                            value={formData.description}
-                            onChange={e => setFormData({ ...formData, description: e.target.value })}
-                            className="flex min-h-[80px] w-full rounded-md border border-input bg-secondary px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200"
-                            placeholder="Brief description of the shoot..."
+                        {showDescription && (
+                            <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-200">
+                                <label className="block text-sm font-medium text-[#424245] mb-2">Description (Optional)</label>
+                                <textarea
+                                    value={formData.description}
+                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                                    className="flex min-h-[100px] w-full rounded-2xl border-0 bg-[#f5f5f7] px-4 py-3 text-[15px] text-[#1d1d1f] placeholder:text-[#86868b] focus:outline-none focus:ring-2 focus:ring-[#0071e3] focus:border-transparent resize-none transition-all duration-200"
+                                    placeholder="Brief description of the shoot..."
+                                    autoFocus
+                                />
+                            </div>
+                        )}
+                    </div>
+                </Card>
+
+                {/* Schedule Card */}
+                <Card className="space-y-4">
+                    <div className="flex items-center justify-between bg-purple-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-purple-100/50 rounded-t-3xl">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                                <Calendar size={16} className="text-purple-600" />
+                            </div>
+                            <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Schedule</h3>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setShowEndTime(!showEndTime)}
+                            className={`h-8 w-8 rounded-full ${showEndTime ? 'bg-purple-100 text-purple-600' : 'text-gray-400 hover:text-purple-600 hover:bg-purple-100/50'}`}
+                            title={showEndTime ? "Remove End Time" : "Add End Time"}
+                        >
+                            {showEndTime ? <X size={16} /> : <Plus size={16} />}
+                        </Button>
+                    </div>
+
+                    <div className="space-y-4 pt-1">
+                        <Input
+                            type="datetime-local"
+                            label="Start Time"
+                            value={formData.startTime}
+                            onChange={e => setFormData({ ...formData, startTime: e.target.value })}
+                            required
+                            className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
+                        />
+
+                        {showEndTime && (
+                            <div className="animate-in slide-in-from-top-2 duration-200">
+                                <Input
+                                    type="datetime-local"
+                                    label="End Time (Optional)"
+                                    value={formData.endTime || ''}
+                                    onChange={e => setFormData({ ...formData, endTime: e.target.value })}
+                                    className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
+                                    autoFocus
+                                />
+                            </div>
+                        )}
+                    </div>
+                </Card>
+
+                {/* Logistics Card */}
+                <Card className="space-y-4">
+                    <div className="flex items-center gap-3 bg-red-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-red-100/50 rounded-t-3xl">
+                        <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+                            <MapPin size={16} className="text-red-500" />
+                        </div>
+                        <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Logistics</h3>
+                    </div>
+
+                    <div className="pt-1">
+                        <Input
+                            label="Location"
+                            value={formData.location}
+                            onChange={e => setFormData({ ...formData, location: e.target.value })}
+                            placeholder="e.g. Studio A, Central Park"
+                            required
+                            className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
                         />
                     </div>
                 </Card>
 
-                <Card className="space-y-4">
-                    <h3 className="text-lg font-semibold text-[#1d1d1f] flex items-center gap-2">
-                        <Calendar size={18} /> Schedule
-                    </h3>
-
-                    <Input
-                        type="datetime-local"
-                        label="Start Time"
-                        value={formData.startTime}
-                        onChange={e => setFormData({ ...formData, startTime: e.target.value })}
-                        required
-                    />
-
-                    <Input
-                        type="datetime-local"
-                        label="End Time (Optional)"
-                        value={formData.endTime || ''}
-                        onChange={e => setFormData({ ...formData, endTime: e.target.value })}
-                    />
-                </Card>
-
-                <Card className="space-y-4">
-                    <h3 className="text-lg font-semibold text-[#1d1d1f] flex items-center gap-2">
-                        <MapPin size={18} /> Logistics
-                    </h3>
-
-                    <Input
-                        label="Location"
-                        value={formData.location}
-                        onChange={e => setFormData({ ...formData, location: e.target.value })}
-                        placeholder="e.g. Studio A, Central Park"
-                        required
-                    />
-
-
-                </Card>
-
+                {/* Point of Contact Card */}
                 <Card className="md:col-span-2 space-y-4">
-                    <h3 className="text-lg font-semibold text-[#1d1d1f] flex items-center gap-2">
-                        <UserIcon size={18} /> Point of Contact
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input
-                            label="POC Name"
-                            value={formData.pocName || ''}
-                            onChange={e => setFormData({ ...formData, pocName: e.target.value })}
-                            placeholder="Name of contact person"
-                        />
-                        <Input
-                            label="POC Contact"
-                            value={formData.pocContact || ''}
-                            onChange={e => setFormData({ ...formData, pocContact: e.target.value })}
-                            placeholder="Phone or Email"
-                        />
+                    <div className="flex items-center justify-between bg-green-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-green-100/50 rounded-t-3xl">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                                <UserIcon size={16} className="text-green-600" />
+                            </div>
+                            <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Point of Contact</h3>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowPOC(!showPOC)}
+                            className="text-green-600 hover:text-green-700 hover:bg-green-100/50"
+                        >
+                            {showPOC ? 'Hide' : 'Add'}
+                        </Button>
                     </div>
+
+                    {showPOC ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 animate-in slide-in-from-top-2 duration-200">
+                            <Input
+                                label="POC Name"
+                                value={formData.pocName || ''}
+                                onChange={e => setFormData({ ...formData, pocName: e.target.value })}
+                                placeholder="Name of contact person"
+                                className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
+                            />
+                            <Input
+                                label="POC Contact"
+                                value={formData.pocContact || ''}
+                                onChange={e => setFormData({ ...formData, pocContact: e.target.value })}
+                                placeholder="Phone or Email"
+                                className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
+                            />
+                        </div>
+                    ) : (
+                        <div className="text-sm text-muted-foreground pt-1 pl-1">
+                            Optional: Add point of contact details if relevant.
+                        </div>
+                    )}
                 </Card>
 
-                <Card className="md:col-span-2 space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-semibold text-[#1d1d1f]">Crew Assignments</h3>
+                {/* Crew Assignments Card */}
+                <Card className="md:col-span-2 space-y-3">
+                    <div className="flex justify-between items-center bg-gray-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-gray-100/50 rounded-t-3xl">
+                        <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Crew Assignments</h3>
                     </div>
 
-                    <div className="space-y-4">
-                        {/* Multi-Select for Crew */}
+                    <div className="space-y-4 pt-1">
                         <div className="space-y-2">
-                            <label className="block text-sm font-medium text-muted-foreground">Select Crew Members</label>
+                            <label className="block text-sm font-medium text-[#424245] mb-2">Select Crew Members</label>
                             <MultiSelect
                                 options={crewOptions}
                                 value={selectedCrewIds}
@@ -189,10 +261,9 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                             />
                         </div>
 
-                        {/* Incharge Selection */}
                         {selectedCrewIds.length > 0 && (
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-muted-foreground">Select Shoot Incharge</label>
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <label className="block text-sm font-medium text-[#424245] mb-2">Select Shoot Incharge</label>
                                 <Select
                                     value={inchargeId}
                                     onChange={setInchargeId}
@@ -202,9 +273,8 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                             </div>
                         )}
 
-                        {/* Summary of Selection */}
                         {selectedCrewIds.length > 0 && (
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <h4 className="text-sm font-medium text-gray-900 mb-2">Selected Crew ({selectedCrewIds.length})</h4>
                                 <div className="flex flex-wrap gap-2">
                                     {selectedCrewIds.map(id => {

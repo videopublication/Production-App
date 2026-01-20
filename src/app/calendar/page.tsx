@@ -11,9 +11,14 @@ import {
     Calendar as CalendarIcon,
     Plus,
     Users,
+    User,
     Clock,
     MapPin,
-    List
+    List,
+    Copy,
+    Phone,
+    MessageCircle,
+    Mail
 } from 'lucide-react';
 import {
     format,
@@ -468,6 +473,80 @@ export default function CalendarPage() {
                                                 {/* Expanded Details */}
                                                 {isExpanded && (
                                                     <div style={{ backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }} className="p-4">
+                                                        {/* POC Details */}
+                                                        {(shoot.pocName || shoot.pocContact) && (
+                                                            <div className="mb-4">
+                                                                <h5 style={{ color: '#374151' }} className="text-xs font-bold uppercase tracking-wider mb-2">
+                                                                    Point of Contact
+                                                                </h5>
+                                                                <div className="flex items-center gap-3 p-2 rounded-lg" style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}>
+                                                                    <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-600">
+                                                                        <User size={16} />
+                                                                    </div>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        {shoot.pocName && (
+                                                                            <p style={{ color: '#111827' }} className="text-sm font-medium truncate">
+                                                                                {shoot.pocName}
+                                                                            </p>
+                                                                        )}
+                                                                        {shoot.pocContact && (
+                                                                            <p style={{ color: '#6b7280' }} className="text-xs truncate">
+                                                                                {shoot.pocContact}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* Actions */}
+                                                                    {shoot.pocContact && (
+                                                                        <div className="flex items-center gap-1">
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    navigator.clipboard.writeText(shoot.pocContact || '');
+                                                                                }}
+                                                                                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+                                                                                title="Copy"
+                                                                            >
+                                                                                <Copy size={14} />
+                                                                            </button>
+
+                                                                            {shoot.pocContact.includes('@') ? (
+                                                                                <a
+                                                                                    href={`mailto:${shoot.pocContact}`}
+                                                                                    onClick={(e) => e.stopPropagation()}
+                                                                                    className="p-1.5 rounded-full hover:bg-blue-50 text-blue-500 transition-colors"
+                                                                                    title="Send Email"
+                                                                                >
+                                                                                    <Mail size={14} />
+                                                                                </a>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <a
+                                                                                        href={`tel:${shoot.pocContact}`}
+                                                                                        onClick={(e) => e.stopPropagation()}
+                                                                                        className="p-1.5 rounded-full hover:bg-blue-50 text-blue-500 transition-colors"
+                                                                                        title="Call"
+                                                                                    >
+                                                                                        <Phone size={14} />
+                                                                                    </a>
+                                                                                    <a
+                                                                                        href={`https://wa.me/${shoot.pocContact.replace(/\D/g, '')}`}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        onClick={(e) => e.stopPropagation()}
+                                                                                        className="p-1.5 rounded-full hover:bg-green-50 text-green-600 transition-colors"
+                                                                                        title="WhatsApp"
+                                                                                    >
+                                                                                        <MessageCircle size={14} />
+                                                                                    </a>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
                                                         {/* Crew List */}
                                                         <h5 style={{ color: '#374151' }} className="text-xs font-bold uppercase tracking-wider mb-3">
                                                             Assigned Crew
@@ -506,12 +585,14 @@ export default function CalendarPage() {
                                                             </div>
                                                         )}
 
-                                                        {/* View Details Button */}
-                                                        <Link href={`/admin/shoots/${shoot.id}`} className="block mt-4">
-                                                            <Button size="sm" className="w-full">
-                                                                View Full Details
-                                                            </Button>
-                                                        </Link>
+                                                        {/* View Details Button - Admin Only */}
+                                                        {user?.role === 'ADMIN' && (
+                                                            <Link href={`/admin/shoots/${shoot.id}`} className="block mt-4">
+                                                                <Button size="sm" className="w-full">
+                                                                    View Full Details
+                                                                </Button>
+                                                            </Link>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>

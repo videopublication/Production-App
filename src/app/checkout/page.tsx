@@ -13,7 +13,7 @@ import { Select } from '@/components/Select';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
-import { generateTransactionId } from '@/lib/id';
+import { generateTransactionId, generateUUID } from '@/lib/id';
 import { useInventory } from '@/hooks/useInventory';
 import { useShoots } from '@/hooks/useShoots';
 
@@ -353,7 +353,7 @@ export default function CheckoutPage() {
             const shootInfo = selectedShootId ? shoots.find(s => s.id === selectedShootId)?.title : null;
 
             await storage.addLog({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 action: 'CHECKOUT',
                 entityId: transaction.id,
                 userId: user.id,
@@ -881,7 +881,7 @@ export default function CheckoutPage() {
             </div>
 
             {/* Mobile Bottom Bar */}
-            <div className="fixed bottom-20 left-0 right-0 p-5 pt-4 bg-white/95 backdrop-blur-2xl border-t border-[#e5e5ea]/50 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30">
+            <div className="md:hidden fixed bottom-20 left-0 right-0 p-5 pt-4 bg-white/95 backdrop-blur-2xl border-t border-[#e5e5ea]/50 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30">
                 <div className="flex items-center gap-5">
                     <div>
                         <p className="text-[12px] font-bold text-[#8e8e93] uppercase">Total</p>

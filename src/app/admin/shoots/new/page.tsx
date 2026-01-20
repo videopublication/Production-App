@@ -11,6 +11,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 import { format, parseISO } from 'date-fns';
+import { generateUUID } from '@/lib/id';
 
 export default function NewShootPage() {
     const router = useRouter();
@@ -33,10 +34,10 @@ export default function NewShootPage() {
 
 
 
-    const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string, shareOnWhatsApp = false) => {
+    const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string) => {
         setIsLoading(true);
         try {
-            const shootId = crypto.randomUUID();
+            const shootId = generateUUID();
 
             const newShoot: Shoot = {
                 ...data as Shoot,
@@ -48,7 +49,7 @@ export default function NewShootPage() {
 
             // Create assignment records
             const assignments: Assignment[] = crewIds.map(userId => ({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 shootId: shootId,
                 userId: userId,
                 role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
@@ -62,7 +63,7 @@ export default function NewShootPage() {
             // Log activity
             if (user) {
                 await storage.addLog({
-                    id: crypto.randomUUID(),
+                    id: generateUUID(),
                     action: 'CREATE',
                     entityId: shootId,
                     userId: user.id,
@@ -71,11 +72,7 @@ export default function NewShootPage() {
                 });
             }
 
-            if (shareOnWhatsApp) {
-                const message = formatWhatsAppMessage(newShoot, assignments, users);
-                openWhatsApp(message);
-            }
-
+            // No auto-redirect to WhatsApp
             router.push('/admin/shoots');
         } catch (error) {
             console.error('Failed to create shoot:', error);
@@ -85,32 +82,22 @@ export default function NewShootPage() {
     };
 
     return (
-        <div className="p-6 space-y-6">
-            <div className="flex items-center gap-4">
+        <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4">
+            <div className="flex items-center gap-3">
                 <Link href="/admin/shoots">
                     <Button variant="ghost" size="icon" className="rounded-full">
                         <ArrowLeft size={20} />
                     </Button>
                 </Link>
-                <h1 className="text-2xl font-bold text-[#1d1d1f]">New Shoot</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-[#1d1d1f]">New Shoot</h1>
             </div>
 
-            <div className="flex gap-3">
-                <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                        const formElement = document.querySelector('form');
-                        if (formElement) formElement.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-                    }}
-                >
-                    Create Shoot Only
-                </Button>
+            <div className="max-w-4xl">
                 <ShootForm
                     users={users}
-                    onSubmit={(data, crewIds, inchargeId) => handleSubmit(data, crewIds, inchargeId, true)}
+                    onSubmit={handleSubmit}
                     isLoading={isLoading}
-                    buttonLabel="Create & Share on WhatsApp"
+                    buttonLabel="Create Shoot"
                 />
             </div>
         </div>
