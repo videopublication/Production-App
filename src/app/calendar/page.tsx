@@ -11,7 +11,7 @@ import {
     Calendar as CalendarIcon,
     Plus,
     Users,
-    User,
+    User as UserIcon,
     Clock,
     MapPin,
     List,
@@ -481,7 +481,7 @@ export default function CalendarPage() {
                                                                 </h5>
                                                                 <div className="flex items-center gap-3 p-2 rounded-lg" style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}>
                                                                     <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-600">
-                                                                        <User size={16} />
+                                                                        <UserIcon size={16} />
                                                                     </div>
                                                                     <div className="min-w-0 flex-1">
                                                                         {shoot.pocName && (
