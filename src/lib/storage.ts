@@ -367,8 +367,10 @@ class StorageService {
             endTime: s.end_time,
             pocName: s.poc_name,
             pocContact: s.poc_contact,
-            requiredRoles: s.required_roles, // JSONB
-            createdBy: s.created_by
+            requiredRoles: s.required_roles,
+            createdBy: s.created_by,
+            googleEventId: s.google_event_id, // Map DB column to type
+            shootNumber: s.shoot_number
         })) as Shoot[];
     }
 
@@ -384,14 +386,18 @@ class StorageService {
             poc_name: shoot.pocName,
             poc_contact: shoot.pocContact,
             required_roles: shoot.requiredRoles,
-            created_by: shoot.createdBy
+            created_by: shoot.createdBy,
+            google_event_id: shoot.googleEventId || null // Save to DB, ensure null if undefined
         };
 
         const { error } = await supabase
             .from('shoots')
             .upsert(dbShoot);
 
-        if (error) console.error('Error saving shoot:', error);
+        if (error) {
+            console.error('Error saving shoot:', error.message, error.details, error);
+            throw error;
+        }
     }
 
     async updateShoot(id: string, updates: Partial<Shoot>): Promise<void> {
@@ -421,6 +427,10 @@ class StorageService {
         if (updates.createdBy !== undefined) {
             dbUpdates.created_by = updates.createdBy;
             delete dbUpdates.createdBy;
+        }
+        if (updates.googleEventId !== undefined) {
+            dbUpdates.google_event_id = updates.googleEventId;
+            delete dbUpdates.googleEventId;
         }
 
         const { error } = await supabase

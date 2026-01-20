@@ -13,6 +13,8 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<{ error: any }>;
     signUp: (email: string, password: string, name: string) => Promise<{ error: any }>;
     logout: () => Promise<void>;
+    linkGoogleCalendar: () => Promise<{ error: any }>;
+    loginWithGoogle: () => Promise<{ error: any }>;
     isLoading: boolean;
 }
 
@@ -85,9 +87,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         .subscribe();
 
                 } else if (error && error.code === 'PGRST116') {
-                    // User exists in Auth but not in public.users table yet
-                    console.warn('User profile not found in public table');
-                    setUser(null);
+                    // User exists in Auth but not in public.users table yet (e.g., first Google Login)
+                    console.log('User profile not found in public table, creating new PENDING profile...');
+
+                    try {
+                        const { error: insertError } = await supabase
+                            .from('users')
+                            .insert([
+                                {
+                                    id: userId,
+                                    email: email,
+                                    name: email.split('@')[0], // Default name from email
+                                    role: 'CREW',
+                                    status: 'PENDING',
+                                    // Try to get avatar from metadata
+                                    avatarUrl: (await supabase.auth.getSession()).data.session?.user?.user_metadata?.avatar_url || null
+                                }
+                            ]);
+
+                        if (insertError) {
+                            console.error('Failed to create public user profile:', insertError);
+                            setUser(null);
+                        } else {
+                            // Successfully created, now recurse/reload to fetch it and handle routing
+                            fetchProfile(userId, email);
+                        }
+                    } catch (err) {
+                        console.error('Error creating profile:', err);
+                        setUser(null);
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching user profile:', error);
@@ -266,8 +294,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push('/login');
     };
 
+    const linkGoogleCalendar = async () => {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                scopes: 'https://www.googleapis.com/auth/calendar.events',
+                redirectTo: `${window.location.origin}/profile`,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                },
+            },
+        });
+        return { error };
+    };
+
+    const loginWithGoogle = async () => {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                // Request emails scope and Calendar scope to get user details and enable calendar integration
+                scopes: 'https://www.googleapis.com/auth/calendar.events',
+                redirectTo: `${window.location.origin}/login`,
+                queryParams: {
+                    access_type: 'offline',
+                    // prompt: 'consent', // Removed to prevent forcing consent screen on every login
+                },
+            },
+        });
+        return { error };
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, signUp, logout, isLoading }}>
+        <AuthContext.Provider value={{ user, login, signUp, logout, linkGoogleCalendar, loginWithGoogle, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

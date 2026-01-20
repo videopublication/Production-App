@@ -24,6 +24,7 @@ export interface User {
     active?: boolean; // Deprecated, kept for immediate backward compat during refactor
     status: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
     fcmToken?: string | null;
+    avatarUrl?: string | null;
 }
 
 export interface Equipment {
@@ -110,6 +111,8 @@ export interface Shoot {
     pocContact?: string;
     requiredRoles: HumanResourceRequirement[];
     createdBy: string;
+    googleEventId?: string;
+    shootNumber?: number;
 }
 
 export interface Assignment {

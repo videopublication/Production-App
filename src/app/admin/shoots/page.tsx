@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage';
 import { Shoot, Assignment, User } from '@/types';
 import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
@@ -18,6 +19,7 @@ type SortDirection = 'asc' | 'desc';
 
 export default function ShootList() {
     const router = useRouter();
+    const { user } = useAuth();
     const [shoots, setShoots] = useState<Shoot[]>([]);
     const [assignments, setAssignments] = useState<Assignment[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -62,13 +64,22 @@ export default function ShootList() {
 
     // Filtered shoots
     const filteredShoots = useMemo(() => {
+        if (!user) return [];
+
         return shoots.filter(shoot => {
+            // Role-based access control
+            if (user.role === 'CREW') {
+                const isAssigned = assignments.some(a => a.shootId === shoot.id && a.userId === user.id);
+                if (!isAssigned) return false;
+            }
+
             // Search filter
             const query = searchQuery.toLowerCase();
             const matchesSearch = !query ||
                 shoot.title.toLowerCase().includes(query) ||
                 shoot.location?.toLowerCase().includes(query) ||
-                shoot.description?.toLowerCase().includes(query);
+                shoot.description?.toLowerCase().includes(query) ||
+                (shoot.shootNumber && shoot.shootNumber.toString().includes(query));
 
             // Status filter
             const matchesStatus = statusFilter === 'ALL' || shoot.status === statusFilter;
@@ -90,7 +101,7 @@ export default function ShootList() {
 
             return matchesSearch && matchesStatus && matchesTime;
         });
-    }, [shoots, searchQuery, statusFilter, timeFilter]);
+    }, [shoots, searchQuery, statusFilter, timeFilter, user, assignments]);
 
     // Sorted shoots for list view
     const sortedShoots = useMemo(() => {
@@ -202,7 +213,7 @@ export default function ShootList() {
                         <Search size={18} style={{ color: '#9ca3af' }} className="absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                             type="text"
-                            placeholder="Search..."
+                            placeholder="Search title, location, ID..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827' }}
@@ -345,9 +356,16 @@ export default function ShootList() {
                                 >
                                     {/* Header */}
                                     <div className="flex items-start justify-between gap-3 mb-2 sm:mb-3">
-                                        <h3 style={{ color: '#111827' }} className="font-bold text-base sm:text-lg group-hover:text-blue-600 transition-colors line-clamp-1">
-                                            {shoot.title}
-                                        </h3>
+                                        <div>
+                                            {shoot.shootNumber && (
+                                                <span className="inline-block text-[10px] font-bold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded-md mb-1.5">
+                                                    #{shoot.shootNumber}
+                                                </span>
+                                            )}
+                                            <h3 style={{ color: '#111827' }} className="font-bold text-base sm:text-lg group-hover:text-blue-600 transition-colors line-clamp-1">
+                                                {shoot.title}
+                                            </h3>
+                                        </div>
                                         <span
                                             style={{ backgroundColor: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.border}` }}
                                             className="text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide shrink-0"
@@ -553,9 +571,16 @@ export default function ShootList() {
                                 >
                                     {/* Shoot Info */}
                                     <div className="col-span-4 min-w-0">
-                                        <h4 style={{ color: '#111827' }} className="font-semibold truncate hover:text-blue-600">
-                                            {shoot.title}
-                                        </h4>
+                                        <div className="flex items-center gap-2">
+                                            {shoot.shootNumber && (
+                                                <span className="text-[11px] font-bold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded tracking-wide shrink-0">
+                                                    #{shoot.shootNumber}
+                                                </span>
+                                            )}
+                                            <h4 style={{ color: '#111827' }} className="font-semibold truncate hover:text-blue-600">
+                                                {shoot.title}
+                                            </h4>
+                                        </div>
                                         {shoot.description && (
                                             <p style={{ color: '#6b7280' }} className="text-sm truncate mt-0.5">
                                                 {shoot.description}

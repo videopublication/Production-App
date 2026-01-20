@@ -7,6 +7,9 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
     const endTime = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : 'TBD';
 
     let message = `🎬 *SHOOT DETAILS* 🎬\n\n`;
+    if (shoot.shootNumber) {
+        message += `*Shoot ID:* #${shoot.shootNumber}\n`;
+    }
     message += `*Shoot Name:* ${shoot.title}\n`;
     message += `*Date:* ${date}\n`;
     message += `*Time:* ${startTime} - ${endTime}\n`;
@@ -30,9 +33,9 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
         message += `- No crew assigned yet\n`;
     }
 
-    return encodeURIComponent(message);
+    return message;
 };
 
 export const openWhatsApp = (message: string) => {
-    window.open(`https://wa.me/?text=${message}`, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
 };

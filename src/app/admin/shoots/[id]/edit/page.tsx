@@ -143,7 +143,7 @@ export default function EditShootPage() {
             }
 
             const details = changes.length > 0
-                ? `Updated ${changes.join(', ')}`
+                ? `Updated shoot${updatedShoot.shootNumber ? ` #${updatedShoot.shootNumber}` : ''}: ${changes.join(', ')}`
                 : 'Updated shoot details';
 
             if (user) {
@@ -183,7 +183,9 @@ export default function EditShootPage() {
                         <ArrowLeft size={20} />
                     </Button>
                 </Link>
-                <h1 className="text-2xl font-bold text-[#1d1d1f]">Edit Shoot</h1>
+                <h1 className="text-2xl font-bold text-[#1d1d1f]">
+                    Edit Shoot {shoot?.shootNumber ? <span className="text-gray-500">#{shoot.shootNumber}</span> : ''}
+                </h1>
             </div>
 
             <ShootForm
