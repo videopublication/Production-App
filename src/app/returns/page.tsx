@@ -3,18 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Equipment, Condition } from '@/types';
+import { Condition } from '@/types';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
-import { useInventory } from '@/hooks/useInventory';
+import { useEquipment, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 export default function ReturnsPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
-    const { equipment: allItems, isLoading: isInventoryLoading, updateEquipment } = useInventory(); // Use updateEquipment from hook
+    const { data: allItems = [], isLoading: isInventoryLoading } = useEquipment();
+    const { mutateAsync: updateEquipment } = useUpdateEquipment();
     const { showToast } = useToast();
     const isOnline = useOnlineStatus();
 
@@ -31,7 +32,6 @@ export default function ReturnsPage() {
         if (authLoading) return;
 
         if (!user) router.push('/login');
-        else if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) router.push('/');
     }, [user, router, authLoading]);
 
     if (authLoading || isInventoryLoading) {
@@ -67,9 +67,7 @@ export default function ReturnsPage() {
         }
 
         try {
-            // Process updates sequentially or in parallel
             await Promise.all(selectedItems.map(async (id) => {
-                // Use hook's mutation for optimistic updates/invalidation
                 await updateEquipment({
                     id,
                     updates: {
@@ -99,7 +97,6 @@ export default function ReturnsPage() {
 
                 if (managers.length > 0) {
                     const tokens = managers.map(m => m.fcmToken).filter(Boolean) as string[];
-                    // Send to each manager (in simpler setup; could be topic messaging later)
                     await Promise.all(tokens.map(token =>
                         fetch('/api/send-notification', {
                             method: 'POST',
@@ -108,7 +105,7 @@ export default function ReturnsPage() {
                                 token,
                                 title: 'Items Returned',
                                 message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
-                                link: '/verification' // Deep link to verification page
+                                link: '/verification'
                             })
                         })
                     ));
@@ -118,8 +115,6 @@ export default function ReturnsPage() {
             }
 
             showToast('Items submitted for verification', 'success');
-
-            // Reset local selection state (data updates automatically via Query cache)
             setSelectedItems([]);
             setConditions({});
         } catch (error) {

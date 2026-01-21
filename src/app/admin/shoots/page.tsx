@@ -1,13 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useShoots } from '@/hooks/useShoots';
+import { useAssignments } from '@/hooks/useAssignments';
+import { useUsers } from '@/hooks/useUsers';
+
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { storage } from '@/lib/storage';
-import { Shoot, Assignment, User } from '@/types';
+import { storage } from '@/lib/storage'; // Still used for type referencing if valid, or remove if unused, but kept for safety. Ideally hooks replace it but types might be needed. Alternatively just imports.
 import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { format, parseISO, isAfter, isBefore, isToday, addDays } from 'date-fns';
+import { format, parseISO, isAfter, isBefore, isToday } from 'date-fns';
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 
@@ -20,10 +23,13 @@ type SortDirection = 'asc' | 'desc';
 export default function ShootList() {
     const router = useRouter();
     const { user } = useAuth();
-    const [shoots, setShoots] = useState<Shoot[]>([]);
-    const [assignments, setAssignments] = useState<Assignment[]>([]);
-    const [users, setUsers] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
+
+    // React Query Hooks
+    const { data: shoots = [], isLoading: shootsLoading } = useShoots();
+    const { data: assignments = [], isLoading: assignmentsLoading } = useAssignments();
+    const { data: users = [], isLoading: usersLoading } = useUsers();
+
+    const loading = shootsLoading || assignmentsLoading || usersLoading;
 
     // UI State
     const [viewMode, setViewMode] = useState<ViewMode>('card');
@@ -35,27 +41,6 @@ export default function ShootList() {
     // Sorting state (for list view)
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
-        try {
-            const [shootsData, assignmentsData, usersData] = await Promise.all([
-                storage.getShoots(),
-                storage.getAssignments(),
-                storage.getUsers()
-            ]);
-            setShoots(shootsData);
-            setAssignments(assignmentsData);
-            setUsers(usersData);
-        } catch (error) {
-            console.error('Failed to load data:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // Get crew count for a shoot
     const getCrewCount = (shootId: string) => {

@@ -15,49 +15,52 @@ import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { useConfirm } from '@/lib/dialog-context';
 
+import { useShoot, useSaveShoot } from '@/hooks/useShoots';
+import { useAssignments } from '@/hooks/useAssignments';
+import { useUsers } from '@/hooks/useUsers';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { getGoogleProviderToken, deleteGoogleCalendarEvent } from '@/lib/google-calendar';
+
+// ... (previous imports)
+
 export default function ShootDetailsPage() {
     const router = useRouter();
     const { user } = useAuth();
     const params = useParams();
     const confirm = useConfirm();
     const id = params?.id as string;
+    const queryClient = useQueryClient();
 
-    const [shoot, setShoot] = useState<Shoot | null>(null);
-    const [assignments, setAssignments] = useState<Assignment[]>([]);
-    const [users, setUsers] = useState<User[]>([]);
+    // React Query Hooks
+    const { data: shoot, isLoading: shootLoading } = useShoot(id);
+    const { data: allAssignments = [], isLoading: assignmentsLoading } = useAssignments();
+    const { data: users = [], isLoading: usersLoading } = useUsers();
+
+    // We still fetch logs manually for now or via a new hook if we created one. 
+    // For now let's keep logs separate or just fetch them inside effect to avoid too much change at once, 
+    // OR ideally we Create useLogs hook.
+    // Let's assume for this step we might lose real-time logs unless we hook-ify them, 
+    // but the request was about "Shoot Details" fetching. 
+    // To keep it simple, I'll keep the logs state but fetch them inside a smaller effect 
+    // OR better, let's make a quick useLogs hook in next step? 
+    // Actually, I can just use `storage.getLogsByEntity(id)` in a simple useQuery here inline or standard effect.
+    // Let's stick to standard Effect for LOGS only to minimize friction, 
+    // but use Hooks for the big data (Shoot, Assignments, Users).
+
     const [logs, setLogs] = useState<Log[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { mutateAsync: saveShoot } = useSaveShoot();
+
+    const loading = shootLoading || assignmentsLoading || usersLoading;
+
+    // Derived State
+    const assignments = allAssignments.filter(a => a.shootId === id);
 
     useEffect(() => {
         if (id) {
-            loadData();
+            storage.getLogsByEntity(id).then(setLogs);
         }
     }, [id]);
-
-    const loadData = async () => {
-        try {
-            const [allShoots, allAssignments, allUsers, shootLogs] = await Promise.all([
-                storage.getShoots(),
-                storage.getAssignments(),
-                storage.getUsers(),
-                storage.getLogsByEntity(id)
-            ]);
-
-            const foundShoot = allShoots.find(s => s.id === id);
-            if (foundShoot) {
-                setShoot(foundShoot);
-                setAssignments(allAssignments.filter(a => a.shootId === id));
-                setUsers(allUsers);
-                setLogs(shootLogs);
-            } else {
-                router.push('/admin/shoots');
-            }
-        } catch (error) {
-            console.error('Failed to load data:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleCancelShoot = async () => {
         if (!shoot) return;
@@ -71,31 +74,36 @@ export default function ShootDetailsPage() {
 
         if (!isConfirmed) return;
 
+        let calendarError = null;
+
         try {
             // Check for Google Calendar Event presence
             if (shoot.googleEventId) {
-                // We need to fetch the token first, similar to how we create events
-                // For simplicity here, we assume if they can create, they have token.
-                // But token might be expired or not present if they logged out/in without consents.
-                // We'll try to get it.
-                // Import the helper (need to add import at top)
-                const { getGoogleProviderToken, deleteGoogleCalendarEvent } = await import('@/lib/google-calendar');
-                const token = await getGoogleProviderToken();
-                if (token) {
-                    await deleteGoogleCalendarEvent(shoot.googleEventId, token);
+                const tokens = await getGoogleProviderToken();
+
+                if (tokens && tokens.accessToken) {
+                    try {
+                        await deleteGoogleCalendarEvent(shoot.googleEventId, tokens);
+                    } catch (err: any) {
+                        console.error('Calendar deletion failed:', err);
+                        calendarError = err.message || 'Unknown calendar error';
+                        // Continue to cancel locally despite calendar error
+                    }
                 } else {
                     console.warn('Cannot delete Google Calendar event: No provider token found.');
+                    calendarError = 'No Google Calendar connection found';
                 }
             }
 
-            // Mark as cancelled and CLEAR the Google ID so we don't try to delete it again or update a dead event
-            // If we re-activate this shoot later, we want to create a NEW event.
+            // Mark as cancelled and CLEAR the Google ID
             const updatedShoot: Shoot = {
                 ...shoot,
                 status: 'CANCELLED',
-                googleEventId: undefined // IMPORTANT: Remove the ID from DB
+                googleEventId: undefined
             };
-            await storage.saveShoot(updatedShoot);
+
+            await saveShoot(updatedShoot);
+            await queryClient.invalidateQueries({ queryKey: [['shoots', id], ['shoots']] });
 
             // Log cancellation
             if (user) {
@@ -107,13 +115,31 @@ export default function ShootDetailsPage() {
                     timestamp: new Date().toISOString(),
                     details: 'Cancelled shoot'
                 });
+                // update logs locally for immediate feedback
+                storage.getLogsByEntity(id).then(setLogs);
             }
 
-            // Reload data to reflect changes
-            await loadData();
+            // Show appropriate feedback
+            const toast = document.createElement('div');
+            if (calendarError) {
+                toast.className = 'fixed bottom-4 right-4 bg-orange-600 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 z-50 animate-in fade-in slide-in-from-bottom-2';
+                toast.innerHTML = `
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <div>
+                        <p class="font-bold">Cancelled locally</p>
+                        <p class="text-xs opacity-90">Could not remove from Calendar: ${calendarError}</p>
+                    </div>
+                `;
+            } else {
+                toast.className = 'fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-full font-medium z-50 animate-in fade-in slide-in-from-bottom-2';
+                toast.textContent = 'Shoot cancelled successfully';
+            }
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+
         } catch (error) {
             console.error('Failed to cancel shoot:', error);
-            // Optionally show toast/alert to user
+            alert('Failed to cancel shoot. Please try again.');
         }
     };
 

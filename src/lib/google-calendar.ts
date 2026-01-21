@@ -5,8 +5,9 @@ export const GOOGLE_CALENDAR_SCOPES = 'https://www.googleapis.com/auth/calendar.
 
 /**
  * Checks if the current session has the required Google Calendar provider token.
+ * Returns both access and refresh tokens.
  */
-export async function getGoogleProviderToken(): Promise<string | null> {
+export async function getGoogleProviderToken() {
     const { data: sessionData } = await supabase.auth.getSession();
     const session = sessionData.session;
 
@@ -14,10 +15,10 @@ export async function getGoogleProviderToken(): Promise<string | null> {
         return null;
     }
 
-    // Note: Supabase stores the provider token in the session.
-    // However, we can't easily check scopes here without making a call.
-    // We assume if they linked via our linkGoogleCalendar flow, they have it.
-    return session.provider_token;
+    return {
+        accessToken: session.provider_token,
+        refreshToken: session.provider_refresh_token
+    };
 }
 
 interface CalendarEvent {
@@ -29,14 +30,32 @@ interface CalendarEvent {
     attendees: { email: string }[];
 }
 
+// Helper to call our internal API
+async function callCalendarApi(method: 'POST' | 'PUT' | 'DELETE', payload: any) {
+    const response = await fetch('/api/calendar', {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        console.error(`Calendar API ${method} Error:`, errorData);
+        throw new Error(errorData.error?.message || 'Calendar API operation failed');
+    }
+
+    return await response.json();
+}
+
 /**
- * Creates a Google Calendar event using the current user's provider token.
- * Returns the created event data or throws an error.
+ * Creates a Google Calendar event via Backend API
  */
 export async function createGoogleCalendarEvent(
     shoot: Partial<Shoot>,
     crew: User[],
-    token: string
+    tokens: { accessToken: string; refreshToken?: string | null }
 ) {
     if (!shoot.startTime || !shoot.endTime) {
         throw new Error('Shoot must have start and end times');
@@ -75,32 +94,21 @@ export async function createGoogleCalendarEvent(
             .map(u => ({ email: u.email! })),
     };
 
-    const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(event),
+    return await callCalendarApi('POST', {
+        event,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken
     });
-
-    if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Google Calendar API Error:', errorData);
-        throw new Error(errorData.error?.message || 'Failed to create Google Calendar event');
-    }
-
-    return await response.json();
 }
 
 /**
- * Updates an existing Google Calendar event.
+ * Updates an existing Google Calendar event via Backend API
  */
 export async function updateGoogleCalendarEvent(
     eventId: string,
     shoot: Partial<Shoot>,
     crew: User[],
-    token: string
+    tokens: { accessToken: string; refreshToken?: string | null }
 ) {
     if (!shoot.startTime || !shoot.endTime) {
         throw new Error('Shoot must have start and end times');
@@ -136,46 +144,24 @@ export async function updateGoogleCalendarEvent(
             .map(u => ({ email: u.email! })),
     };
 
-    const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`, {
-        method: 'PUT', // PUT updates the entire resource
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(event),
+    return await callCalendarApi('PUT', {
+        eventId,
+        event,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken
     });
-
-    if (!response.ok) {
-        // If 410 (Gone) or 404 (Not Found), we usually assume it's lost and maybe return null or throw specific error
-        if (response.status === 410 || response.status === 404) {
-            throw new Error('Event not found in calendar');
-        }
-
-        const errorData = await response.json();
-        console.error('Google Calendar Update Error:', errorData);
-        throw new Error(errorData.error?.message || 'Failed to update Google Calendar event');
-    }
-
-    return await response.json();
 }
 
 /**
- * Deletes a Google Calendar event.
+ * Deletes a Google Calendar event via Backend API
  */
-export async function deleteGoogleCalendarEvent(eventId: string, token: string) {
-    const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`, {
-        method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
+export async function deleteGoogleCalendarEvent(
+    eventId: string,
+    tokens: { accessToken: string; refreshToken?: string | null }
+) {
+    return await callCalendarApi('DELETE', {
+        eventId,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken
     });
-
-    if (!response.ok) {
-        // 410 Gone means it's already deleted, which is fine
-        if (response.status === 410) return;
-
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Google Calendar Delete Error:', errorData);
-        throw new Error(errorData.error?.message || 'Failed to delete event');
-    }
 }

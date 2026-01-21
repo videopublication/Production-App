@@ -15,7 +15,8 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
 import { Skeleton } from '@/components/Skeleton';
-import { useInventory } from '@/hooks/useInventory';
+import { useEquipment, useUpdateEquipment } from '@/hooks/useEquipment';
+import { useUsers } from '@/hooks/useUsers';
 
 export default function InventoryPage() {
     const router = useRouter();
@@ -23,14 +24,12 @@ export default function InventoryPage() {
     const { showToast } = useToast();
     const confirm = useConfirm();
 
-    // TanStack Query Hook
-    const {
-        equipment: items,
-        users: usersList,
-        isLoading: isInventoryLoading,
-        cleanupAssignments,
-        refresh
-    } = useInventory();
+    // TanStack Query Hooks
+    const { data: items = [], isLoading: equipmentLoading, refetch: refresh } = useEquipment();
+    const { data: usersList = [], isLoading: usersLoading } = useUsers();
+    const { mutateAsync: updateEquipment } = useUpdateEquipment();
+
+    const isInventoryLoading = equipmentLoading || usersLoading;
 
     // Derived state for users map
     const users = useMemo(() => {
@@ -40,6 +39,12 @@ export default function InventoryPage() {
         });
         return map;
     }, [usersList]);
+
+    const cleanupAssignments = async (itemsToCleanup: Equipment[]) => {
+        await Promise.all(itemsToCleanup.map(item =>
+            updateEquipment({ id: item.id, updates: { assignedTo: null } })
+        ));
+    };
 
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL'>('ALL');

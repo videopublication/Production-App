@@ -18,7 +18,7 @@ export default function TransactionsPage() {
     const { user, isLoading: authLoading } = useAuth();
 
     // Data Hooks (Offline Ready)
-    const { transactions: allTransactions, isLoading: isTxLoading, refresh: refreshTransactions } = useTransactions();
+    const { data: allTransactions = [], isLoading: isTxLoading, refetch: refreshTransactions } = useTransactions();
     const { equipment, users, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
 
     const [searchQuery, setSearchQuery] = useState('');

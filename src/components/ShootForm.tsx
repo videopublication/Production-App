@@ -81,7 +81,16 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         if (savedForm) {
             try {
                 const parsed = JSON.parse(savedForm);
-                setFormData(prev => ({ ...prev, ...parsed }));
+                // Restore basic form data
+                setFormData(prev => ({
+                    ...prev,
+                    ...parsed.formData
+                }));
+
+                // Restore Crew & Incharge
+                if (parsed.selectedCrewIds) setSelectedCrewIds(parsed.selectedCrewIds);
+                if (parsed.inchargeId) setInchargeId(parsed.inchargeId);
+
                 sessionStorage.removeItem('tempShootForm'); // Clear it
                 // Also optimistically assume they wanted to add to calendar if they clicked connect
                 setAddToCalendar(true);
@@ -91,14 +100,25 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         }
     }, []);
 
-    // Auto-set End Time Logic
+    // Auto-set End Time Logic & Validation
     useEffect(() => {
-        if (formData.startTime && !formData.endTime) {
-            // If start time is set but end time is empty, default end time to end of that day (23:59)
+        if (formData.startTime) {
             const startDate = new Date(formData.startTime);
-            const endDate = new Date(startDate);
-            endDate.setHours(23, 59, 0, 0); // End of day
-            setFormData(prev => ({ ...prev, endTime: format(endDate, "yyyy-MM-dd'T'HH:mm") }));
+
+            if (!formData.endTime) {
+                // If end time is empty, default to end of that day (23:59)
+                const endDate = new Date(startDate);
+                endDate.setHours(23, 59, 0, 0);
+                setFormData(prev => ({ ...prev, endTime: format(endDate, "yyyy-MM-dd'T'HH:mm") }));
+            } else {
+                // If end time exists but is BEFORE start time, reset it to start time + 1 hour or end of day
+                const endDate = new Date(formData.endTime);
+                if (endDate < startDate) {
+                    const newEndDate = new Date(startDate);
+                    newEndDate.setHours(newEndDate.getHours() + 4); // Default to 4 hours scan
+                    setFormData(prev => ({ ...prev, endTime: format(newEndDate, "yyyy-MM-dd'T'HH:mm") }));
+                }
+            }
         }
     }, [formData.startTime]);
 
@@ -123,8 +143,13 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     };
 
     const handleConnectCalendar = async () => {
-        // Save current form state so we don't lose it
-        sessionStorage.setItem('tempShootForm', JSON.stringify(formData));
+        // Save complete state so we don't lose it
+        const stateToSave = {
+            formData,
+            selectedCrewIds,
+            inchargeId
+        };
+        sessionStorage.setItem('tempShootForm', JSON.stringify(stateToSave));
 
         await supabase.auth.signInWithOAuth({
             provider: 'google',
@@ -146,8 +171,18 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         // Determine effective status (revive to CONFIRMED if it was CANCELLED)
         const effectiveStatus = initialData.status === 'CANCELLED' ? 'CONFIRMED' : formData.status;
 
+        // Ensure End Time is populated if missing
+        let effectiveEndTime = formData.endTime;
+        if (formData.startTime && !effectiveEndTime) {
+            const startDate = new Date(formData.startTime);
+            const endDate = new Date(startDate);
+            endDate.setHours(23, 59, 0, 0); // Default to End of Day
+            effectiveEndTime = format(endDate, "yyyy-MM-dd'T'HH:mm");
+        }
+
         const submissionData = {
             ...formData,
+            endTime: effectiveEndTime,
             status: effectiveStatus
         };
 
@@ -156,21 +191,21 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
         if (hasCalendarToken) {
             try {
-                const token = await getGoogleProviderToken();
-                if (token) {
+                const tokens = await getGoogleProviderToken();
+                if (tokens && tokens.accessToken) {
                     const assignedCrew = users.filter(u => selectedCrewIds.includes(u.id));
 
                     if (addToCalendar) {
                         if (googleEventId) {
                             // UPDATE existing event
                             try {
-                                await updateGoogleCalendarEvent(googleEventId, submissionData, assignedCrew, token);
+                                await updateGoogleCalendarEvent(googleEventId, submissionData, assignedCrew, tokens);
                             } catch (error) {
                                 console.warn('Failed to update event:', error);
                             }
                         } else {
                             // CREATE new event
-                            const event = await createGoogleCalendarEvent(submissionData, assignedCrew, token);
+                            const event = await createGoogleCalendarEvent(submissionData, assignedCrew, tokens);
                             googleEventId = event.id;
 
                             // Show success toast
@@ -308,9 +343,18 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                     type="datetime-local"
                                     label="End Time (Optional)"
                                     value={formData.endTime || ''}
-                                    onChange={e => setFormData({ ...formData, endTime: e.target.value })}
+                                    onChange={e => {
+                                        const newEndTime = e.target.value;
+                                        if (formData.startTime && newEndTime < formData.startTime) {
+                                            alert('End time cannot be before start time');
+                                            // Reset to start time or keep previous? let's just not update or set to start
+                                            return;
+                                        }
+                                        setFormData({ ...formData, endTime: newEndTime });
+                                    }}
                                     className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
                                     autoFocus
+                                    min={formData.startTime} // HTML5 validation helper
                                 />
                             </div>
                         )}

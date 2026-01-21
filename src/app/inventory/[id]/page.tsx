@@ -12,11 +12,19 @@ import QRCode from 'qrcode';
 import Image from 'next/image';
 import jsPDF from 'jspdf';
 
+import { useEquipmentItem, useUpdateEquipment } from '@/hooks/useEquipment';
+import { useUsers } from '@/hooks/useUsers';
+
 export default function ItemDetailsPage() {
     const params = useParams();
     const router = useRouter();
     const { user } = useAuth();
-    const [item, setItem] = useState<Equipment | null>(null);
+
+    const id = params?.id as string;
+    const { data: item, isLoading } = useEquipmentItem(id);
+    const { mutateAsync: updateEquipment } = useUpdateEquipment();
+    const { data: users = [] } = useUsers();
+
     const [qrCode, setQrCode] = useState<string>('');
     const [assignedUser, setAssignedUser] = useState<string>('');
 
@@ -29,45 +37,36 @@ export default function ItemDetailsPage() {
     const [saveMessage, setSaveMessage] = useState('');
 
     useEffect(() => {
-        const loadItem = async () => {
-            if (!params.id) return;
+        if (item) {
+            // Initialize edit fields
+            setEditStatus(item.status);
+            setEditCondition(item.condition);
+            setEditLocation(item.location);
 
-            const items = await storage.getEquipment();
-            const found = items.find(i => i.id === params.id || i.barcode === params.id);
-
-            if (found) {
-                setItem(found);
-                // Initialize edit fields
-                setEditStatus(found.status);
-                setEditCondition(found.condition);
-                setEditLocation(found.location);
-
+            // QR & Assigned User Logic
+            const generateQR = async () => {
                 try {
-                    const data = JSON.stringify({ id: found.id, barcode: found.barcode });
+                    const data = JSON.stringify({ id: item.id, barcode: item.barcode });
+                    const QRCode = (await import('qrcode')).default;
                     const url = await QRCode.toDataURL(data, { width: 300 });
                     setQrCode(url);
-
-                    if (found.assignedTo) {
-                        const users = await storage.getUsers();
-                        const foundUser = users.find(u => u.id === found.assignedTo);
-                        if (foundUser) {
-                            setAssignedUser(foundUser.name);
-                        } else {
-                            setAssignedUser(found.assignedTo);
-                        }
-                    }
                 } catch (err) {
                     console.error(err);
                 }
-            }
-        };
+            };
+            generateQR();
 
-        loadItem();
-    }, [params.id]);
+            if (item.assignedTo) {
+                const foundUser = users.find(u => u.id === item.assignedTo);
+                setAssignedUser(foundUser ? foundUser.name : item.assignedTo);
+            }
+        }
+    }, [item, users]);
 
     // Check if current user can manage equipment
     const canManage = user && (user.role === 'MANAGER' || user.role === 'ADMIN');
 
+    // Handle save changes
     // Handle save changes
     const handleSaveChanges = async () => {
         if (!item || !canManage) return;
@@ -82,7 +81,7 @@ export default function ItemDetailsPage() {
                 assignedTo: editStatus === 'AVAILABLE' ? null as any : item.assignedTo,
             };
 
-            await storage.updateEquipment(item.id, updates);
+            await updateEquipment({ id: item.id, updates });
 
             // Log update
             await storage.addLog({
@@ -94,7 +93,6 @@ export default function ItemDetailsPage() {
                 details: `Updated item "${item.name}" (${item.barcode}). Status: ${editStatus}, Condition: ${editCondition}`
             });
 
-            setItem({ ...item, ...updates });
             setIsEditing(false);
             setSaveMessage('Changes saved successfully!');
             setTimeout(() => setSaveMessage(''), 3000);

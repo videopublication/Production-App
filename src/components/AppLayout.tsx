@@ -39,11 +39,22 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
 };
 
 export const AppLayout = ({ children }: { children: React.ReactNode }) => {
-    const { user } = useAuth();
+
     const pathname = usePathname();
     const isPublicPage = pathname === '/login' || pathname === '/' || pathname === '/inactive';
 
     // Wrap with SidebarProvider only for authenticated pages
+    const { user, isLoading } = useAuth();
+
+    // Prevent flash of "public page" or empty shell while auth is determining state
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
     if (isPublicPage || !user) {
         return (
             <ToastProvider>

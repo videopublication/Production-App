@@ -16,6 +16,7 @@ import { useConfirm } from '@/lib/dialog-context';
 import { generateTransactionId, generateUUID } from '@/lib/id';
 import { useInventory } from '@/hooks/useInventory';
 import { useShoots } from '@/hooks/useShoots';
+import { useCheckOut } from '@/hooks/useTransactions';
 
 import { useAssignments } from '@/hooks/useAssignments';
 
@@ -65,8 +66,8 @@ export default function CheckoutPage() {
 
     // Data Hooks
     const { equipment: equipmentList, users: allUsers, isLoading: isInventoryLoading } = useInventory();
-    const { shoots, isLoading: isShootsLoading } = useShoots();
-    const { assignments } = useAssignments();
+    const { data: shoots = [], isLoading: isShootsLoading } = useShoots();
+    const { data: assignments = [] } = useAssignments();
 
     // Filter users based on role for assignment dropdown
     const users = useMemo(() => {
@@ -315,6 +316,8 @@ export default function CheckoutPage() {
         }
     };
 
+    const { mutateAsync: checkout, isPending: isCheckoutLoading } = useCheckOut();
+
     const handleCheckout = async () => {
         if (!user || cart.length === 0) return;
         if (!project.trim()) {
@@ -328,46 +331,14 @@ export default function CheckoutPage() {
             return;
         }
 
-        setIsLoading(true);
         try {
-            const transaction: Transaction = {
-                id: generateTransactionId(),
-                userId: selectedUserIds[0],
-                additionalUsers: selectedUserIds.slice(1),
-                items: cart.map(i => i.id),
-                timestampOut: new Date().toISOString(),
-                project: project.trim(),
+            await checkout({
+                items: cart,
                 shootId: selectedShootId || undefined,
+                userId: selectedUserIds[0], // Primary user
                 notes: notes.trim(),
-                preCheckoutConditions: cart.reduce((acc, item) => ({
-                    ...acc,
-                    [item.id]: item.condition
-                }), {}),
-                status: 'OPEN'
-            };
-
-            await storage.saveTransaction(transaction);
-
-            const primaryUser = users.find(u => u.id === selectedUserIds[0]);
-            const primaryName = primaryUser ? primaryUser.name : (user?.id === selectedUserIds[0] ? user.name : 'Selected User');
-            const shootInfo = selectedShootId ? shoots.find(s => s.id === selectedShootId)?.title : null;
-
-            await storage.addLog({
-                id: generateUUID(),
-                action: 'CHECKOUT',
-                entityId: transaction.id,
-                userId: user.id,
-                timestamp: new Date().toISOString(),
-                details: `Checkout [${transaction.id}]: ${cart.length} items for "${project.trim()}"${shootInfo ? ` (Shoot: ${shootInfo})` : ''} (To: ${primaryName})`
+                project: project.trim()
             });
-
-            await Promise.all(cart.map(item =>
-                storage.updateEquipment(item.id, {
-                    status: 'CHECKED_OUT',
-                    assignedTo: selectedUserIds[0],
-                    lastActivity: new Date().toISOString()
-                })
-            ));
 
             setCart([]);
             setSelectedShootId('');
@@ -382,10 +353,9 @@ export default function CheckoutPage() {
         } catch (err) {
             console.error(err);
             showToast('Checkout failed', 'error');
-        } finally {
-            setIsLoading(false);
         }
     };
+
 
     if (authLoading || isDataLoading) {
         return (

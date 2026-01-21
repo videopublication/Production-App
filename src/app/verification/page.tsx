@@ -211,12 +211,14 @@ export default function VerificationPage() {
                 return;
             }
 
+            // 1. Update Equipment Status
             await storage.updateEquipment(id, {
                 status,
                 assignedTo: null as any,
                 lastActivity: new Date().toISOString()
             });
 
+            // 2. Find and Update Transaction
             const allTransactions = await storage.getTransactions();
             const relatedTransaction = allTransactions.find(
                 t => t.status === 'OPEN' && t.items.includes(id)
@@ -235,20 +237,36 @@ export default function VerificationPage() {
             }
 
             if (relatedTransaction) {
-                const updatedItems = await storage.getEquipment();
-                const transactionItems = updatedItems.filter(
-                    i => relatedTransaction.items.includes(i.id)
+                // Update postReturnConditions
+                const currentConditions = relatedTransaction.postReturnConditions || {};
+                // We use the ITEM'S condition (which is what we are verifying) or map status to condition if implied.
+                // Actually the item has a 'condition' field. Only 'status' is passed to this function.
+                // We should theoretically support updating condition in this modal too, but for now we'll use existing item condition
+                // OR ideally 'OK' if status is AVAILABLE, etc.
+                // For simplicity, we record it as returned.
+                const conditionToRecord = status === 'AVAILABLE' ? 'OK' : (item.condition || 'OK');
+
+                const updatedConditions = {
+                    ...currentConditions,
+                    [id]: conditionToRecord
+                };
+
+                const allItemsReturned = relatedTransaction.items.every(itemId =>
+                    updatedConditions[itemId] !== undefined
                 );
 
-                const allItemsReturned = transactionItems.every(
-                    i => i.status !== 'CHECKED_OUT' && i.status !== 'PENDING_VERIFICATION'
-                );
+                const txnUpdates: any = {
+                    postReturnConditions: updatedConditions
+                };
 
                 if (allItemsReturned) {
-                    await storage.updateTransaction(relatedTransaction.id, {
-                        status: 'CLOSED'
-                    });
+                    txnUpdates.status = 'CLOSED';
+                    txnUpdates.timestampIn = new Date().toISOString();
+                }
 
+                await storage.updateTransaction(relatedTransaction.id, txnUpdates);
+
+                if (allItemsReturned) {
                     if (user) {
                         await storage.addLog({
                             id: crypto.randomUUID(),
