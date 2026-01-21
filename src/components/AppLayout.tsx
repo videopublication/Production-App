@@ -10,6 +10,7 @@ import { BottomTabBar } from './BottomTabBar';
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context';
 import { ToastProvider } from '@/lib/toast-context';
 import { DialogProvider } from '@/lib/dialog-context';
+import { PWAInstallPrompt } from './PWAInstallPrompt';
 
 const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; isPublicPage: boolean }) => {
     const { user } = useAuth();
@@ -54,6 +55,7 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
                             </main>
                         </div>
                     </div>
+                    <PWAInstallPrompt />
                 </DialogProvider>
             </ToastProvider>
         );
@@ -69,6 +71,7 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
                             {children}
                         </MainContent>
                     </div>
+                    <PWAInstallPrompt />
                 </SidebarProvider>
             </DialogProvider>
         </ToastProvider>
