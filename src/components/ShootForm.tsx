@@ -155,7 +155,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
             provider: 'google',
             options: {
                 scopes: 'https://www.googleapis.com/auth/calendar.events',
-                redirectTo: window.location.href,
+                redirectTo: window.location.origin + window.location.pathname,
                 queryParams: {
                     access_type: 'offline',
                     // prompt: 'consent', // Removed to make it seamless

@@ -22,7 +22,20 @@ export function useEquipmentItem(id: string) {
             // For now we fetch all and find, as Supabase doesn't have getSingle easily wrapped in storage
             // This is actually better for cache consistency if list is already loaded
             const allItems = await storage.getEquipment();
-            return allItems.find(e => e.id === id);
+
+            // Debugging lookup failure
+            const decodedId = decodeURIComponent(id);
+            const found = allItems.find(e =>
+                e.id === id ||
+                e.barcode === id ||
+                e.barcode === decodedId
+            );
+
+            if (!found) {
+                console.warn(`Equipment lookup failed. Searched for "${id}" (decoded: "${decodedId}") in ${allItems.length} items.`);
+            }
+
+            return found || null;
         },
         enabled: !!id,
     });

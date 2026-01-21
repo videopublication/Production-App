@@ -152,7 +152,19 @@ export default function ItemDetailsPage() {
         }
     };
 
-    if (!item) return <div className="p-8 text-center">Loading...</div>;
+    if (isLoading) return <div className="p-8 text-center">Loading...</div>;
+    if (isLoading) return <div className="p-8 text-center">Loading...</div>;
+    if (!item) return (
+        <div className="p-8 text-center space-y-4">
+            <h3 className="text-lg font-semibold">Item not found</h3>
+            <p className="text-muted-foreground text-sm">
+                Could not find equipment with ID or Barcode: <span className="font-mono bg-secondary px-1 py-0.5 rounded">{id}</span>
+            </p>
+            <Button onClick={() => router.push('/inventory')} variant="secondary">
+                Back to Inventory
+            </Button>
+        </div>
+    );
 
     return (
         <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
