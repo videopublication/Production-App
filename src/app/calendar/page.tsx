@@ -8,6 +8,7 @@ import { Shoot, Assignment, User } from '@/types';
 import {
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     Calendar as CalendarIcon,
     Plus,
     Users,
@@ -48,6 +49,7 @@ export default function CalendarPage() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedShoot, setSelectedShoot] = useState<Shoot | null>(null);
+    const [crewFilter, setCrewFilter] = useState<string>('ALL');
 
     useEffect(() => {
         loadData();
@@ -70,9 +72,17 @@ export default function CalendarPage() {
         }
     };
 
+    // Filter shoots based on crew selection
+    const filteredShoots = useMemo(() => {
+        if (crewFilter === 'ALL') return shoots;
+        return shoots.filter(shoot => {
+            return assignments.some(a => a.shootId === shoot.id && a.userId === crewFilter);
+        });
+    }, [shoots, assignments, crewFilter]);
+
     // Get shoots for a specific date (including multi-day shoots that span this date)
     const getShootsForDate = (date: Date) => {
-        return shoots.filter(shoot => {
+        return filteredShoots.filter(shoot => {
             if (!shoot.startTime) return false;
             const shootStart = startOfDay(parseISO(shoot.startTime));
             const shootEnd = shoot.endTime ? startOfDay(parseISO(shoot.endTime)) : shootStart;
@@ -112,11 +122,11 @@ export default function CalendarPage() {
 
     // Count total shoots this month
     const shootsThisMonth = useMemo(() => {
-        return shoots.filter(shoot => {
+        return filteredShoots.filter(shoot => {
             if (!shoot.startTime) return false;
             return isSameMonth(parseISO(shoot.startTime), currentMonth);
         }).length;
-    }, [shoots, currentMonth]);
+    }, [filteredShoots, currentMonth]);
 
     // Color palette for different shoots (vibrant, distinct colors)
     const shootColorPalette = [
@@ -182,6 +192,30 @@ export default function CalendarPage() {
                         {shootsThisMonth} shoot{shootsThisMonth !== 1 ? 's' : ''} scheduled in {format(currentMonth, 'MMMM yyyy')}
                     </p>
                 </div>
+
+                {/* Filter */}
+                {user?.role === 'ADMIN' && (
+                    <div className="relative group">
+                        <div className="flex items-center gap-2 bg-white pl-3 pr-2 py-2 rounded-xl border border-gray-200 shadow-sm hover:border-blue-300 transition-all cursor-pointer">
+                            <Users size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
+                            <select
+                                value={crewFilter}
+                                onChange={(e) => setCrewFilter(e.target.value)}
+                                className="appearance-none bg-transparent text-sm font-medium text-gray-700 focus:outline-none cursor-pointer pr-6"
+                            >
+                                <option value="ALL">All Crew</option>
+                                {users
+                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .map(u => (
+                                        <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-400 group-hover:text-blue-500">
+                                <ChevronDown size={14} />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

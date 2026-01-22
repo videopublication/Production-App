@@ -73,7 +73,8 @@ export default function NewShootPage() {
             }
 
             // No auto-redirect to WhatsApp
-            router.push('/admin/shoots');
+            // Redirect to the new shoot details page
+            router.push(`/admin/shoots/${shootId}`);
         } catch (error) {
             console.error('Failed to create shoot:', error);
         } finally {

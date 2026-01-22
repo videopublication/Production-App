@@ -38,10 +38,11 @@ export default function EditShootPage() {
                 storage.getUsers()
             ]);
 
-            const foundShoot = allShoots.find(s => s.id === id);
+            const foundShoot = allShoots.find(s => s.id === id || s.shootNumber?.toString() === id);
             if (foundShoot) {
                 setShoot(foundShoot);
-                setAssignments(allAssignments.filter(a => a.shootId === id));
+                // Make sure we filter using the UUID, not the URL param (which might be "23")
+                setAssignments(allAssignments.filter(a => a.shootId === foundShoot.id));
                 setUsers(allUsers);
             } else {
                 router.push('/admin/shoots');
@@ -77,7 +78,7 @@ export default function EditShootPage() {
             const toAdd = crewIds.filter(uid => !existingCrewIds.includes(uid));
             const newAssignments: Assignment[] = toAdd.map(userId => ({
                 id: crypto.randomUUID(),
-                shootId: id,
+                shootId: shoot.id, // Use UUID
                 userId: userId,
                 role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
                 status: 'PENDING'
@@ -150,14 +151,14 @@ export default function EditShootPage() {
                 await storage.addLog({
                     id: crypto.randomUUID(),
                     action: 'EDIT',
-                    entityId: id,
+                    entityId: shoot.id, // Use UUID
                     userId: user.id,
                     timestamp: new Date().toISOString(),
                     details: details
                 });
             }
 
-            router.push(`/admin/shoots/${id}`);
+            router.push(`/admin/shoots/${shoot.id}`);
         } catch (error) {
             console.error('Failed to update shoot:', error);
         } finally {

@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage'; // Still used for type referencing if valid, or remove if unused, but kept for safety. Ideally hooks replace it but types might be needed. Alternatively just imports.
-import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react';
 import { format, parseISO, isAfter, isBefore, isToday } from 'date-fns';
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
@@ -36,11 +36,28 @@ export default function ShootList() {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
     const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
+    const [crewFilter, setCrewFilter] = useState<string>('ALL'); // Crew filter state
     const [showFilters, setShowFilters] = useState(false);
 
     // Sorting state (for list view)
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const [expandedCrewShootId, setExpandedCrewShootId] = useState<string | null>(null);
+
+    // Get crew details
+    const getShootCrew = (shootId: string) => {
+        const shootAssignments = assignments.filter(a => a.shootId === shootId);
+        return shootAssignments.map(a => {
+            const user = users.find(u => u.id === a.userId);
+            return {
+                id: a.id,
+                name: user?.name || 'Unknown',
+                role: a.role,
+                userId: a.userId
+            };
+        });
+    };
 
     // Get crew count for a shoot
     const getCrewCount = (shootId: string) => {
@@ -84,9 +101,15 @@ export default function ShootList() {
                 }
             }
 
-            return matchesSearch && matchesStatus && matchesTime;
+            // Crew Filter
+            let matchesCrew = true;
+            if (crewFilter !== 'ALL') {
+                matchesCrew = assignments.some(a => a.shootId === shoot.id && a.userId === crewFilter);
+            }
+
+            return matchesSearch && matchesStatus && matchesTime && matchesCrew;
         });
-    }, [shoots, searchQuery, statusFilter, timeFilter, user, assignments]);
+    }, [shoots, searchQuery, statusFilter, timeFilter, crewFilter, user, assignments]);
 
     // Sorted shoots for list view
     const sortedShoots = useMemo(() => {
@@ -291,6 +314,31 @@ export default function ShootList() {
                                 ))}
                             </div>
                         </div>
+
+                        {/* Crew Filter (Admin Only) */}
+                        {user?.role === 'ADMIN' && (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span style={{ color: '#6b7280' }} className="text-xs sm:text-sm font-medium shrink-0">Assigned To:</span>
+                                <div className="relative">
+                                    <select
+                                        value={crewFilter}
+                                        onChange={(e) => setCrewFilter(e.target.value)}
+                                        className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-xs sm:text-sm border border-gray-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-sm hover:border-gray-300 transition-colors"
+                                        style={{ color: '#374151' }}
+                                    >
+                                        <option value="ALL">All Crew</option>
+                                        {users
+                                            .sort((a, b) => a.name.localeCompare(b.name))
+                                            .map(u => (
+                                                <option key={u.id} value={u.id}>{u.name}</option>
+                                            ))}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                                        <ChevronDown size={12} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -543,16 +591,17 @@ export default function ShootList() {
                     {sortedShoots.map((shoot, index) => {
                         const statusStyle = getStatusStyle(shoot.status);
                         const crewCount = getCrewCount(shoot.id);
+                        const isExpanded = expandedCrewShootId === shoot.id;
 
                         return (
                             <div
                                 key={shoot.id}
+                                className="cursor-pointer group"
                                 onClick={() => router.push(`/admin/shoots/${shoot.id}`)}
-                                className="cursor-pointer"
                             >
                                 <div
                                     style={{ borderBottom: index < sortedShoots.length - 1 ? '1px solid #f3f4f6' : 'none' }}
-                                    className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 px-4 py-4 hover:bg-gray-50 transition-colors"
+                                    className={`grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 px-4 py-4 transition-colors ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
                                 >
                                     {/* Shoot Info */}
                                     <div className="col-span-4 min-w-0">
@@ -592,11 +641,29 @@ export default function ShootList() {
 
                                     {/* Crew */}
                                     <div className="col-span-2 flex items-center">
-                                        <div className="flex items-center gap-1.5">
-                                            <Users size={14} style={{ color: '#9ca3af' }} />
-                                            <span style={{ color: '#374151' }} className="text-sm">
-                                                {crewCount} members
-                                            </span>
+                                        <div className="flex items-center gap-2 relative z-10">
+                                            <div className="flex items-center gap-1.5">
+                                                <Users size={14} style={{ color: '#9ca3af' }} />
+                                                <span style={{ color: '#374151' }} className="text-sm">
+                                                    {crewCount} members
+                                                </span>
+                                            </div>
+                                            {crewCount > 0 && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setExpandedCrewShootId(isExpanded ? null : shoot.id);
+                                                    }}
+                                                    className="p-1 hover:bg-gray-200 rounded-full transition-colors focus:outline-none"
+                                                    title={isExpanded ? "Hide crew" : "Show crew"}
+                                                >
+                                                    {isExpanded ? (
+                                                        <EyeOff size={16} className="text-gray-500" />
+                                                    ) : (
+                                                        <Eye size={16} className="text-gray-500" />
+                                                    )}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -610,6 +677,27 @@ export default function ShootList() {
                                         </span>
                                     </div>
                                 </div>
+
+                                {/* Expanded Crew Section */}
+                                {isExpanded && (
+                                    <div
+                                        className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex flex-wrap gap-4 items-center animate-in slide-in-from-top-2 duration-200"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mr-2">Assigned Crew:</div>
+                                        {getShootCrew(shoot.id).map(member => (
+                                            <div key={member.id} className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white">
+                                                    {member.name.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className="flex flex-col leading-none">
+                                                    <span className="text-xs font-medium text-gray-700">{member.name}</span>
+                                                    <span className="text-[10px] text-gray-500">{member.role}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}

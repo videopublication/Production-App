@@ -42,7 +42,7 @@ export default function InventoryPage() {
 
     const cleanupAssignments = async (itemsToCleanup: Equipment[]) => {
         await Promise.all(itemsToCleanup.map(item =>
-            updateEquipment({ id: item.id, updates: { assignedTo: null } })
+            updateEquipment({ id: item.id, updates: { assignedTo: undefined } })
         ));
     };
 
@@ -459,7 +459,7 @@ export default function InventoryPage() {
                 </div>
             )}
 
-            <PullToRefresh onRefresh={refresh}>
+            <PullToRefresh onRefresh={async () => { await refresh(); }}>
                 {isActionLoading || isInventoryLoading ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                         {Array.from({ length: 12 }).map((_, i) => (

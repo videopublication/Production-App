@@ -48,8 +48,8 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
     // Toggle states for optional fields
     const [showDescription, setShowDescription] = useState(!!initialData.description);
-    const [showEndTime, setShowEndTime] = useState(!!initialData.endTime);
-    const [showPOC, setShowPOC] = useState(!!initialData.pocName || !!initialData.pocContact);
+    const [showEndTime, setShowEndTime] = useState(true);
+    const [showPOC, setShowPOC] = useState(true);
 
     // Google Calendar State
     const [addToCalendar, setAddToCalendar] = useState(false);
@@ -233,7 +233,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                         }
                     } else if (!addToCalendar && googleEventId) {
                         // REMOVE event if user unchecked the box
-                        await deleteGoogleCalendarEvent(googleEventId, token);
+                        await deleteGoogleCalendarEvent(googleEventId, tokens);
                         googleEventId = undefined; // Clear ID to remove from DB
                     }
                 }
@@ -417,12 +417,11 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                         <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
                             <MapPin size={16} className="text-red-500" />
                         </div>
-                        <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Logistics</h3>
+                        <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Location</h3>
                     </div>
 
                     <div className="pt-1">
                         <Input
-                            label="Location"
                             value={formData.location}
                             onChange={e => setFormData({ ...formData, location: e.target.value })}
                             placeholder="e.g. Studio A, Central Park"

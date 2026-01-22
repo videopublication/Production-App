@@ -149,7 +149,7 @@ export function useCheckIn() {
                 // Add Check-In Log
                 await storage.addLog({
                     id: crypto.randomUUID(), // New ID
-                    action: 'CHECK_IN', // Using 'CHECK_IN' to match intention, or 'RETURN' if preferred.
+                    action: 'RETURN', // Using 'RETURN' as valid ActionType
                     entityId: item.id,
                     userId,
                     timestamp,

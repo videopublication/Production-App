@@ -23,7 +23,7 @@ export function useShoot(id: string) {
         queryKey: SHOOT_KEYS.detail(id),
         queryFn: async () => {
             const shoots = await storage.getShoots();
-            return shoots.find(s => s.id === id);
+            return shoots.find(s => s.id === id || s.shootNumber?.toString() === id);
         },
         enabled: !!id, // Only run if ID is provided
     });

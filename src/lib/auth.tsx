@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Listen for changes
         const {
             data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
+        } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (session?.user) {
                 // If we already have a user and IDs match, we might not need to refetch
                 // But to be safe on sign-in, we fetch.
@@ -156,6 +156,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (channel) supabase.removeChannel(channel);
         };
     }, [router]);
+
+    // Handle Google Login Success Logging
+    useEffect(() => {
+        const checkGoogleLoginSuccess = async () => {
+            const pendingLogin = sessionStorage.getItem('auth_logging_pending');
+            if (pendingLogin === 'google' && user) {
+                // Clear immediately to prevent double logging
+                sessionStorage.removeItem('auth_logging_pending');
+
+                // Log success
+                try {
+                    if (user.status === 'ACTIVE' || user.status === 'PENDING') { // Pending users also managed via signup flow usually, but Google might be different
+                        // For Google, if they are brand new, they might be PENDING.
+                        // If existing active user, log LOGIN.
+                        storage.addLog({
+                            id: generateUUID(),
+                            action: 'LOGIN',
+                            userId: user.id,
+                            entityId: 'AUTH',
+                            timestamp: new Date().toISOString(),
+                            details: `User logged in with Google: ${user.email}`
+                        });
+                    } else {
+                        storage.addLog({
+                            id: generateUUID(),
+                            action: 'LOGIN_FAILED',
+                            userId: user.id,
+                            entityId: 'AUTH',
+                            timestamp: new Date().toISOString(),
+                            details: `Google login attempt by inactive user: ${user.email}`
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error logging google success:', err);
+                }
+            }
+        };
+
+        checkGoogleLoginSuccess();
+    }, [user]);
 
     const login = async (email: string, password: string) => {
         setIsLoading(true);
@@ -310,6 +350,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const loginWithGoogle = async () => {
+        // Log the attempt (Non-blocking)
+        // We do NOT await this, so the redirect happens immediately without waiting for the log to save.
+        storage.addLog({
+            id: generateUUID(),
+            action: 'LOGIN',
+            entityId: 'AUTH',
+            timestamp: new Date().toISOString(),
+            details: `Google login attempt initiated`
+        }).catch(e => console.error('Failed to log google attempt', e));
+
+        // Set flag to track this login attempt across the redirect
+        sessionStorage.setItem('auth_logging_pending', 'google');
+
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
