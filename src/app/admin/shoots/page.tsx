@@ -225,7 +225,7 @@ export default function ShootList() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827' }}
-                            className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full pl-11 sm:pl-12 pr-4 py-2 sm:py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                     </div>
 
