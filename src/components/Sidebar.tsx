@@ -91,22 +91,24 @@ export const Sidebar = () => {
             {/* User Profile */}
             <div className={`p-3 border-t border-border ${isCollapsed ? 'flex justify-center' : ''}`}>
                 {isCollapsed ? (
-                    <button
-                        onClick={logout}
+                    <Link
+                        href="/profile"
                         className="w-11 h-11 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-[15px] hover:opacity-90 transition-opacity"
-                        title={`${user.name} - Sign Out`}
+                        title="View Profile"
                     >
                         {user.name.charAt(0).toUpperCase()}
-                    </button>
+                    </Link>
                 ) : (
                     <div className="flex items-center gap-3 px-3 py-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-[15px] flex-shrink-0">
-                            {user.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="font-medium text-[14px] text-foreground truncate">{user.name}</p>
-                            <p className="text-[12px] text-muted-foreground">{user.role}</p>
-                        </div>
+                        <Link href="/profile" className="flex items-center gap-3 flex-1 min-w-0 group cursor-pointer">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-[15px] flex-shrink-0 group-hover:opacity-90 transition-opacity">
+                                {user.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="font-medium text-[14px] text-foreground truncate group-hover:text-primary transition-colors">{user.name}</p>
+                                <p className="text-[12px] text-muted-foreground">{user.role}</p>
+                            </div>
+                        </Link>
                         <button
                             onClick={logout}
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"

@@ -167,18 +167,19 @@ export default function CheckoutPage() {
             const linkedAssignments = assignments.filter(a => a.shootId === selectedShootId);
             if (linkedAssignments.length > 0) {
                 const userIds = linkedAssignments.map(a => a.userId);
-                const uniqueIds = Array.from(new Set(userIds)); // Deduplicate
+                const uniqueIds = Array.from(new Set(userIds));
 
-                // Only update if different to avoid excess renders/loops
-                setSelectedUserIds(prev => {
-                    const isSame = prev.length === uniqueIds.length && prev.every(id => uniqueIds.includes(id));
-                    return isSame ? prev : uniqueIds;
-                });
+                // Only update if different to avoid redundant toasts and renders
+                const isSame = selectedUserIds.length === uniqueIds.length &&
+                    selectedUserIds.every(id => uniqueIds.includes(id));
 
-                showToast(`Auto-selected ${uniqueIds.length} crew members`, 'info');
+                if (!isSame) {
+                    setSelectedUserIds(uniqueIds);
+                    showToast(`Auto-selected ${uniqueIds.length} crew members`, 'info');
+                }
             }
         }
-    }, [selectedShootId, assignments]);
+    }, [selectedShootId, assignments, selectedUserIds, showToast]);
 
     const lastProcessedRef = React.useRef<{ code: string; time: number } | null>(null);
 

@@ -110,7 +110,7 @@ export default function TransactionsPage() {
 *Equipment List:*
 ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Other Items:*\n${txn.notes}` : ''}
 
-_Generated via Production App_`;
+_Generated via VP App_`;
     };
 
     const handleShareWhatsApp = (e: React.MouseEvent, txn: Transaction) => {

@@ -90,8 +90,8 @@ export default function AdminLogsPage() {
         <div className="space-y-6 animate-fade-in pb-12">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Activity Logs</h1>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Activity Logs</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                         Audit trail of all system activities
                     </p>
                 </div>
@@ -99,7 +99,7 @@ export default function AdminLogsPage() {
                     variant="outline"
                     size="sm"
                     onClick={loadData}
-                    className="bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                    className="bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                 >
                     <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -108,13 +108,13 @@ export default function AdminLogsPage() {
                 </Button>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-gray-200/60 shadow-sm">
+            <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-2xl border border-gray-200/60 dark:border-gray-800 shadow-sm">
                 <div className="flex flex-col gap-4">
                     <Input
                         placeholder="Search by user, action or details..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-gray-50/50 border-gray-200 focus:bg-white transition-all text-gray-900 placeholder:text-gray-400"
+                        className="w-full bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:bg-white dark:focus:bg-gray-800 transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                     />
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-2 px-2">
                         {['ALL', 'CHECKOUT', 'RETURN', 'EDIT', 'CREATE', 'VERIFY', 'LOGIN', 'SIGNUP', 'LOGOUT', 'LOGIN_FAILED'].map(action => (
@@ -123,7 +123,7 @@ export default function AdminLogsPage() {
                                 variant={filterAction === action ? 'primary' : 'outline'}
                                 size="sm"
                                 onClick={() => setFilterAction(action)}
-                                className={`whitespace-nowrap shrink-0 ${filterAction !== action ? 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900' : ''}`}
+                                className={`whitespace-nowrap shrink-0 ${filterAction !== action ? 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white' : ''}`}
                             >
                                 {action === 'ALL' ? 'All' : action}
                             </Button>
@@ -134,10 +134,10 @@ export default function AdminLogsPage() {
 
             <PullToRefresh onRefresh={loadData}>
                 {/* Desktop View Table */}
-                <div className="hidden md:block bg-white rounded-2xl border border-gray-200/60 overflow-hidden shadow-sm">
+                <div className="hidden md:block bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50/50 text-gray-500 font-medium border-b border-gray-100">
+                            <thead className="bg-gray-50/50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-100 dark:border-gray-800">
                                 <tr>
                                     <th className="px-5 py-3 min-w-[150px] font-semibold text-xs uppercase tracking-wider">Date & Time</th>
                                     <th className="px-5 py-3 font-semibold text-xs uppercase tracking-wider">User</th>
@@ -145,22 +145,22 @@ export default function AdminLogsPage() {
                                     <th className="px-5 py-3 w-full font-semibold text-xs uppercase tracking-wider">Details</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={4} className="px-5 py-8 text-center text-gray-500">Loading logs...</td>
+                                        <td colSpan={4} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">Loading logs...</td>
                                     </tr>
                                 ) : filteredLogs.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="px-5 py-8 text-center text-gray-500">No logs found</td>
+                                        <td colSpan={4} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">No logs found</td>
                                     </tr>
                                 ) : (
                                     filteredLogs.map((log) => (
-                                        <tr key={log.id} className="hover:bg-gray-50/80 transition-colors">
-                                            <td className="px-5 py-4 whitespace-nowrap text-gray-500">
+                                        <tr key={log.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors">
+                                            <td className="px-5 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                                                 {new Date(log.timestamp).toLocaleString()}
                                             </td>
-                                            <td className="px-5 py-4 whitespace-nowrap font-medium text-gray-900">
+                                            <td className="px-5 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">
                                                 {getUserName(log.userId)}
                                             </td>
                                             <td className="px-5 py-4 whitespace-nowrap">
@@ -168,7 +168,7 @@ export default function AdminLogsPage() {
                                                     {log.action}
                                                 </Badge>
                                             </td>
-                                            <td className="px-5 py-4 text-gray-600 italic text-xs">
+                                            <td className="px-5 py-4 text-gray-600 dark:text-gray-400 italic text-xs">
                                                 {log.details || '-'}
                                             </td>
                                         </tr>
@@ -182,20 +182,20 @@ export default function AdminLogsPage() {
                 {/* Mobile View List */}
                 <div className="md:hidden space-y-3">
                     {loading ? (
-                        <div className="text-center py-10 bg-white rounded-2xl border border-gray-200/60 text-gray-500">
+                        <div className="text-center py-10 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                             Loading logs...
                         </div>
                     ) : filteredLogs.length === 0 ? (
-                        <div className="text-center py-10 bg-white rounded-2xl border border-gray-200/60 text-gray-500">
+                        <div className="text-center py-10 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                             No logs found
                         </div>
                     ) : (
                         filteredLogs.map((log) => (
-                            <div key={log.id} className="bg-white p-4 rounded-2xl border border-gray-200/60 shadow-sm space-y-3">
+                            <div key={log.id} className="bg-white dark:bg-[#1c1c1e] p-4 rounded-2xl border border-gray-200/60 dark:border-gray-800 shadow-sm space-y-3">
                                 <div className="flex justify-between items-start">
                                     <div className="space-y-1">
-                                        <p className="font-semibold text-[15px] text-gray-900">{getUserName(log.userId)}</p>
-                                        <p className="text-xs text-gray-400">
+                                        <p className="font-semibold text-[15px] text-gray-900 dark:text-white">{getUserName(log.userId)}</p>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500">
                                             {new Date(log.timestamp).toLocaleString()}
                                         </p>
                                     </div>
@@ -203,7 +203,7 @@ export default function AdminLogsPage() {
                                         {log.action}
                                     </Badge>
                                 </div>
-                                <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
                                     {log.details || 'No details provided'}
                                 </p>
                             </div>

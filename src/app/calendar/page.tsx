@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
@@ -19,7 +19,8 @@ import {
     Copy,
     Phone,
     MessageCircle,
-    Mail
+    Mail,
+    Search
 } from 'lucide-react';
 import {
     format,
@@ -36,9 +37,17 @@ import {
     isToday,
     isWithinInterval,
     startOfDay,
-    endOfDay
+    endOfDay,
+    eachWeekOfInterval,
+    differenceInCalendarDays,
+    addDays,
 } from 'date-fns';
 import { Button } from '@/components/Button';
+
+// Helper to check if two intervals overlap
+const areIntervalsOverlapping = (start1: Date, end1: Date, start2: Date, end2: Date) => {
+    return start1 <= end2 && start2 <= end1;
+};
 
 export default function CalendarPage() {
     const { user } = useAuth();
@@ -50,6 +59,31 @@ export default function CalendarPage() {
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedShoot, setSelectedShoot] = useState<Shoot | null>(null);
     const [crewFilter, setCrewFilter] = useState<string>('ALL');
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const filterRef = useRef<HTMLDivElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+                setIsFilterOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Focus search input when filter opens
+    useEffect(() => {
+        if (isFilterOpen && searchInputRef.current) {
+            // Small timeout to allow transition/render
+            setTimeout(() => {
+                searchInputRef.current?.focus();
+            }, 50);
+        }
+    }, [isFilterOpen]);
 
     useEffect(() => {
         loadData();
@@ -107,14 +141,17 @@ export default function CalendarPage() {
         });
     };
 
-    // Calendar days calculation
-    const calendarDays = useMemo(() => {
+    // Calendar Weeks calculation (Standard Grid approach usually works better with Weeks logic if we want spanning)
+    const calendarWeeks = useMemo(() => {
         const monthStart = startOfMonth(currentMonth);
         const monthEnd = endOfMonth(currentMonth);
         const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
         const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
 
-        return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+        return eachWeekOfInterval({
+            start: calendarStart,
+            end: calendarEnd
+        }, { weekStartsOn: 0 });
     }, [currentMonth]);
 
     // Shoots for selected date
@@ -152,7 +189,9 @@ export default function CalendarPage() {
     // Get status-specific styling (for cancelled shoots)
     const getStatusStyle = (status: string, shootId: string) => {
         if (status === 'CANCELLED') {
-            return { bg: '#fee2e2', text: '#991b1b', border: '#ef4444' };
+            // Using RGBA for background allows it to adapt to dark/light mode (pale red on light, dark red on dark)
+            // Text is brighter red to be visible on both
+            return { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', border: '#f87171' };
         }
         return getShootColor(shootId);
     };
@@ -195,23 +234,79 @@ export default function CalendarPage() {
 
                 {/* Filter */}
                 {user?.role === 'ADMIN' && (
-                    <div className="relative group">
-                        <div className="flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl border shadow-sm transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700">
-                            <Users size={16} className="text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" />
-                            <select
-                                value={crewFilter}
-                                onChange={(e) => setCrewFilter(e.target.value)}
-                                className="appearance-none bg-transparent text-sm font-medium focus:outline-none cursor-pointer pr-6 text-gray-700 dark:text-gray-300"
-                            >
-                                <option value="ALL">All Crew</option>
+                    <div className="relative z-20" ref={filterRef}>
+                        <button
+                            onClick={() => {
+                                setIsFilterOpen(!isFilterOpen);
+                                if (!isFilterOpen) setSearchQuery('');
+                            }}
+                            className="flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl border shadow-sm transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700 min-w-[180px] justify-between group"
+                        >
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                <Users size={16} className="text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors shrink-0" />
+                                <span className={`text-sm font-medium truncate ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-blue-600 dark:text-blue-400'}`}>
+                                    {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || 'Unknown'}
+                                </span>
+                            </div>
+                            <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        <div
+                            className={`absolute right-0 top-full mt-2 w-[240px] bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right ${isFilterOpen
+                                ? 'opacity-100 scale-100 translate-y-0'
+                                : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+                                }`}
+                        >
+                            {/* Search Box */}
+                            <div className="p-2 border-b border-gray-100 dark:border-gray-800 sticky top-0 bg-white dark:bg-[#1c1c1e] z-10">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input
+                                        ref={searchInputRef}
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="Search crew..."
+                                        className="w-full text-xs pl-8 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-lg focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500"
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="max-h-[250px] overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800">
+                                <button
+                                    onClick={() => { setCrewFilter('ALL'); setIsFilterOpen(false); }}
+                                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2 ${crewFilter === 'ALL'
+                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                        } ${searchQuery ? 'hidden' : ''}`}
+                                >
+                                    All Crew
+                                </button>
                                 {users
+                                    .filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()))
                                     .sort((a, b) => a.name.localeCompare(b.name))
                                     .map(u => (
-                                        <option key={u.id} value={u.id}>{u.name}</option>
+                                        <button
+                                            key={u.id}
+                                            onClick={() => { setCrewFilter(u.id); setIsFilterOpen(false); }}
+                                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2 ${crewFilter === u.id
+                                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                                }`}
+                                        >
+                                            <div className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-500">
+                                                {u.name.charAt(0)}
+                                            </div>
+                                            <span className="truncate">{u.name}</span>
+                                        </button>
                                     ))}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400">
-                                <ChevronDown size={14} />
+                                {users.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                                    <div className="px-4 py-3 text-xs text-center text-gray-500">
+                                        No crew found
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -261,135 +356,199 @@ export default function CalendarPage() {
                             ))}
                         </div>
 
-                        <div className="grid grid-cols-7">
-                            {calendarDays.map((day, index) => {
-                                const daysShoots = getShootsForDate(day);
-                                const isCurrentMonth = isSameMonth(day, currentMonth);
-                                const isSelected = selectedDate && isSameDay(day, selectedDate);
-                                const isTodayDate = isToday(day);
+                        {/* Week Rows Layout */}
+                        <div className="flex flex-col">
+                            {calendarWeeks.map((weekStart, weekIndex) => {
+                                const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
+                                const daysInWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+                                // Process events for this week
+                                const weekEvents = filteredShoots.filter(shoot => {
+                                    if (!shoot.startTime) return false;
+                                    const shootStart = startOfDay(parseISO(shoot.startTime));
+                                    const shootEnd = shoot.endTime ? startOfDay(parseISO(shoot.endTime)) : shootStart;
+
+                                    // Check if shoot interacts with this week
+                                    return areIntervalsOverlapping(shootStart, shootEnd, weekStart, weekEnd);
+                                }).map(shoot => {
+                                    const shootStart = startOfDay(parseISO(shoot.startTime!));
+                                    const shootEnd = shoot.endTime ? startOfDay(parseISO(shoot.endTime)) : shootStart;
+
+                                    // Calculate visual position in this week (0-6)
+                                    let startIndex = differenceInCalendarDays(shootStart, weekStart);
+                                    let duration = differenceInCalendarDays(shootEnd, shootStart) + 1;
+
+                                    // Clamp to this week
+                                    if (startIndex < 0) {
+                                        duration += startIndex; // Decrease duration by days passed
+                                        startIndex = 0;
+                                    }
+                                    const endIndex = startIndex + duration;
+                                    if (endIndex > 7) {
+                                        duration = 7 - startIndex;
+                                    }
+
+                                    return {
+                                        shoot,
+                                        colStart: startIndex + 1, // Grid columns are 1-based
+                                        colSpan: duration,
+                                        isStart: startIndex >= differenceInCalendarDays(shootStart, weekStart), // Visual logic simplification
+                                        isEnd: (startIndex + duration) < 7 // Simplify
+                                    };
+                                });
+
+                                // Packing Algorithm to determine vertical rows
+                                const sortedEvents = weekEvents.sort((a, b) => {
+                                    // Sort by colStart, then duration desc
+                                    if (a.colStart !== b.colStart) return a.colStart - b.colStart;
+                                    return b.colSpan - a.colSpan;
+                                });
+
+                                // Matrix to track occupied cells: occupied[row][col (0-6)]
+                                const occupied: boolean[][] = [];
+                                const placedEvents = sortedEvents.map(event => {
+                                    let rowIndex = 0;
+                                    while (true) {
+                                        if (!occupied[rowIndex]) occupied[rowIndex] = [];
+
+                                        // Check if this row is free for the event's span
+                                        let isFree = true;
+                                        for (let i = 0; i < event.colSpan; i++) {
+                                            if (occupied[rowIndex][event.colStart - 1 + i]) {
+                                                isFree = false;
+                                                break;
+                                            }
+                                        }
+
+                                        if (isFree) {
+                                            // Place it
+                                            for (let i = 0; i < event.colSpan; i++) {
+                                                occupied[rowIndex][event.colStart - 1 + i] = true;
+                                            }
+                                            return { ...event, rowIndex };
+                                        }
+                                        rowIndex++;
+                                    }
+                                });
+
+                                const rowCount = Math.max(3, occupied.length); // Min height ensures grid looks consistent
+                                const rowHeight = 28; // height of each event bar + gap
+                                const headerHeight = 40; // Approx height for date number area
+                                const minWeekHeight = Math.max(100, (rowCount * rowHeight) + headerHeight);
 
                                 return (
-                                    <button
-                                        key={index}
-                                        onClick={() => {
-                                            setSelectedDate(day);
-                                            setSelectedShoot(null);
-                                        }}
-                                        className={`min-h-[80px] sm:min-h-[100px] p-1 sm:p-2 text-left transition-colors border-b border-gray-100 dark:border-gray-800 ${(index + 1) % 7 !== 0 ? 'border-r border-gray-100 dark:border-gray-800' : ''
-                                            } ${isSelected
-                                                ? 'bg-blue-50 dark:bg-blue-900/20'
-                                                : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                                            } ${!isCurrentMonth ? 'opacity-40' : ''
-                                            }`}
+                                    <div
+                                        key={weekIndex}
+                                        style={{ minHeight: `${minWeekHeight}px` }}
+                                        className={`relative grid grid-cols-7 border-b border-gray-100 dark:border-gray-800 ${weekIndex === calendarWeeks.length - 1 ? 'border-b-0' : ''}`}
                                     >
-                                        {/* Date Number */}
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span
-                                                className={`text-xs sm:text-sm font-semibold w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full ${isTodayDate
-                                                        ? 'bg-blue-600 text-white'
-                                                        : isSelected
-                                                            ? 'text-blue-600 dark:text-blue-400'
-                                                            : 'text-gray-700 dark:text-gray-300'
-                                                    }`}
-                                            >
-                                                {format(day, 'd')}
-                                            </span>
-                                            {daysShoots.length > 0 && (
-                                                <span className="hidden sm:inline text-[10px] font-medium text-gray-500 dark:text-gray-400">
-                                                    {daysShoots.length} shoot{daysShoots.length > 1 ? 's' : ''}
-                                                </span>
-                                            )}
-                                        </div>
+                                        {/* Background Cells Layer */}
+                                        {daysInWeek.map((day, dayIndex) => {
+                                            const isSelected = selectedDate && isSameDay(day, selectedDate);
+                                            const isCurrentMonth = isSameMonth(day, currentMonth);
+                                            const isTodayDate = isToday(day);
 
-                                        {/* Shoots Preview - DESKTOP: Full bars */}
-                                        <div className="hidden sm:block space-y-1">
-                                            {daysShoots.slice(0, 2).map(shoot => {
-                                                const style = getStatusStyle(shoot.status, shoot.id);
-                                                const shootStart = startOfDay(parseISO(shoot.startTime!));
-                                                const shootEnd = shoot.endTime ? startOfDay(parseISO(shoot.endTime)) : shootStart;
-                                                const isMultiDay = !isSameDay(shootStart, shootEnd);
-                                                const isStartDay = isSameDay(day, shootStart);
-                                                const isEndDay = isSameDay(day, shootEnd);
+                                            return (
+                                                <div
+                                                    key={day.toString()}
+                                                    onClick={() => {
+                                                        setSelectedDate(day);
+                                                        setSelectedShoot(null);
+                                                    }}
+                                                    className={`
+                                                        h-full p-2 transition-colors relative z-0
+                                                        ${dayIndex < 6 ? 'border-r border-gray-100 dark:border-gray-800' : ''}
+                                                        ${isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}
+                                                        ${!isCurrentMonth ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}
+                                                    `}
+                                                >
+                                                    <div className="flex justify-between items-start">
+                                                        <span
+                                                            className={`text-xs sm:text-sm font-semibold w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full ${isTodayDate
+                                                                ? 'bg-blue-600 text-white'
+                                                                : isSelected
+                                                                    ? 'text-blue-600 dark:text-blue-400'
+                                                                    : 'text-gray-700 dark:text-gray-300'
+                                                                } ${!isCurrentMonth ? 'opacity-40' : ''}`}
+                                                        >
+                                                            {format(day, 'd')}
+                                                        </span>
+
+                                                        {/* Mobile Dot Indicators (visible only on small screens) */}
+                                                        <div className="sm:hidden flex flex-wrap gap-0.5 max-w-[50%] justify-end">
+                                                            {placedEvents
+                                                                .filter(e => (dayIndex + 1) >= e.colStart && (dayIndex + 1) < (e.colStart + e.colSpan))
+                                                                .slice(0, 3)
+                                                                .map((e, i) => (
+                                                                    <div key={i} className={`w-1.5 h-1.5 rounded-full ${e.shoot.status === 'CANCELLED' ? 'bg-red-400' : 'bg-blue-400'}`} />
+                                                                ))
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Events Layer - Placed on top using Grid positioning */}
+                                        <div
+                                            className="absolute inset-x-0 top-9 bottom-1 pointer-events-none px-0.5 grid grid-cols-7"
+                                            style={{
+                                                gridTemplateRows: `repeat(${rowCount}, ${rowHeight}px)`
+                                            }}
+                                        >
+                                            {placedEvents.map((event) => {
+                                                const style = getStatusStyle(event.shoot.status, event.shoot.id);
 
                                                 return (
                                                     <div
-                                                        key={shoot.id}
+                                                        key={`${event.shoot.id}-${weekIndex}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedShoot(event.shoot);
+                                                            // Calculate best date to select (closest to today if spans, or start)
+                                                            const sStart = parseISO(event.shoot.startTime!);
+                                                            const diff = differenceInCalendarDays(sStart, weekStart);
+                                                            const targetDate = addDays(weekStart, Math.max(0, diff));
+                                                            setSelectedDate(targetDate);
+                                                        }}
                                                         style={{
+                                                            gridColumnStart: event.colStart,
+                                                            gridColumnEnd: `span ${event.colSpan}`,
+                                                            gridRowStart: event.rowIndex + 1,
                                                             backgroundColor: style.bg,
                                                             color: style.text,
                                                             borderLeft: `3px solid ${style.border || style.text}`,
-                                                            marginLeft: isMultiDay && !isStartDay ? '-8px' : '0',
-                                                            marginRight: isMultiDay && !isEndDay ? '-8px' : '0',
-                                                            paddingLeft: isMultiDay && !isStartDay ? '10px' : '6px',
-                                                            paddingRight: isMultiDay && !isEndDay ? '10px' : '6px',
-                                                            borderTopLeftRadius: isStartDay || !isMultiDay ? '4px' : '0',
-                                                            borderBottomLeftRadius: isStartDay || !isMultiDay ? '4px' : '0',
-                                                            borderTopRightRadius: isEndDay || !isMultiDay ? '4px' : '0',
-                                                            borderBottomRightRadius: isEndDay || !isMultiDay ? '4px' : '0',
+                                                            opacity: event.shoot.status === 'CANCELLED' ? 0.6 : 1,
                                                         }}
-                                                        className="py-1 text-[11px] font-medium truncate cursor-pointer hover:opacity-80 transition-opacity"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedShoot(shoot);
-                                                            setSelectedDate(day);
-                                                        }}
+                                                        className={`
+                                                            pointer-events-auto
+                                                            mx-1 mb-1 h-6
+                                                            rounded px-2 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all shadow-sm flex items-center
+                                                            relative z-10
+                                                        `}
+                                                        title={event.shoot.title}
                                                     >
-                                                        {isStartDay && shoot.startTime && (
-                                                            <span className="opacity-70 mr-1">{format(parseISO(shoot.startTime), 'h a')}</span>
+                                                        {event.colSpan > 1 && (
+                                                            <span className={`truncate w-full text-left ${event.shoot.status === 'CANCELLED' ? 'line-through decoration-red-500' : ''}`}>
+                                                                {event.shoot.title}
+                                                            </span>
                                                         )}
-                                                        {isStartDay ? shoot.title : (isEndDay && shoot.endTime ? `ends ${format(parseISO(shoot.endTime), 'h a')}` : '')}
+
+                                                        {event.colSpan === 1 && (
+                                                            <>
+                                                                {event.shoot.status === 'CANCELLED' && (
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-red-600 shrink-0 mr-1.5" />
+                                                                )}
+                                                                <span className={`truncate ${event.shoot.status === 'CANCELLED' ? 'line-through decoration-red-500' : ''}`}>
+                                                                    {event.shoot.title}
+                                                                </span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
-                                            {/* Show colored dots for remaining shoots on desktop */}
-                                            {daysShoots.length > 2 && (
-                                                <div className="flex items-center gap-1 px-1">
-                                                    {daysShoots.slice(2).map(shoot => {
-                                                        const style = getStatusStyle(shoot.status, shoot.id);
-                                                        return (
-                                                            <div
-                                                                key={shoot.id}
-                                                                style={{ backgroundColor: style.border || style.text }}
-                                                                className="w-2 h-2 rounded-full cursor-pointer hover:scale-125 transition-transform"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setSelectedShoot(shoot);
-                                                                    setSelectedDate(day);
-                                                                }}
-                                                                title={shoot.title}
-                                                            />
-                                                        );
-                                                    })}
-                                                    <span style={{ color: '#6b7280' }} className="text-[9px] font-medium ml-0.5">
-                                                        +{daysShoots.length - 2}
-                                                    </span>
-                                                </div>
-                                            )}
                                         </div>
-
-                                        {/* Shoots Preview - MOBILE: Just colored dots */}
-                                        <div className="sm:hidden">
-                                            {daysShoots.length > 0 && (
-                                                <div className="flex flex-wrap gap-1 justify-center mt-1">
-                                                    {daysShoots.slice(0, 4).map(shoot => {
-                                                        const style = getStatusStyle(shoot.status, shoot.id);
-                                                        return (
-                                                            <div
-                                                                key={shoot.id}
-                                                                style={{ backgroundColor: style.border || style.text }}
-                                                                className="w-2.5 h-2.5 rounded-full"
-                                                            />
-                                                        );
-                                                    })}
-                                                    {daysShoots.length > 4 && (
-                                                        <span style={{ color: '#6b7280' }} className="text-[8px] font-medium">
-                                                            +{daysShoots.length - 4}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </button>
+                                    </div>
                                 );
                             })}
                         </div>
@@ -423,8 +582,8 @@ export default function CalendarPage() {
                             )}
                         </div>
 
-                        {/* Shoots List */}
-                        <div className="p-4 max-h-[500px] overflow-y-auto">
+                        {/* Shoots List - Dynamic Height for better balance */}
+                        <div className="p-4 max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar">
                             {!selectedDate ? (
                                 <div className="text-center py-8">
                                     <CalendarIcon size={40} className="mx-auto mb-3 text-gray-300 dark:text-gray-600" />
@@ -456,8 +615,8 @@ export default function CalendarPage() {
                                                     borderLeft: `4px solid ${statusStyle.border || statusStyle.text}`
                                                 }}
                                                 className={`rounded-xl overflow-hidden transition-all border ${isExpanded
-                                                        ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500'
-                                                        : 'border-gray-200 dark:border-gray-800'
+                                                    ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500'
+                                                    : 'border-gray-200 dark:border-gray-800'
                                                     }`}
                                             >
                                                 {/* Shoot Header */}
@@ -597,8 +756,8 @@ export default function CalendarPage() {
                                                                                     : undefined
                                                                             }}
                                                                             className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${member.role === 'Incharge'
-                                                                                    ? 'text-white'
-                                                                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                                                                ? 'text-white'
+                                                                                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                                                                                 }`}
                                                                         >
                                                                             {member.user?.name?.charAt(0) || '?'}

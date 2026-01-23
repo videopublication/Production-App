@@ -35,6 +35,35 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "Scan QR",
+      "short_name": "Scan",
+      "description": "Scan equipment QR codes",
+      "url": "/checkout?action=scan",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "New Shoot",
+      "short_name": "New Shoot",
+      "description": "Create a new shoot",
+      "url": "/admin/shoots/new",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "categories": [
+    "productivity",
+    "business"
+  ],
   "prefer_related_applications": false
 }

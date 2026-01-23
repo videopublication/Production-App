@@ -20,7 +20,8 @@ import { useAssignments } from '@/hooks/useAssignments';
 import { useUsers } from '@/hooks/useUsers';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { getGoogleProviderToken, deleteGoogleCalendarEvent } from '@/lib/google-calendar';
+import { getGoogleProviderToken, deleteGoogleCalendarEvent, createGoogleCalendarEvent } from '@/lib/google-calendar';
+import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
 // ... (previous imports)
 
@@ -52,6 +53,7 @@ export default function ShootDetailsPage() {
     const { mutateAsync: saveShoot } = useSaveShoot();
 
     const loading = shootLoading || assignmentsLoading || usersLoading;
+    const [isSyncing, setIsSyncing] = useState(false);
 
 
     // Derived State
@@ -144,6 +146,65 @@ export default function ShootDetailsPage() {
         }
     };
 
+    const handleSyncToCalendar = async () => {
+        if (!shoot || isSyncing) return;
+
+        setIsSyncing(true);
+        try {
+            const tokens = await getGoogleProviderToken();
+            if (!tokens || !tokens.accessToken) {
+                // If no tokens, they need to sign in with Google Calendar scope
+                await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        scopes: 'https://www.googleapis.com/auth/calendar.events',
+                        redirectTo: window.location.href,
+                        queryParams: {
+                            access_type: 'offline',
+                        },
+                    },
+                });
+                return;
+            }
+
+            const assignedCrew = users.filter(u => assignments.some(a => a.userId === u.id));
+            const event = await createGoogleCalendarEvent(shoot, assignedCrew, tokens);
+
+            if (event?.id) {
+                // Update shoot with the new googleEventId
+                await storage.saveShoot({
+                    ...shoot,
+                    googleEventId: event.id
+                });
+
+                // Invalidate query
+                await queryClient.invalidateQueries({ queryKey: [['shoots', id], ['shoots'], ['shoots', shoot.id]] });
+
+                // Success toast
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 z-50 animate-in fade-in slide-in-from-bottom-2';
+                toast.innerHTML = `
+                    <div class="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-sm">
+                        <svg class="h-5 w-5 fill-white" viewBox="0 0 24 24">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="font-bold">Successfully Synced!</p>
+                        <p class="text-xs opacity-90">Invites sent to ${assignedCrew.filter(c => c.email).length} crew members.</p>
+                    </div>
+                `;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 4000);
+            }
+        } catch (error: any) {
+            console.error('Failed to sync to calendar:', error);
+            alert('Wait! Something went wrong: ' + error.message);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     const getUserName = (userId?: string) => {
         if (!userId) return 'System';
         return users.find(u => u.id === userId)?.name || 'Unknown';
@@ -185,6 +246,37 @@ export default function ShootDetailsPage() {
 
     return (
         <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12 p-4 sm:p-6">
+            {/* Calendar Connection Banner */}
+            {!shoot.googleEventId && user?.role === 'ADMIN' && shoot.status !== 'CANCELLED' && (
+                <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+                            <AlertCircle size={20} className="text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Not Connected to Google Calendar</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Sync this shoot to automatically invite crew members and track it in your calendar.</p>
+                        </div>
+                    </div>
+                    <Button
+                        size="sm"
+                        onClick={handleSyncToCalendar}
+                        disabled={isSyncing}
+                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white gap-2 h-9 px-4 rounded-xl shadow-lg shadow-blue-500/20"
+                    >
+                        {isSyncing ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                            <svg className="w-4 h-4" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" alpha="0.5" />
+                            </svg>
+                        )}
+                        Sync to Calendar
+                    </Button>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-4">
@@ -410,8 +502,8 @@ export default function ShootDetailsPage() {
                                             <div className="relative">
                                                 <div
                                                     className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shadow-sm ${isIncharge
-                                                            ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white'
-                                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                                        ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white'
+                                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                                                         }`}
                                                 >
                                                     {assignedUser.name.charAt(0)}

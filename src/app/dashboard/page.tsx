@@ -270,7 +270,7 @@ export default function DashboardPage() {
                     <h1 className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-gray-100">
                         Dashboard
                     </h1>
-                    <p className="text-[15px] text-[#86868b] dark:text-gray-400 mt-1">Pull down to refresh • Overview of your inventory</p>
+                    <p className="text-[15px] text-[#86868b] dark:text-gray-400 mt-1">Overview of your inventory</p>
                 </div>
 
                 {/* Stats Cards */}

@@ -103,9 +103,8 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                         className="absolute z-[100] mt-2 w-full overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] border border-border"
                         style={{ boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)' }}
                     >
-                        {/* Search input */}
-                        <div className="p-3 pb-0">
-                            <div className="flex items-center h-10 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl overflow-hidden">
+                        <div className="p-3 pb-2">
+                            <div className="flex items-center h-10 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl overflow-hidden border border-[#d2d2d7] dark:border-gray-700 focus-within:ring-2 focus-within:ring-[#0071e3]/50 focus-within:border-[#0071e3] transition-all">
                                 <div className="flex items-center justify-center w-10 h-10 flex-shrink-0">
                                     <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -138,9 +137,9 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                                         <div
                                             key={option.value}
                                             onClick={() => toggleOption(option.value)}
-                                            className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[14px] transition-colors ${index < filteredOptions.length - 1 ? 'mb-1' : ''
+                                            className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[15px] transition-colors ${index < filteredOptions.length - 1 ? 'mb-1' : ''
                                                 } ${isSelected
-                                                    ? 'bg-[#0071e3]/10 text-[#0071e3] font-medium'
+                                                    ? 'bg-[#0071e3]/10 text-[#0071e3] font-semibold'
                                                     : 'text-foreground hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e]'
                                                 }`}
                                         >

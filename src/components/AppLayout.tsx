@@ -11,6 +11,7 @@ import { SidebarProvider, useSidebar } from '@/lib/sidebar-context';
 import { ToastProvider } from '@/lib/toast-context';
 import { DialogProvider } from '@/lib/dialog-context';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
+import { OfflineIndicator } from './OfflineIndicator';
 
 const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; isPublicPage: boolean }) => {
     const { user } = useAuth();
@@ -67,6 +68,7 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
                         </div>
                     </div>
                     <PWAInstallPrompt />
+                    <OfflineIndicator />
                 </DialogProvider>
             </ToastProvider>
         );
@@ -83,6 +85,7 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
                         </MainContent>
                     </div>
                     <PWAInstallPrompt />
+                    <OfflineIndicator />
                 </SidebarProvider>
             </DialogProvider>
         </ToastProvider>

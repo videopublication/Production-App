@@ -5,9 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
 
+import { APP_CONFIG } from '@/lib/config';
+import { useToast } from '@/lib/toast-context';
+
 export default function ProfilePage() {
     const router = useRouter();
-    const { user, logout, linkGoogleCalendar } = useAuth();
+    const { user, logout } = useAuth();
+    const { showToast } = useToast();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     if (!user) return null;
@@ -15,6 +19,21 @@ export default function ProfilePage() {
     const handleLogout = async () => {
         await logout();
         router.push('/login');
+    };
+
+    const handleCopyDebugInfo = () => {
+        const info = `
+App: ${APP_CONFIG.name}
+Version: ${APP_CONFIG.version}
+Environment: ${APP_CONFIG.build}
+User ID: ${user.id}
+Email: ${user.email}
+Role: ${user.role}
+User Agent: ${navigator.userAgent}
+        `.trim();
+
+        navigator.clipboard.writeText(info);
+        showToast('Debug info copied to clipboard', 'success');
     };
 
     const menuItems = [
@@ -40,7 +59,6 @@ export default function ProfilePage() {
 
             {/* Profile Header */}
             <div className="flex flex-col items-center py-6">
-                {/* ... existing header content ... */}
                 {user.avatarUrl ? (
                     <img
                         src={user.avatarUrl}
@@ -81,12 +99,18 @@ export default function ProfilePage() {
                         <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Email</span>
                         <span className="text-[15px] text-[#86868b] dark:text-gray-400">{user.email || 'Not set'}</span>
                     </div>
-                    {/* ... rest of existing items ... */}
+
                     <div className="list-item-native flex items-center justify-between">
                         <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Role</span>
                         <span className="text-[15px] text-[#86868b] dark:text-gray-400">{user.role}</span>
                     </div>
-                    <div className="list-item-native flex items-center justify-between">
+                    <div
+                        className="list-item-native flex items-center justify-between active:bg-gray-100 dark:active:bg-[#2c2c2e] cursor-pointer"
+                        onClick={() => {
+                            navigator.clipboard.writeText(user.id);
+                            showToast('User ID copied', 'success');
+                        }}
+                    >
                         <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">User ID</span>
                         <span className="text-[13px] text-[#86868b] dark:text-gray-400 font-mono">{user.id.substring(0, 8)}...</span>
                     </div>
@@ -115,58 +139,22 @@ export default function ProfilePage() {
                 </div>
             )}
 
-            {/* Connections Section */}
-            <div className="space-y-2">
-                <p className="section-header-ios">Connections</p>
-                <div className="grouped-container">
-                    <button
-                        onClick={async () => {
-                            const { error } = await linkGoogleCalendar();
-                            if (error) alert('Failed to link Google Calendar: ' + error.message);
-                        }}
-                        className="list-item-native w-full flex items-center justify-between"
-                    >
-                        <div className="flex items-center gap-3">
-                            {/* Google Icon */}
-                            <svg className="w-5 h-5" viewBox="0 0 24 24">
-                                <path
-                                    fill="#4285F4"
-                                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                                />
-                                <path
-                                    fill="#34A853"
-                                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                                />
-                                <path
-                                    fill="#FBBC05"
-                                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z"
-                                />
-                                <path
-                                    fill="#EA4335"
-                                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                                />
-                            </svg>
-                            <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Google Calendar</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-[15px] text-[#86868b] dark:text-gray-400">Connect</span>
-                            <svg className="w-4 h-4 text-[#c7c7cc]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                        </div>
-                    </button>
-                </div>
-            </div>
 
             {/* App Info */}
-            <div className="grouped-container">
-                <div className="list-item-native flex items-center justify-between">
+            <div className="grouped-container overflow-hidden">
+                <button
+                    onClick={handleCopyDebugInfo}
+                    className="list-item-native w-full flex items-center justify-between active:bg-gray-100 dark:active:bg-[#2c2c2e] transition-colors"
+                >
                     <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Version</span>
-                    <span className="text-[15px] text-[#86868b] dark:text-gray-400">2.0.0</span>
-                </div>
+                    <span className="text-[15px] text-[#86868b] dark:text-gray-400">{APP_CONFIG.version}</span>
+                </button>
                 <div className="list-item-native flex items-center justify-between">
-                    <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Build</span>
-                    <span className="text-[15px] text-[#86868b] dark:text-gray-400">Production</span>
+                    <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Environment</span>
+                    <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${APP_CONFIG.build === 'Production' ? 'bg-green-500' : 'bg-orange-500'}`}></span>
+                        <span className="text-[15px] text-[#86868b] dark:text-gray-400">{APP_CONFIG.build}</span>
+                    </div>
                 </div>
             </div>
 
