@@ -610,7 +610,7 @@ export default function CheckoutPage() {
                         <div className="p-4">
                             {/* Shoot Selector for Mobile - Premium Card */}
                             {availableShoots.length > 0 && (
-                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 border border-indigo-100 mb-4">
+                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/50 mb-4">
                                     <div className="flex items-center gap-3 mb-3">
                                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
                                             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -618,8 +618,8 @@ export default function CheckoutPage() {
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-[14px] font-bold text-indigo-900">Link to Shoot</p>
-                                            <p className="text-[11px] text-indigo-600/70">Optional • Auto-fills project name</p>
+                                            <p className="text-[14px] font-bold text-indigo-900 dark:text-indigo-200">Link to Shoot</p>
+                                            <p className="text-[11px] text-indigo-600/70 dark:text-indigo-300/70">Optional • Auto-fills project name</p>
                                         </div>
                                     </div>
 
@@ -652,7 +652,7 @@ export default function CheckoutPage() {
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                 </svg>
                                             </div>
-                                            <p className="text-[13px] font-medium text-green-700">
+                                            <p className="text-[13px] font-medium text-green-700 dark:text-green-400">
                                                 Equipment will be linked to this shoot
                                             </p>
                                         </div>
