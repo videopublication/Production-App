@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-background: var(--background);
@@ -20,6 +21,10 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -123,6 +128,10 @@
   --input: #d2d2d7;
   --ring: #0071e3;
   --radius: 1.125rem;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
 }
 
 html {
@@ -131,7 +140,7 @@ html {
 }
 
 body {
-  background-color: #f5f5f7;
+  background-color: var(--background);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -139,6 +148,113 @@ body {
   min-height: 100vh;
   /* Subtle grain texture for matte finish */
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+/* Dark Mode Overrides */
+.dark {
+  --background: #000000;
+  --foreground: #f5f5f7;
+  --secondary: #1c1c1e;
+  --secondary-foreground: #ffffff;
+  --muted: #1c1c1e;
+  --muted-foreground: #98989d;
+  --accent: #1c1c1e;
+  --accent-foreground: #ffffff;
+  --border: #38383a;
+  --input: #38383a;
+  --card: #1c1c1e;
+  --card-foreground: #f5f5f7;
+  --popover: #1c1c1e;
+  --popover-foreground: #f5f5f7;
+
+  /* Update background pattern for dark mode */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+
+  /* Component Overrides */
+  .card-apple,
+  .card-matte {
+    background-color: #1c1c1e;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .glass {
+    background: rgba(28, 28, 30, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .list-item-native {
+    background: #1c1c1e;
+  }
+
+  .list-item-native:active {
+    background-color: #2c2c2e;
+  }
+
+  .list-item-native::after {
+    background-color: #38383a;
+  }
+
+  .grouped-container {
+    background: #1c1c1e;
+  }
+
+  .search-bar-ios {
+    background-color: rgba(118, 118, 128, 0.24);
+  }
+
+  .search-bar-ios input {
+    color: #ffffff;
+  }
+
+  .search-bar-ios input::placeholder {
+    color: #98989d;
+  }
+
+  .segmented-control {
+    background-color: rgba(118, 118, 128, 0.24);
+  }
+
+  .segmented-control-item {
+    color: #ffffff;
+  }
+
+  .segmented-control-item.active {
+    background-color: #3e3e40;
+    color: #ffffff;
+  }
+}
+
+/* Accent Color Overrides */
+[data-accent='purple'] {
+  --primary: #5856d6;
+  --ring: #5856d6;
+}
+
+[data-accent='green'] {
+  --primary: #34c759;
+  --ring: #34c759;
+}
+
+[data-accent='orange'] {
+  --primary: #ff9500;
+  --ring: #ff9500;
+}
+
+[data-accent='red'] {
+  --primary: #ff3b30;
+  --ring: #ff3b30;
+}
+
+[data-accent='gray'] {
+  --primary: #8e8e93;
+  --ring: #8e8e93;
+}
+
+/* Blue is default, so no need for explicit override unless needed */
+
+/* Density Overrides */
+[data-density='compact'] {
+  --radius: 0.75rem;
 }
 
 /* Typography Utilities */

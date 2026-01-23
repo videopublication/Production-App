@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 const { data, error } = await supabase
                     .from('users')
-                    .select('*')
+                    .select('*, avatarUrl:avatar_url')
                     .eq('id', userId)
                     .single();
 
@@ -68,7 +68,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                 filter: `id=eq.${userId}`
                             },
                             async (payload) => {
-                                const updatedUser = payload.new as User;
+                                const updatedUser = payload.new as any;
+                                // Map avatar_url to avatarUrl for consistency incase of updates
+                                if (updatedUser.avatar_url) updatedUser.avatarUrl = updatedUser.avatar_url;
+
                                 if (updatedUser.status === 'PENDING' || updatedUser.status === 'SUSPENDED') {
                                     const reason = updatedUser.status === 'SUSPENDED' ? 'suspended' : 'pending';
                                     setUser(null);
@@ -80,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                         router.push('/login');
                                     }
                                     // Update local user state
-                                    setUser(updatedUser);
+                                    setUser(updatedUser as User);
                                 }
                             }
                         )
@@ -100,13 +103,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                     name: email.split('@')[0], // Default name from email
                                     role: 'CREW',
                                     status: 'PENDING',
-                                    // Try to get avatar from metadata
-                                    avatarUrl: (await supabase.auth.getSession()).data.session?.user?.user_metadata?.avatar_url || null
+                                    // Map JS property avatarUrl to DB column avatar_url
+                                    avatar_url: (await supabase.auth.getSession()).data.session?.user?.user_metadata?.avatar_url || null
                                 }
                             ]);
 
                         if (insertError) {
-                            console.error('Failed to create public user profile:', insertError);
+                            console.error('Failed to create public user profile details (JSON):', JSON.stringify(insertError, null, 2));
+                            console.error('Attempted Insert Data:', {
+                                id: userId,
+                                email,
+                                role: 'CREW',
+                                status: 'PENDING'
+                            });
                             setUser(null);
                         } else {
                             // Successfully created, now recurse/reload to fetch it and handle routing

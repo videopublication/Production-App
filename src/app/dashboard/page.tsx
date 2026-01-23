@@ -81,7 +81,7 @@ const ALL_QUICK_ACTIONS = [
         gradient: 'from-indigo-500 to-indigo-600',
         shadow: 'shadow-indigo-500/25',
         icon: 'M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z',
-        roles: ['ADMIN'] as UserRole[], // Only admins can manage shoots
+        roles: ['CREW', 'MANAGER', 'ADMIN'] as UserRole[], // Everyone can view shoots (CREW sees assigned only)
     },
     {
         id: 'users',
@@ -125,9 +125,9 @@ const ALL_QUICK_ACTIONS = [
 const getDefaultActionsForRole = (role: UserRole): string[] => {
     switch (role) {
         case 'CREW':
-            return ['checkout', 'returns', 'inventory', 'calendar'];
+            return ['checkout', 'returns', 'inventory', 'calendar', 'shoots'];
         case 'MANAGER':
-            return ['checkout', 'returns', 'verify', 'inventory', 'history', 'calendar', 'add-item'];
+            return ['checkout', 'returns', 'verify', 'inventory', 'shoots', 'history', 'calendar', 'add-item'];
         case 'ADMIN':
             return ['checkout', 'returns', 'verify', 'inventory', 'history', 'calendar', 'add-item', 'shoots', 'users', 'notify'];
         default:
@@ -267,18 +267,18 @@ export default function DashboardPage() {
             <div className="max-w-6xl mx-auto animate-fade-in">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">
+                    <h1 className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-gray-100">
                         Dashboard
                     </h1>
-                    <p className="text-[15px] text-[#86868b] mt-1">Pull down to refresh • Overview of your inventory</p>
+                    <p className="text-[15px] text-[#86868b] dark:text-gray-400 mt-1">Pull down to refresh • Overview of your inventory</p>
                 </div>
 
                 {/* Stats Cards */}
-                <div className="bg-white rounded-3xl shadow-sm border border-[#e5e5ea] p-4 sm:p-6 mb-8">
-                    <h2 className="text-sm font-semibold text-[#86868b] uppercase tracking-wider mb-4">Inventory Overview</h2>
+                <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-[#e5e5ea] dark:border-gray-800 p-4 sm:p-6 mb-8 transition-colors">
+                    <h2 className="text-sm font-semibold text-[#86868b] dark:text-gray-400 uppercase tracking-wider mb-4">Inventory Overview</h2>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                         {/* Available */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200/50">
+                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-900/10 border border-emerald-200/50 dark:border-emerald-900/30">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="w-10 h-10 rounded-xl bg-emerald-500 shadow-lg shadow-emerald-500/30 flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -286,12 +286,12 @@ export default function DashboardPage() {
                                     </svg>
                                 </div>
                             </div>
-                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">{stats.available}</p>
-                            <p className="text-sm text-[#86868b] mt-1">Available</p>
+                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-emerald-50">{stats.available}</p>
+                            <p className="text-sm text-[#86868b] dark:text-emerald-400/80 mt-1">Available</p>
                         </div>
 
                         {/* Checked Out */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200/50">
+                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-200/50 dark:border-blue-900/30">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="w-10 h-10 rounded-xl bg-blue-500 shadow-lg shadow-blue-500/30 flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -299,13 +299,13 @@ export default function DashboardPage() {
                                     </svg>
                                 </div>
                             </div>
-                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">{stats.checkedOut}</p>
-                            <p className="text-sm text-[#86868b] mt-1">Checked Out</p>
+                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-blue-50">{stats.checkedOut}</p>
+                            <p className="text-sm text-[#86868b] dark:text-blue-400/80 mt-1">Checked Out</p>
                         </div>
 
                         {/* Pending Verification */}
                         <div
-                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100/50 border border-amber-200/50 cursor-pointer hover:border-amber-300 transition-colors"
+                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-900/20 dark:to-amber-900/10 border border-amber-200/50 dark:border-amber-900/30 cursor-pointer hover:border-amber-300 transition-colors"
                             onClick={() => router.push('/verification')}
                         >
                             <div className="flex items-center justify-between mb-3">
@@ -320,12 +320,12 @@ export default function DashboardPage() {
                                     </span>
                                 )}
                             </div>
-                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">{stats.pendingVerification}</p>
-                            <p className="text-sm text-[#86868b] mt-1">Pending Verification</p>
+                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-amber-50">{stats.pendingVerification}</p>
+                            <p className="text-sm text-[#86868b] dark:text-amber-400/80 mt-1">Pending Verification</p>
                         </div>
 
                         {/* Attention */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-red-50 to-red-100/50 border border-red-200/50">
+                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-900/20 dark:to-red-900/10 border border-red-200/50 dark:border-red-900/30">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="w-10 h-10 rounded-xl bg-red-500 shadow-lg shadow-red-500/30 flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -333,21 +333,21 @@ export default function DashboardPage() {
                                     </svg>
                                 </div>
                             </div>
-                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">{stats.attention}</p>
-                            <p className="text-sm text-[#86868b] mt-1">Needs Attention</p>
+                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-red-50">{stats.attention}</p>
+                            <p className="text-sm text-[#86868b] dark:text-red-400/80 mt-1">Needs Attention</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Quick Actions */}
-                <div className="bg-white rounded-3xl shadow-sm border border-[#e5e5ea] p-4 sm:p-6">
+                <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-[#e5e5ea] dark:border-gray-800 p-4 sm:p-6 transition-colors">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-sm font-semibold text-[#86868b] uppercase tracking-wider">Quick Actions</h2>
+                        <h2 className="text-sm font-semibold text-[#86868b] dark:text-gray-400 uppercase tracking-wider">Quick Actions</h2>
                         <button
                             onClick={() => setIsEditMode(!isEditMode)}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isEditMode
                                 ? 'bg-[#007aff] text-white'
-                                : 'bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed]'
+                                : 'bg-[#f5f5f7] dark:bg-gray-800 text-[#1d1d1f] dark:text-gray-200 hover:bg-[#e8e8ed] dark:hover:bg-gray-700'
                                 }`}
                         >
                             {isEditMode ? 'Done' : 'Edit'}
@@ -361,14 +361,14 @@ export default function DashboardPage() {
                                 <button
                                     key={action.id}
                                     onClick={() => router.push(action.route)}
-                                    className="group flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-[#f5f5f7] transition-colors"
+                                    className="group flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-[#f5f5f7] dark:hover:bg-gray-800 transition-colors"
                                 >
                                     <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[20px] bg-gradient-to-br ${action.gradient} shadow-lg ${action.shadow} flex items-center justify-center group-hover:scale-105 group-active:scale-95 transition-transform`}>
                                         <svg className="w-7 h-7 sm:w-8 sm:h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d={action.icon} />
                                         </svg>
                                     </div>
-                                    <span className="text-[11px] sm:text-xs font-medium text-[#1d1d1f] text-center">{action.label}</span>
+                                    <span className="text-[11px] sm:text-xs font-medium text-[#1d1d1f] dark:text-gray-300 text-center">{action.label}</span>
                                 </button>
                             ))}
                         </div>
@@ -411,8 +411,8 @@ export default function DashboardPage() {
                                                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                                                     key={action.id}
                                                     className={`flex items-center gap-3 p-3 rounded-2xl border-2 ${isSelected
-                                                        ? 'border-[#007aff] bg-[#007aff]/5'
-                                                        : 'border-[#e5e5ea] bg-[#f5f5f7]/50'
+                                                        ? 'border-[#007aff] bg-[#007aff]/5 dark:bg-[#007aff]/10'
+                                                        : 'border-[#e5e5ea] dark:border-gray-800 bg-[#f5f5f7]/50 dark:bg-gray-800/50'
                                                         }`}
                                                 >
                                                     {/* Icon */}
@@ -424,8 +424,8 @@ export default function DashboardPage() {
 
                                                     {/* Label */}
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-[#1d1d1f]">{action.label}</p>
-                                                        <p className="text-xs text-[#86868b] truncate">{action.route}</p>
+                                                        <p className="font-semibold text-[#1d1d1f] dark:text-gray-200">{action.label}</p>
+                                                        <p className="text-xs text-[#86868b] dark:text-gray-500 truncate">{action.route}</p>
                                                     </div>
 
                                                     {/* Reorder buttons (only for selected) */}
@@ -434,18 +434,18 @@ export default function DashboardPage() {
                                                             <button
                                                                 onClick={() => moveAction(action.id, 'up')}
                                                                 disabled={index === 0}
-                                                                className="p-1 rounded bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                                                className="p-1 rounded bg-[#f5f5f7] dark:bg-gray-700 hover:bg-[#e8e8ed] dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                                             >
-                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                <svg className="w-4 h-4 text-gray-700 dark:text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                                                                 </svg>
                                                             </button>
                                                             <button
                                                                 onClick={() => moveAction(action.id, 'down')}
                                                                 disabled={index === selectedActionIds.length - 1}
-                                                                className="p-1 rounded bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                                                className="p-1 rounded bg-[#f5f5f7] dark:bg-gray-700 hover:bg-[#e8e8ed] dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                                             >
-                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                <svg className="w-4 h-4 text-gray-700 dark:text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                                                                 </svg>
                                                             </button>
@@ -455,7 +455,7 @@ export default function DashboardPage() {
                                                     {/* Toggle */}
                                                     <button
                                                         onClick={() => toggleAction(action.id)}
-                                                        className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${isSelected ? 'bg-[#34c759]' : 'bg-[#e5e5ea]'
+                                                        className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${isSelected ? 'bg-[#34c759]' : 'bg-[#e5e5ea] dark:bg-gray-700'
                                                             }`}
                                                     >
                                                         <motion.div
@@ -471,7 +471,7 @@ export default function DashboardPage() {
                                 </LayoutGroup>
                             </div>
 
-                            <p className="text-xs text-[#86868b] text-center mt-4">
+                            <p className="text-xs text-[#86868b] dark:text-gray-500 text-center mt-4">
                                 Toggle actions on/off • Use arrows to reorder • Changes save automatically
                             </p>
                         </div>

@@ -233,6 +233,8 @@ export default function TransactionDetailPage() {
         }
     };
 
+
+
     const handleForceReturn = async (itemId: string) => {
         const item = equipment.find(e => e.id === itemId);
         if (!item) {
@@ -257,24 +259,48 @@ export default function TransactionDetailPage() {
 
         setSaving(true);
         try {
-            // Update item status directly to AVAILABLE (admin/manager verified return)
+            // 1. Update item status directly to AVAILABLE
             await storage.updateEquipment(itemId, {
                 status: 'AVAILABLE',
                 lastActivity: new Date().toISOString()
             });
 
-            // Log the force return
+            // 2. Update Transaction (Close if all returned)
+            const currentConditions = transaction?.postReturnConditions || {};
+            const updatedConditions = {
+                ...currentConditions,
+                [itemId]: 'OK' // Default to OK for force return, or we could ask
+            };
+
+            const allItemsReturned = transaction?.items.every(id =>
+                updatedConditions[id] !== undefined
+            );
+
+            const txnUpdates: any = {
+                postReturnConditions: updatedConditions
+            };
+
+            if (allItemsReturned) {
+                txnUpdates.status = 'CLOSED';
+                txnUpdates.timestampIn = new Date().toISOString();
+            }
+
+            if (transaction) {
+                await storage.updateTransaction(transaction.id, txnUpdates);
+            }
+
+            // 3. Log the force return
             await storage.addLog({
                 id: crypto.randomUUID(),
                 action: 'RETURN',
                 entityId: transaction!.id,
                 userId: user!.id,
                 timestamp: new Date().toISOString(),
-                details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Verified by ${user!.name}`,
+                details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Verified by ${user!.name}${allItemsReturned ? ' (Transaction Closed)' : ''}`,
             });
 
             await loadData(true);
-            showToast(`${item.name} force-returned. Awaiting verification.`, 'success');
+            showToast(`${item.name} force-returned. Transaction updated.`, 'success');
         } catch (error) {
             console.error('Error force returning item:', error);
             showToast('Failed to force return item', 'error');
@@ -419,6 +445,58 @@ export default function TransactionDetailPage() {
         .filter(name => name !== 'Unknown User');
     const allMemberNames = [primaryUserName, ...additionalUserNames];
 
+    const canManualClose = transaction?.status === 'OPEN' && transaction.items.every(itemId => {
+        const item = equipment.find(e => e.id === itemId);
+        return item && item.status !== 'CHECKED_OUT' && item.status !== 'PENDING_VERIFICATION';
+    });
+
+    const handleManualClose = async () => {
+        const isConfirmed = await confirm({
+            title: 'Close Transaction?',
+            message: 'All items appear to be returned. Mark this transaction as CLOSED?',
+            confirmLabel: 'Close Transaction',
+            variant: 'primary'
+        }); // Note: variant default usually blue/primary.
+
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            const currentConditions = transaction!.postReturnConditions || {};
+            const updatedConditions = { ...currentConditions };
+
+            transaction!.items.forEach(id => {
+                if (!updatedConditions[id]) {
+                    const item = equipment.find(e => e.id === id);
+                    updatedConditions[id] = item?.condition || 'OK';
+                }
+            });
+
+            await storage.updateTransaction(transaction!.id, {
+                status: 'CLOSED',
+                timestampIn: new Date().toISOString(),
+                postReturnConditions: updatedConditions
+            });
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: transaction!.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Manually closed transaction - All items confirmed returned.`,
+            });
+
+            await loadData(true);
+            showToast('Transaction closed successfully', 'success');
+        } catch (error) {
+            console.error('Error closing transaction:', error);
+            showToast('Failed to close transaction', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fade-in pb-12 max-w-5xl mx-auto">
             {/* Header */}
@@ -443,9 +521,22 @@ export default function TransactionDetailPage() {
                         </p>
                     </div>
                 </div>
-                <Badge variant={transaction.status === 'OPEN' ? 'success' : 'default'} className="text-xs sm:text-sm px-2 sm:px-3 py-0.5 sm:py-1 shrink-0 mt-1 sm:mt-0">
-                    {transaction.status}
-                </Badge>
+                <div className="flex items-center gap-2 shrink-0 mt-1 sm:mt-0">
+                    {canManualClose && (
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleManualClose}
+                            isLoading={saving}
+                            className="text-xs bg-green-100 text-green-700 hover:bg-green-200 border-green-200"
+                        >
+                            Mark Closed
+                        </Button>
+                    )}
+                    <Badge variant={transaction.status === 'OPEN' ? 'success' : 'default'} className="text-xs sm:text-sm px-2 sm:px-3 py-0.5 sm:py-1">
+                        {transaction.status}
+                    </Badge>
+                </div>
             </div>
 
             {/* Transaction Info Cards - Desktop: Grid, Mobile: Compact Single Card */}

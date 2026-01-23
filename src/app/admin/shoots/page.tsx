@@ -17,7 +17,7 @@ import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'CONFIRMED' | 'CANCELLED';
 type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST';
-type SortField = 'title' | 'date' | 'location' | 'crew' | 'status';
+type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber';
 type SortDirection = 'asc' | 'desc';
 
 export default function ShootList() {
@@ -113,15 +113,6 @@ export default function ShootList() {
 
     // Sorted shoots for list view
     const sortedShoots = useMemo(() => {
-        if (viewMode !== 'list') {
-            // For card view, just sort by date descending
-            return [...filteredShoots].sort((a, b) => {
-                if (!a.startTime) return 1;
-                if (!b.startTime) return -1;
-                return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
-            });
-        }
-
         return [...filteredShoots].sort((a, b) => {
             let comparison = 0;
 
@@ -143,11 +134,15 @@ export default function ShootList() {
                 case 'status':
                     comparison = a.status.localeCompare(b.status);
                     break;
+                case 'shootNumber':
+                    // Sort by shoot number safely handle nulls
+                    comparison = (a.shootNumber || 0) - (b.shootNumber || 0);
+                    break;
             }
 
             return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [filteredShoots, viewMode, sortField, sortDirection, assignments]);
+    }, [filteredShoots, sortField, sortDirection, assignments]);
 
     // Handle column sort click
     const handleSort = (field: SortField) => {
@@ -201,55 +196,54 @@ export default function ShootList() {
             {/* Header */}
             <div className="flex items-center justify-between gap-4 px-2 sm:px-0">
                 <div>
-                    <h1 style={{ color: '#111827' }} className="text-xl sm:text-3xl font-bold">Shoots</h1>
-                    <p style={{ color: '#6b7280' }} className="text-xs sm:text-sm mt-0.5 sm:mt-1">Manage upcoming productions</p>
+                    <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white">Shoots</h1>
+                    <p className="text-xs sm:text-sm mt-0.5 sm:mt-1 text-gray-500 dark:text-gray-400">Manage upcoming productions</p>
                 </div>
-                <Link href="/admin/shoots/new" className="shrink-0">
-                    <Button variant="primary" className="gap-2 shadow-lg rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold">
-                        <Plus size={16} strokeWidth={2.5} />
-                        <span className="hidden xs:inline">New Shoot</span>
-                        <span className="xs:hidden">New</span>
-                    </Button>
-                </Link>
+                {user?.role === 'ADMIN' && (
+                    <Link href="/admin/shoots/new" className="shrink-0">
+                        <Button variant="primary" className="gap-2 shadow-lg rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold">
+                            <Plus size={16} strokeWidth={2.5} />
+                            <span className="hidden xs:inline">New Shoot</span>
+                            <span className="xs:hidden">New</span>
+                        </Button>
+                    </Link>
+                )}
             </div>
 
             {/* Search & Filters Bar */}
-            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-xl p-2 sm:p-4 shadow-sm space-y-3 sm:space-y-4">
+            <div className="rounded-xl p-2 sm:p-4 shadow-sm space-y-3 sm:space-y-4 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                     {/* Search */}
                     <div className="relative flex-1">
-                        <Search size={18} style={{ color: '#9ca3af' }} className="absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                         <input
                             type="text"
                             placeholder="Search title, location, ID..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', color: '#111827' }}
-                            className="w-full pl-11 sm:pl-12 pr-4 py-2 sm:py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full pl-11 sm:pl-12 pr-4 py-2 sm:py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                         />
                     </div>
 
                     {/* View Toggle & Filter Button */}
                     <div className="flex gap-2">
                         {/* View Mode Toggle */}
-                        <div style={{ backgroundColor: '#f3f4f6' }} className="flex rounded-lg p-1 shrink-0">
+                        <div className="flex rounded-lg p-1 shrink-0 bg-gray-100 dark:bg-gray-800">
                             <button
                                 onClick={() => setViewMode('card')}
-                                style={{
-                                    backgroundColor: viewMode === 'card' ? '#ffffff' : 'transparent',
-                                    color: viewMode === 'card' ? '#111827' : '#6b7280'
-                                }}
-                                className="p-1.5 sm:p-2 rounded-md transition-all"
+                                className={`p-1.5 sm:p-2 rounded-md transition-all ${viewMode === 'card'
+                                    ? 'bg-white dark:bg-[#1c1c1e] shadow text-gray-900 dark:text-white'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
                             >
                                 <Grid3X3 size={18} />
                             </button>
                             <button
                                 onClick={() => setViewMode('list')}
-                                style={{
-                                    backgroundColor: viewMode === 'list' ? '#ffffff' : 'transparent',
-                                    color: viewMode === 'list' ? '#111827' : '#6b7280'
-                                }}
-                                className="p-1.5 sm:p-2 rounded-md transition-all"
+                                className={`p-1.5 sm:p-2 rounded-md transition-all ${viewMode === 'list'
+                                    ? 'bg-white dark:bg-[#1c1c1e] shadow text-gray-900 dark:text-white'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
                             >
                                 <List size={18} />
                             </button>
@@ -258,36 +252,54 @@ export default function ShootList() {
                         {/* Filter Toggle */}
                         <button
                             onClick={() => setShowFilters(!showFilters)}
-                            style={{
-                                backgroundColor: showFilters ? '#eff6ff' : '#f3f4f6',
-                                color: showFilters ? '#2563eb' : '#374151',
-                                border: showFilters ? '1px solid #bfdbfe' : '1px solid transparent'
-                            }}
-                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${showFilters
+                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-transparent'
+                                }`}
                         >
                             <Filter size={16} />
-                            Filters
+                            <span className="hidden sm:inline">Filters</span>
                             <ChevronDown size={14} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
                         </button>
                     </div>
                 </div>
 
+                {/* Mobile Sort Controls (Visible on mobile for quick access, or desktop if preferred) */}
+                <div className="flex sm:hidden overflow-x-auto gap-2 pb-1 scrollbar-hide">
+                    <select
+                        value={sortField}
+                        onChange={(e) => setSortField(e.target.value as SortField)}
+                        className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-blue-500"
+                    >
+                        <option value="date">Date</option>
+                        <option value="shootNumber">Shoot ID</option>
+                        <option value="title">Shoot Name</option>
+                        <option value="status">Status</option>
+                    </select>
+                    <button
+                        onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                        className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg px-2 py-1.5 flex items-center gap-1"
+                    >
+                        {sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                        <span className="text-xs">{sortDirection === 'asc' ? 'Asc' : 'Desc'}</span>
+                    </button>
+                </div>
+
                 {/* Filter Options */}
                 {showFilters && (
-                    <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 pt-2 sm:pt-3 border-t" style={{ borderColor: '#e5e7eb' }}>
+                    <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-800">
                         {/* Status Filter */}
                         <div className="flex flex-wrap items-center gap-2">
-                            <span style={{ color: '#6b7280' }} className="text-xs sm:text-sm font-medium shrink-0">Status:</span>
+                            <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">Status:</span>
                             <div className="flex flex-wrap gap-1.5">
                                 {(['ALL', 'CONFIRMED', 'CANCELLED'] as StatusFilter[]).map(status => (
                                     <button
                                         key={status}
                                         onClick={() => setStatusFilter(status)}
-                                        style={{
-                                            backgroundColor: statusFilter === status ? '#3b82f6' : '#f3f4f6',
-                                            color: statusFilter === status ? '#ffffff' : '#374151'
-                                        }}
-                                        className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all"
+                                        className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${statusFilter === status
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                            }`}
                                     >
                                         {status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}
                                     </button>
@@ -297,17 +309,16 @@ export default function ShootList() {
 
                         {/* Time Filter */}
                         <div className="flex flex-wrap items-center gap-2">
-                            <span style={{ color: '#6b7280' }} className="text-xs sm:text-sm font-medium shrink-0">When:</span>
+                            <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">When:</span>
                             <div className="flex flex-wrap gap-1.5">
                                 {(['ALL', 'TODAY', 'UPCOMING', 'PAST'] as TimeFilter[]).map(time => (
                                     <button
                                         key={time}
                                         onClick={() => setTimeFilter(time)}
-                                        style={{
-                                            backgroundColor: timeFilter === time ? '#3b82f6' : '#f3f4f6',
-                                            color: timeFilter === time ? '#ffffff' : '#374151'
-                                        }}
-                                        className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all"
+                                        className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${timeFilter === time
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                            }`}
                                     >
                                         {time === 'ALL' ? 'All' : time.charAt(0) + time.slice(1).toLowerCase()}
                                     </button>
@@ -315,16 +326,39 @@ export default function ShootList() {
                             </div>
                         </div>
 
+                        {/* Sort Filter (Visible inside filters on Desktop) */}
+                        <div className="hidden sm:flex flex-wrap items-center gap-2">
+                            <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">Sort By:</span>
+                            <div className="flex gap-2">
+                                <select
+                                    value={sortField}
+                                    onChange={(e) => setSortField(e.target.value as SortField)}
+                                    className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-xs sm:text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-sm hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                                >
+                                    <option value="date">Date</option>
+                                    <option value="shootNumber">Shoot ID</option>
+                                    <option value="title">Shoot Name</option>
+                                    <option value="status">Status</option>
+                                </select>
+                                <button
+                                    onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                    className="px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-1.5 transition-colors"
+                                >
+                                    {sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                                    <span className="text-xs sm:text-sm">{sortDirection === 'asc' ? 'Ascending' : 'Descending'}</span>
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Crew Filter (Admin Only) */}
                         {user?.role === 'ADMIN' && (
                             <div className="flex flex-wrap items-center gap-2">
-                                <span style={{ color: '#6b7280' }} className="text-xs sm:text-sm font-medium shrink-0">Assigned To:</span>
+                                <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">Assigned To:</span>
                                 <div className="relative">
                                     <select
                                         value={crewFilter}
                                         onChange={(e) => setCrewFilter(e.target.value)}
-                                        className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-xs sm:text-sm border border-gray-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-sm hover:border-gray-300 transition-colors"
-                                        style={{ color: '#374151' }}
+                                        className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-xs sm:text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-sm hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                                     >
                                         <option value="ALL">All Crew</option>
                                         {users
@@ -345,26 +379,27 @@ export default function ShootList() {
 
             {/* Results Count */}
             <div className="flex items-center justify-between px-1">
-                <p style={{ color: '#6b7280' }} className="text-xs sm:text-sm">
-                    Showing <span style={{ color: '#111827' }} className="font-semibold">{filteredShoots.length}</span> of {shoots.length} shoots
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    Showing <span className="font-semibold text-gray-900 dark:text-white">{filteredShoots.length}</span> of {shoots.length} shoots
                 </p>
             </div>
 
             {/* Shoots Grid/List */}
+            {/* Shoots Grid/List */}
             {filteredShoots.length === 0 ? (
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="text-center py-16 rounded-2xl shadow-sm">
-                    <div style={{ backgroundColor: '#f3f4f6' }} className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Calendar size={28} style={{ color: '#9ca3af' }} />
+                <div className="text-center py-16 rounded-2xl shadow-sm bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-gray-100 dark:bg-gray-800">
+                        <Calendar size={28} className="text-gray-400 dark:text-gray-500" />
                     </div>
-                    <h3 style={{ color: '#111827' }} className="text-lg font-semibold mb-2">
+                    <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
                         {searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL' ? 'No shoots found' : 'No shoots yet'}
                     </h3>
-                    <p style={{ color: '#6b7280' }} className="max-w-sm mx-auto mb-4">
+                    <p className="max-w-sm mx-auto mb-4 text-gray-500 dark:text-gray-400">
                         {searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL'
                             ? 'Try adjusting your search or filters'
                             : 'Create your first shoot to start tracking productions'}
                     </p>
-                    {!(searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL') && (
+                    {!(searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL') && user?.role === 'ADMIN' && (
                         <Link href="/admin/shoots/new">
                             <Button size="sm">Create Shoot</Button>
                         </Link>
@@ -381,21 +416,18 @@ export default function ShootList() {
                             <div
                                 key={shoot.id}
                                 onClick={() => router.push(`/admin/shoots/${shoot.id}`)}
-                                className="group h-full" // Added group wrapper to maintain hover states if needed, though most styles are on inner div
+                                className="group h-full"
                             >
-                                <div
-                                    style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}
-                                    className="rounded-xl p-3 sm:p-5 shadow-sm hover:shadow-lg transition-all duration-200 h-full cursor-pointer relative"
-                                >
+                                <div className="rounded-xl p-3 sm:p-5 shadow-sm hover:shadow-lg transition-all duration-200 h-full cursor-pointer relative bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
                                     {/* Header */}
                                     <div className="flex items-start justify-between gap-3 mb-2 sm:mb-3">
                                         <div>
                                             {shoot.shootNumber && (
-                                                <span className="inline-block text-[10px] font-bold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded-md mb-1.5">
+                                                <span className="inline-block text-[10px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md mb-1.5">
                                                     #{shoot.shootNumber}
                                                 </span>
                                             )}
-                                            <h3 style={{ color: '#111827' }} className="font-bold text-base sm:text-lg group-hover:text-blue-600 transition-colors line-clamp-1">
+                                            <h3 className="font-bold text-base sm:text-lg text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
                                                 {shoot.title}
                                             </h3>
                                         </div>
@@ -409,7 +441,7 @@ export default function ShootList() {
 
                                     {/* Description */}
                                     {shoot.description && (
-                                        <p style={{ color: '#6b7280' }} className="text-sm line-clamp-2 mb-4">
+                                        <p className="text-sm line-clamp-2 mb-4 text-gray-500 dark:text-gray-400">
                                             {shoot.description}
                                         </p>
                                     )}
@@ -417,8 +449,8 @@ export default function ShootList() {
                                     {/* Details */}
                                     <div className="space-y-2 mb-4">
                                         <div className="flex items-center gap-2">
-                                            <Calendar size={14} style={{ color: '#9ca3af' }} />
-                                            <span style={{ color: '#374151' }} className="text-sm">
+                                            <Calendar size={14} className="text-gray-400 dark:text-gray-500" />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">
                                                 {shoot.startTime ? (
                                                     shoot.endTime && format(parseISO(shoot.startTime), 'yyyy-MM-dd') !== format(parseISO(shoot.endTime), 'yyyy-MM-dd')
                                                         ? `${format(parseISO(shoot.startTime), 'MMM d')} - ${format(parseISO(shoot.endTime), 'MMM d, yyyy')}`
@@ -427,25 +459,25 @@ export default function ShootList() {
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Clock size={14} style={{ color: '#9ca3af' }} />
-                                            <span style={{ color: '#374151' }} className="text-sm">
+                                            <Clock size={14} className="text-gray-400 dark:text-gray-500" />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">
                                                 {shoot.startTime ? format(parseISO(shoot.startTime), 'h:mm a') : 'TBD'}
                                                 {shoot.endTime && ` - ${format(parseISO(shoot.endTime), 'h:mm a')}`}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <MapPin size={14} style={{ color: '#9ca3af' }} />
-                                            <span style={{ color: '#374151' }} className="text-sm truncate">
+                                            <MapPin size={14} className="text-gray-400 dark:text-gray-500" />
+                                            <span className="text-sm truncate text-gray-700 dark:text-gray-300">
                                                 {shoot.location || 'Location not set'}
                                             </span>
                                         </div>
                                     </div>
 
                                     {/* Footer */}
-                                    <div style={{ borderTop: '1px solid #f3f4f6' }} className="pt-4 flex items-center justify-between mt-auto">
+                                    <div className="pt-4 flex items-center justify-between mt-auto border-t border-gray-100 dark:border-gray-800">
                                         <div className="flex items-center gap-1.5">
-                                            <Users size={14} style={{ color: '#9ca3af' }} />
-                                            <span style={{ color: '#6b7280' }} className="text-xs font-medium">
+                                            <Users size={14} className="text-gray-400 dark:text-gray-500" />
+                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                                                 {crewCount} crew
                                             </span>
                                         </div>
@@ -533,9 +565,9 @@ export default function ShootList() {
                                                 </svg>
                                             </button>
 
-                                            <div className="h-4 w-[1px] bg-gray-200 mx-1"></div>
+                                            <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-700 mx-1"></div>
 
-                                            <span style={{ color: '#6b7280' }} className="text-xs">
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">
                                                 by {shoot.createdBy || 'Admin'}
                                             </span>
                                         </div>
@@ -547,41 +579,36 @@ export default function ShootList() {
                 </div>
             ) : (
                 /* List View */
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-xl shadow-sm overflow-hidden">
+                <div className="rounded-xl shadow-sm overflow-hidden bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
                     {/* Table Header */}
-                    <div style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }} className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 text-xs font-semibold uppercase tracking-wider">
+                    <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 text-xs font-semibold uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">
                         <button
                             onClick={() => handleSort('title')}
-                            className="col-span-4 flex items-center gap-1.5 hover:text-blue-600 transition-colors text-left"
-                            style={{ color: sortField === 'title' ? '#2563eb' : '#6b7280' }}
+                            className={`col-span-4 flex items-center gap-1.5 transition-colors text-left ${sortField === 'title' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                         >
                             Shoot <SortIndicator field="title" />
                         </button>
                         <button
                             onClick={() => handleSort('date')}
-                            className="col-span-2 flex items-center gap-1.5 hover:text-blue-600 transition-colors text-left"
-                            style={{ color: sortField === 'date' ? '#2563eb' : '#6b7280' }}
+                            className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'date' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                         >
                             Date & Time <SortIndicator field="date" />
                         </button>
                         <button
                             onClick={() => handleSort('location')}
-                            className="col-span-2 flex items-center gap-1.5 hover:text-blue-600 transition-colors text-left"
-                            style={{ color: sortField === 'location' ? '#2563eb' : '#6b7280' }}
+                            className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'location' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                         >
                             Location <SortIndicator field="location" />
                         </button>
                         <button
                             onClick={() => handleSort('crew')}
-                            className="col-span-2 flex items-center gap-1.5 hover:text-blue-600 transition-colors text-left"
-                            style={{ color: sortField === 'crew' ? '#2563eb' : '#6b7280' }}
+                            className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'crew' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                         >
                             Crew <SortIndicator field="crew" />
                         </button>
                         <button
                             onClick={() => handleSort('status')}
-                            className="col-span-2 flex items-center gap-1.5 hover:text-blue-600 transition-colors text-left"
-                            style={{ color: sortField === 'status' ? '#2563eb' : '#6b7280' }}
+                            className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'status' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                         >
                             Status <SortIndicator field="status" />
                         </button>
@@ -600,23 +627,28 @@ export default function ShootList() {
                                 onClick={() => router.push(`/admin/shoots/${shoot.id}`)}
                             >
                                 <div
-                                    style={{ borderBottom: index < sortedShoots.length - 1 ? '1px solid #f3f4f6' : 'none' }}
-                                    className={`grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 px-4 py-4 transition-colors ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
+                                    className={`grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 px-4 py-4 transition-colors ${isExpanded
+                                        ? 'bg-blue-50/30 dark:bg-blue-900/10'
+                                        : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                                        } ${index < sortedShoots.length - 1
+                                            ? 'border-b border-gray-100 dark:border-gray-800'
+                                            : ''
+                                        }`}
                                 >
                                     {/* Shoot Info */}
                                     <div className="col-span-4 min-w-0">
                                         <div className="flex items-center gap-2">
                                             {shoot.shootNumber && (
-                                                <span className="text-[11px] font-bold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded tracking-wide shrink-0">
+                                                <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded tracking-wide shrink-0">
                                                     #{shoot.shootNumber}
                                                 </span>
                                             )}
-                                            <h4 style={{ color: '#111827' }} className="font-semibold truncate hover:text-blue-600">
+                                            <h4 className="font-semibold truncate hover:text-blue-600 dark:hover:text-blue-400 text-gray-900 dark:text-white">
                                                 {shoot.title}
                                             </h4>
                                         </div>
                                         {shoot.description && (
-                                            <p style={{ color: '#6b7280' }} className="text-sm truncate mt-0.5">
+                                            <p className="text-sm truncate mt-0.5 text-gray-500 dark:text-gray-400">
                                                 {shoot.description}
                                             </p>
                                         )}
@@ -624,17 +656,17 @@ export default function ShootList() {
 
                                     {/* Date & Time */}
                                     <div className="col-span-2 flex flex-col justify-center">
-                                        <span style={{ color: '#374151' }} className="text-sm font-medium">
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                             {shoot.startTime ? format(parseISO(shoot.startTime), 'MMM d, yyyy') : 'Not set'}
                                         </span>
-                                        <span style={{ color: '#9ca3af' }} className="text-xs">
+                                        <span className="text-xs text-gray-400 dark:text-gray-500">
                                             {shoot.startTime ? format(parseISO(shoot.startTime), 'h:mm a') : ''}
                                         </span>
                                     </div>
 
                                     {/* Location */}
                                     <div className="col-span-2 flex items-center">
-                                        <span style={{ color: '#374151' }} className="text-sm truncate">
+                                        <span className="text-sm truncate text-gray-700 dark:text-gray-300">
                                             {shoot.location || '-'}
                                         </span>
                                     </div>
@@ -643,8 +675,8 @@ export default function ShootList() {
                                     <div className="col-span-2 flex items-center">
                                         <div className="flex items-center gap-2 relative z-10">
                                             <div className="flex items-center gap-1.5">
-                                                <Users size={14} style={{ color: '#9ca3af' }} />
-                                                <span style={{ color: '#374151' }} className="text-sm">
+                                                <Users size={14} className="text-gray-400 dark:text-gray-500" />
+                                                <span className="text-sm text-gray-700 dark:text-gray-300">
                                                     {crewCount} members
                                                 </span>
                                             </div>
@@ -681,18 +713,18 @@ export default function ShootList() {
                                 {/* Expanded Crew Section */}
                                 {isExpanded && (
                                     <div
-                                        className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex flex-wrap gap-4 items-center animate-in slide-in-from-top-2 duration-200"
+                                        className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex flex-wrap gap-4 items-center animate-in slide-in-from-top-2 duration-200"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mr-2">Assigned Crew:</div>
+                                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-2">Assigned Crew:</div>
                                         {getShootCrew(shoot.id).map(member => (
-                                            <div key={member.id} className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                                            <div key={member.id} className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm">
                                                 <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white">
                                                     {member.name.charAt(0).toUpperCase()}
                                                 </div>
                                                 <div className="flex flex-col leading-none">
-                                                    <span className="text-xs font-medium text-gray-700">{member.name}</span>
-                                                    <span className="text-[10px] text-gray-500">{member.role}</span>
+                                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{member.name}</span>
+                                                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{member.role}</span>
                                                 </div>
                                             </div>
                                         ))}

@@ -102,9 +102,6 @@ class StorageService {
         // Sanitize updates - remove ID and handle camelCase mapping
         const dbUpdates: any = { ...updates };
         delete dbUpdates.id;
-        delete dbUpdates.barcode;
-        delete dbUpdates.name;
-        delete dbUpdates.category;
 
         if (updates.serialNumber !== undefined) {
             dbUpdates.serial_number = updates.serialNumber;
@@ -128,6 +125,30 @@ class StorageService {
 
         if (error) {
             console.error('Error updating equipment:', error);
+            throw error;
+        }
+    }
+
+    async deleteEquipment(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('equipment')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error deleting equipment:', error);
+            throw error;
+        }
+    }
+
+    async bulkDeleteEquipment(ids: string[]): Promise<void> {
+        const { error } = await supabase
+            .from('equipment')
+            .delete()
+            .in('id', ids);
+
+        if (error) {
+            console.error('Error bulk deleting equipment:', error);
             throw error;
         }
     }

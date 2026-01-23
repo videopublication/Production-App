@@ -32,17 +32,17 @@ export const Sidebar = () => {
     return (
         // Desktop only - hidden on mobile (bottom tabs used instead)
         <aside className={`
-            hidden md:flex fixed top-0 left-0 h-screen bg-white z-40 transition-all duration-300 ease-out flex-col border-r border-[#f5f5f7]
+            hidden md:flex fixed top-0 left-0 h-screen bg-card z-40 transition-all duration-300 ease-out flex-col border-r border-border
             ${isCollapsed ? 'w-[72px]' : 'w-[260px]'}
         `}>
             {/* Logo */}
-            <div className={`h-16 flex items-center border-b border-[#f5f5f7] ${isCollapsed ? 'justify-center px-0' : 'px-5 gap-3'}`}>
-                <div className="w-9 h-9 bg-[#0071e3] rounded-xl flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className={`h-16 flex items-center border-b border-border ${isCollapsed ? 'justify-center px-0' : 'px-5 gap-3'}`}>
+                <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                 </div>
-                {!isCollapsed && <span className="font-semibold text-[17px] text-[#1d1d1f]">Vpub App</span>}
+                {!isCollapsed && <span className="font-semibold text-[17px] text-foreground">Vpub App</span>}
             </div>
 
             {/* Navigation */}
@@ -54,8 +54,8 @@ export const Sidebar = () => {
                                 ? 'justify-center w-11 h-11 mx-auto'
                                 : 'gap-3 px-3 py-2.5'
                                 } ${isActive(item.path)
-                                    ? 'bg-[#0071e3] text-white'
-                                    : 'text-[#1d1d1f] hover:bg-[#f5f5f7]'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'text-foreground hover:bg-muted'
                                 }`}>
                                 <svg className="w-[20px] h-[20px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
@@ -68,10 +68,10 @@ export const Sidebar = () => {
             </nav>
 
             {/* Collapse Toggle Button */}
-            <div className={`px-3 py-2 border-t border-[#f5f5f7] ${isCollapsed ? 'flex justify-center' : ''}`}>
+            <div className={`px-3 py-2 border-t border-border ${isCollapsed ? 'flex justify-center' : ''}`}>
                 <button
                     onClick={toggleCollapsed}
-                    className={`flex items-center justify-center rounded-xl text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-all duration-200 ${isCollapsed ? 'w-11 h-11 mx-auto' : 'w-full gap-2 px-3 py-2.5'
+                    className={`flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 ${isCollapsed ? 'w-11 h-11 mx-auto' : 'w-full gap-2 px-3 py-2.5'
                         }`}
                     title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
                 >
@@ -89,7 +89,7 @@ export const Sidebar = () => {
             </div>
 
             {/* User Profile */}
-            <div className={`p-3 border-t border-[#f5f5f7] ${isCollapsed ? 'flex justify-center' : ''}`}>
+            <div className={`p-3 border-t border-border ${isCollapsed ? 'flex justify-center' : ''}`}>
                 {isCollapsed ? (
                     <button
                         onClick={logout}
@@ -104,12 +104,12 @@ export const Sidebar = () => {
                             {user.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="font-medium text-[14px] text-[#1d1d1f] truncate">{user.name}</p>
-                            <p className="text-[12px] text-[#86868b]">{user.role}</p>
+                            <p className="font-medium text-[14px] text-foreground truncate">{user.name}</p>
+                            <p className="text-[12px] text-muted-foreground">{user.role}</p>
                         </div>
                         <button
                             onClick={logout}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-[#86868b] hover:text-[#ff3b30] hover:bg-[#ff3b30]/10 transition-colors"
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                             title="Sign Out"
                         >
                             <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

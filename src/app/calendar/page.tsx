@@ -184,11 +184,11 @@ export default function CalendarPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2 sm:px-0">
                 <div>
-                    <h1 style={{ color: '#111827' }} className="text-2xl sm:text-3xl font-bold flex items-center gap-3">
-                        <CalendarIcon size={28} style={{ color: '#3b82f6' }} />
+                    <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3 text-gray-900 dark:text-white">
+                        <CalendarIcon size={28} className="text-blue-500 dark:text-blue-400" />
                         Calendar
                     </h1>
-                    <p style={{ color: '#6b7280' }} className="text-sm mt-1">
+                    <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">
                         {shootsThisMonth} shoot{shootsThisMonth !== 1 ? 's' : ''} scheduled in {format(currentMonth, 'MMMM yyyy')}
                     </p>
                 </div>
@@ -196,12 +196,12 @@ export default function CalendarPage() {
                 {/* Filter */}
                 {user?.role === 'ADMIN' && (
                     <div className="relative group">
-                        <div className="flex items-center gap-2 bg-white pl-3 pr-2 py-2 rounded-xl border border-gray-200 shadow-sm hover:border-blue-300 transition-all cursor-pointer">
-                            <Users size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
+                        <div className="flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl border shadow-sm transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700">
+                            <Users size={16} className="text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" />
                             <select
                                 value={crewFilter}
                                 onChange={(e) => setCrewFilter(e.target.value)}
-                                className="appearance-none bg-transparent text-sm font-medium text-gray-700 focus:outline-none cursor-pointer pr-6"
+                                className="appearance-none bg-transparent text-sm font-medium focus:outline-none cursor-pointer pr-6 text-gray-700 dark:text-gray-300"
                             >
                                 <option value="ALL">All Crew</option>
                                 {users
@@ -210,7 +210,7 @@ export default function CalendarPage() {
                                         <option key={u.id} value={u.id}>{u.name}</option>
                                     ))}
                             </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-400 group-hover:text-blue-500">
+                            <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400">
                                 <ChevronDown size={14} />
                             </div>
                         </div>
@@ -221,51 +221,46 @@ export default function CalendarPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Calendar */}
                 <div className="lg:col-span-2">
-                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-2xl shadow-sm overflow-hidden">
+                    <div className="rounded-2xl shadow-sm overflow-hidden bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
                         {/* Calendar Header */}
-                        <div style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }} className="px-3 sm:px-6 py-4 flex items-center justify-between gap-2">
+                        <div className="px-3 sm:px-6 py-4 flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">
                             <div className="flex items-center gap-1 sm:gap-2 flex-1">
                                 <button
                                     onClick={() => navigateMonth('prev')}
-                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-200 transition-colors shrink-0"
-                                    style={{ color: '#374151' }}
+                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors shrink-0 text-gray-700 dark:text-gray-300"
                                 >
                                     <ChevronLeft size={20} />
                                 </button>
-                                <h2 style={{ color: '#111827' }} className="text-lg sm:text-xl font-bold flex-1 text-center sm:min-w-[200px]">
+                                <h2 className="text-lg sm:text-xl font-bold flex-1 text-center sm:min-w-[200px] text-gray-900 dark:text-white">
                                     {format(currentMonth, 'MMMM yyyy')}
                                 </h2>
                                 <button
                                     onClick={() => navigateMonth('next')}
-                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-200 transition-colors shrink-0"
-                                    style={{ color: '#374151' }}
+                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors shrink-0 text-gray-700 dark:text-gray-300"
                                 >
                                     <ChevronRight size={20} />
                                 </button>
                             </div>
                             <button
                                 onClick={goToToday}
-                                style={{ backgroundColor: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}
-                                className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold hover:bg-blue-100 transition-colors shrink-0"
+                                className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors shrink-0 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40"
                             >
                                 Today
                             </button>
                         </div>
 
                         {/* Day Headers */}
-                        <div className="grid grid-cols-7 border-b" style={{ borderColor: '#e5e7eb' }}>
+                        <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-800">
                             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                                 <div
                                     key={day}
-                                    style={{ color: '#6b7280', backgroundColor: '#f9fafb' }}
-                                    className="py-3 text-center text-xs font-semibold uppercase tracking-wider"
+                                    className="py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800"
                                 >
                                     {day}
                                 </div>
                             ))}
                         </div>
 
-                        {/* Calendar Grid */}
                         <div className="grid grid-cols-7">
                             {calendarDays.map((day, index) => {
                                 const daysShoots = getShootsForDate(day);
@@ -280,26 +275,27 @@ export default function CalendarPage() {
                                             setSelectedDate(day);
                                             setSelectedShoot(null);
                                         }}
-                                        style={{
-                                            borderRight: (index + 1) % 7 !== 0 ? '1px solid #f3f4f6' : 'none',
-                                            borderBottom: '1px solid #f3f4f6',
-                                            backgroundColor: isSelected ? '#eff6ff' : 'transparent'
-                                        }}
-                                        className={`min-h-[80px] sm:min-h-[100px] p-1 sm:p-2 text-left transition-colors hover:bg-gray-50 ${!isCurrentMonth ? 'opacity-40' : ''}`}
+                                        className={`min-h-[80px] sm:min-h-[100px] p-1 sm:p-2 text-left transition-colors border-b border-gray-100 dark:border-gray-800 ${(index + 1) % 7 !== 0 ? 'border-r border-gray-100 dark:border-gray-800' : ''
+                                            } ${isSelected
+                                                ? 'bg-blue-50 dark:bg-blue-900/20'
+                                                : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                                            } ${!isCurrentMonth ? 'opacity-40' : ''
+                                            }`}
                                     >
                                         {/* Date Number */}
                                         <div className="flex items-center justify-between mb-1">
                                             <span
-                                                style={{
-                                                    color: isTodayDate ? '#ffffff' : isSelected ? '#2563eb' : '#374151',
-                                                    backgroundColor: isTodayDate ? '#3b82f6' : 'transparent'
-                                                }}
-                                                className={`text-xs sm:text-sm font-semibold w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full`}
+                                                className={`text-xs sm:text-sm font-semibold w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full ${isTodayDate
+                                                        ? 'bg-blue-600 text-white'
+                                                        : isSelected
+                                                            ? 'text-blue-600 dark:text-blue-400'
+                                                            : 'text-gray-700 dark:text-gray-300'
+                                                    }`}
                                             >
                                                 {format(day, 'd')}
                                             </span>
                                             {daysShoots.length > 0 && (
-                                                <span style={{ color: '#6b7280' }} className="hidden sm:inline text-[10px] font-medium">
+                                                <span className="hidden sm:inline text-[10px] font-medium text-gray-500 dark:text-gray-400">
                                                     {daysShoots.length} shoot{daysShoots.length > 1 ? 's' : ''}
                                                 </span>
                                             )}
@@ -414,14 +410,14 @@ export default function CalendarPage() {
 
                 {/* Sidebar - Selected Date Details */}
                 <div className="lg:col-span-1">
-                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-2xl shadow-sm overflow-hidden sticky top-6">
+                    <div className="rounded-2xl shadow-sm overflow-hidden sticky top-6 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
                         {/* Sidebar Header */}
-                        <div style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }} className="px-5 py-4">
-                            <h3 style={{ color: '#111827' }} className="font-bold text-lg">
+                        <div className="px-5 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">
+                            <h3 className="font-bold text-lg text-gray-900 dark:text-white">
                                 {selectedDate ? format(selectedDate, 'EEEE, MMMM d') : 'Select a Date'}
                             </h3>
                             {selectedDate && (
-                                <p style={{ color: '#6b7280' }} className="text-sm">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
                                     {shootsForSelectedDate.length} shoot{shootsForSelectedDate.length !== 1 ? 's' : ''} scheduled
                                 </p>
                             )}
@@ -431,15 +427,15 @@ export default function CalendarPage() {
                         <div className="p-4 max-h-[500px] overflow-y-auto">
                             {!selectedDate ? (
                                 <div className="text-center py-8">
-                                    <CalendarIcon size={40} style={{ color: '#d1d5db' }} className="mx-auto mb-3" />
-                                    <p style={{ color: '#6b7280' }} className="text-sm">Click on a date to see shoots</p>
+                                    <CalendarIcon size={40} className="mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Click on a date to see shoots</p>
                                 </div>
                             ) : shootsForSelectedDate.length === 0 ? (
                                 <div className="text-center py-8">
-                                    <div style={{ backgroundColor: '#f3f4f6' }} className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <CalendarIcon size={24} style={{ color: '#9ca3af' }} />
+                                    <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-gray-100 dark:bg-gray-800">
+                                        <CalendarIcon size={24} className="text-gray-400 dark:text-gray-500" />
                                     </div>
-                                    <p style={{ color: '#6b7280' }} className="text-sm font-medium">No shoots on this day</p>
+                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No shoots on this day</p>
                                     {user?.role === 'ADMIN' && (
                                         <Link href="/admin/shoots/new" className="mt-3 inline-block">
                                             <Button size="sm" variant="secondary">Schedule Shoot</Button>
@@ -457,20 +453,20 @@ export default function CalendarPage() {
                                             <div
                                                 key={shoot.id}
                                                 style={{
-                                                    borderTop: isExpanded ? '2px solid #3b82f6' : '1px solid #e5e7eb',
-                                                    borderRight: isExpanded ? '2px solid #3b82f6' : '1px solid #e5e7eb',
-                                                    borderBottom: isExpanded ? '2px solid #3b82f6' : '1px solid #e5e7eb',
                                                     borderLeft: `4px solid ${statusStyle.border || statusStyle.text}`
                                                 }}
-                                                className="rounded-xl overflow-hidden transition-all"
+                                                className={`rounded-xl overflow-hidden transition-all border ${isExpanded
+                                                        ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500'
+                                                        : 'border-gray-200 dark:border-gray-800'
+                                                    }`}
                                             >
                                                 {/* Shoot Header */}
                                                 <button
                                                     onClick={() => setSelectedShoot(isExpanded ? null : shoot)}
-                                                    className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+                                                    className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                                                 >
                                                     <div className="flex items-start justify-between gap-2 mb-2">
-                                                        <h4 style={{ color: '#111827' }} className="font-bold text-[15px]">
+                                                        <h4 className="font-bold text-[15px] text-gray-900 dark:text-white">
                                                             {shoot.title}
                                                         </h4>
                                                         <span
@@ -483,21 +479,21 @@ export default function CalendarPage() {
 
                                                     <div className="space-y-1.5">
                                                         <div className="flex items-center gap-2">
-                                                            <Clock size={12} style={{ color: '#9ca3af' }} />
-                                                            <span style={{ color: '#6b7280' }} className="text-xs">
+                                                            <Clock size={12} className="text-gray-400 dark:text-gray-500" />
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400">
                                                                 {shoot.startTime ? format(parseISO(shoot.startTime), 'h:mm a') : 'TBD'}
                                                                 {shoot.endTime && ` - ${format(parseISO(shoot.endTime), 'h:mm a')}`}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <MapPin size={12} style={{ color: '#9ca3af' }} />
-                                                            <span style={{ color: '#6b7280' }} className="text-xs truncate">
+                                                            <MapPin size={12} className="text-gray-400 dark:text-gray-500" />
+                                                            <span className="text-xs truncate text-gray-500 dark:text-gray-400">
                                                                 {shoot.location || 'No location'}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <Users size={12} style={{ color: '#9ca3af' }} />
-                                                            <span style={{ color: '#6b7280' }} className="text-xs">
+                                                            <Users size={12} className="text-gray-400 dark:text-gray-500" />
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400">
                                                                 {crew.length} crew member{crew.length !== 1 ? 's' : ''}
                                                             </span>
                                                         </div>
@@ -506,25 +502,25 @@ export default function CalendarPage() {
 
                                                 {/* Expanded Details */}
                                                 {isExpanded && (
-                                                    <div style={{ backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }} className="p-4">
+                                                    <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-800">
                                                         {/* POC Details */}
                                                         {(shoot.pocName || shoot.pocContact) && (
                                                             <div className="mb-4">
-                                                                <h5 style={{ color: '#374151' }} className="text-xs font-bold uppercase tracking-wider mb-2">
+                                                                <h5 className="text-xs font-bold uppercase tracking-wider mb-2 text-gray-700 dark:text-gray-300">
                                                                     Point of Contact
                                                                 </h5>
-                                                                <div className="flex items-center gap-3 p-2 rounded-lg" style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}>
-                                                                    <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-600">
+                                                                <div className="flex items-center gap-3 p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                                                    <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
                                                                         <UserIcon size={16} />
                                                                     </div>
                                                                     <div className="min-w-0 flex-1">
                                                                         {shoot.pocName && (
-                                                                            <p style={{ color: '#111827' }} className="text-sm font-medium truncate">
+                                                                            <p className="text-sm font-medium truncate text-gray-900 dark:text-white">
                                                                                 {shoot.pocName}
                                                                             </p>
                                                                         )}
                                                                         {shoot.pocContact && (
-                                                                            <p style={{ color: '#6b7280' }} className="text-xs truncate">
+                                                                            <p className="text-xs truncate text-gray-500 dark:text-gray-400">
                                                                                 {shoot.pocContact}
                                                                             </p>
                                                                         )}
@@ -582,35 +578,36 @@ export default function CalendarPage() {
                                                         )}
 
                                                         {/* Crew List */}
-                                                        <h5 style={{ color: '#374151' }} className="text-xs font-bold uppercase tracking-wider mb-3">
+                                                        <h5 className="text-xs font-bold uppercase tracking-wider mb-3 text-gray-700 dark:text-gray-300">
                                                             Assigned Crew
                                                         </h5>
                                                         {crew.length === 0 ? (
-                                                            <p style={{ color: '#9ca3af' }} className="text-xs italic">No crew assigned</p>
+                                                            <p className="text-xs italic text-gray-400 dark:text-gray-500">No crew assigned</p>
                                                         ) : (
                                                             <div className="space-y-2">
                                                                 {crew.map(member => (
                                                                     <div
                                                                         key={member.id}
-                                                                        className="flex items-center gap-3 p-2 rounded-lg"
-                                                                        style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}
+                                                                        className="flex items-center gap-3 p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                                                                     >
                                                                         <div
                                                                             style={{
                                                                                 background: member.role === 'Incharge'
                                                                                     ? 'linear-gradient(135deg, #6366f1, #3b82f6)'
-                                                                                    : '#e5e7eb',
-                                                                                color: member.role === 'Incharge' ? '#ffffff' : '#374151'
+                                                                                    : undefined
                                                                             }}
-                                                                            className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                                                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${member.role === 'Incharge'
+                                                                                    ? 'text-white'
+                                                                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                                                                }`}
                                                                         >
                                                                             {member.user?.name?.charAt(0) || '?'}
                                                                         </div>
                                                                         <div className="min-w-0 flex-1">
-                                                                            <p style={{ color: '#111827' }} className="text-sm font-medium truncate">
+                                                                            <p className="text-sm font-medium truncate text-gray-900 dark:text-white">
                                                                                 {member.user?.name || 'Unknown'}
                                                                             </p>
-                                                                            <p style={{ color: '#9ca3af' }} className="text-[10px] uppercase font-semibold">
+                                                                            <p className="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-500">
                                                                                 {member.role === 'Incharge' ? 'Lead' : member.user?.role || 'Crew'}
                                                                             </p>
                                                                         </div>

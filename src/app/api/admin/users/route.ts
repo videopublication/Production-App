@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 // Create admin client for admin operations (create user, change password, toggle status)
 const getSupabaseAdmin = () => {
@@ -22,7 +23,57 @@ const getSupabaseAdmin = () => {
     });
 };
 
+// Helper to check for admin session
+async function ensureAdmin() {
+    const cookieStore = await cookies()
+
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            cookies: {
+                getAll() {
+                    return cookieStore.getAll()
+                },
+                setAll(cookiesToSet) {
+                    try {
+                        cookiesToSet.forEach(({ name, value, options }) => {
+                            cookieStore.set(name, value, options)
+                        })
+                    } catch {
+                        // The `setAll` method was called from a Server Component.
+                        // This can be ignored if you have middleware refreshing
+                        // user sessions.
+                    }
+                },
+            },
+        }
+    )
+
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    if (error || !user) {
+        return { error: 'Unauthorized', status: 401 }
+    }
+
+    // Check role strictly from JWT/metadata again to be safe, 
+    // or rely on the trusted service role check if you prefer, 
+    // but checking metadata on the user object is good practice.
+    const role = user.app_metadata?.role
+    if (role !== 'ADMIN') {
+        return { error: 'Forbidden: Admin access required', status: 403 }
+    }
+
+    return { success: true }
+}
+
 export async function GET(request: Request) {
+    // 1. Verify User is Admin
+    const authCheck = await ensureAdmin();
+    if (authCheck.error) {
+        return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
     try {
         console.log('Fetching users using admin client...');
 
@@ -45,13 +96,33 @@ export async function GET(request: Request) {
     }
 }
 
+import { z } from 'zod';
+
+const createUserSchema = z.object({
+    email: z.string().email(),
+    password: z.string().min(6),
+    name: z.string().min(1),
+    role: z.enum(['ADMIN', 'MANAGER', 'CREW'])
+});
+
 export async function POST(request: Request) {
+    // 1. Verify User is Admin
+    const authCheck = await ensureAdmin();
+    if (authCheck.error) {
+        return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
     try {
         const supabaseAdmin = getSupabaseAdmin();
         const body = await request.json();
-        const { email, password, name, role } = body;
 
-        // 1. Create user in Supabase Auth
+        // Validate Input
+        const result = createUserSchema.safeParse(body);
+        if (!result.success) {
+            return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
+        }
+
+        const { email, password, name, role } = result.data;
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
@@ -87,11 +158,31 @@ export async function POST(request: Request) {
     }
 }
 
+const updateUserSchema = z.object({
+    id: z.string().uuid(),
+    password: z.string().min(6).optional(),
+    status: z.enum(['ACTIVE', 'PENDING', 'SUSPENDED']).optional(),
+    role: z.enum(['ADMIN', 'MANAGER', 'CREW']).optional()
+});
+
 export async function PUT(request: Request) {
+    // 1. Verify User is Admin
+    const authCheck = await ensureAdmin();
+    if (authCheck.error) {
+        return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
     try {
         const supabaseAdmin = getSupabaseAdmin();
         const body = await request.json();
-        const { id, password, status, role } = body;
+
+        // Validate Input
+        const result = updateUserSchema.safeParse(body);
+        if (!result.success) {
+            return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
+        }
+
+        const { id, password, status, role } = result.data;
 
         if (password) {
             const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(id, {
@@ -101,8 +192,8 @@ export async function PUT(request: Request) {
         }
 
         const updates: any = {};
-        if (status !== undefined) updates.status = status;
-        if (role !== undefined) updates.role = role;
+        if (status) updates.status = status;
+        if (role) updates.role = role;
 
         if (Object.keys(updates).length > 0) {
             const { error: updateError } = await supabaseAdmin

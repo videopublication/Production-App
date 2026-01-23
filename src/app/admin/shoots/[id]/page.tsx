@@ -190,15 +190,14 @@ export default function ShootDetailsPage() {
                 <div className="flex items-start gap-4">
                     <Link href="/admin/shoots">
                         <button
-                            className="h-10 w-10 rounded-full flex items-center justify-center bg-white border border-gray-300 shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all"
-                            style={{ color: '#1f2937' }}
+                            className="h-10 w-10 rounded-full flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 transition-all"
                         >
                             <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
                     </Link>
                     <div className="min-w-0">
                         <div className="flex items-center gap-3 flex-wrap">
-                            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-[#1d1d1f]">
+                            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
                                 {shoot.shootNumber && <span className="text-gray-400 mr-2">#{shoot.shootNumber}</span>}
                                 {shoot.title}
                             </h1>
@@ -264,7 +263,7 @@ export default function ShootDetailsPage() {
                                 console.error('Failed to copy', err);
                             }
                         }}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-95 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs sm:text-sm whitespace-nowrap"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-95 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-xs sm:text-sm whitespace-nowrap"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -273,13 +272,15 @@ export default function ShootDetailsPage() {
                     </button>
 
                     <Link href={`/admin/shoots/${shoot.id}/edit`} className="flex-1 sm:flex-none">
-                        <Button variant="outline" className="w-full gap-1.5 bg-white hover:bg-gray-50 h-[38px] px-3 rounded-lg font-semibold border-gray-200 text-xs sm:text-sm">
-                            <Edit size={14} /> Edit
-                        </Button>
+                        {user?.role === 'ADMIN' && (
+                            <Button variant="outline" className="w-full gap-1.5 bg-white dark:bg-[#1c1c1e] hover:bg-gray-50 dark:hover:bg-gray-800 h-[38px] px-3 rounded-lg font-semibold border-gray-200 dark:border-gray-800 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+                                <Edit size={14} /> Edit
+                            </Button>
+                        )}
                     </Link>
 
 
-                    {shoot.status !== 'CANCELLED' && (
+                    {shoot.status !== 'CANCELLED' && user?.role === 'ADMIN' && (
                         <Button variant="danger" onClick={handleCancelShoot} className="flex-1 sm:flex-none gap-1.5 h-[38px] px-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap">
                             <XCircle size={14} /> Cancel
                         </Button>
@@ -289,14 +290,14 @@ export default function ShootDetailsPage() {
 
             {/* Quick Info Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-blue-500 shadow-sm relative overflow-hidden group">
+                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-blue-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800">
                     <div className="absolute right-0 top-0 p-3 opacity-100">
                         <svg className="w-16 h-16 text-blue-100 dark:text-blue-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                     </div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Date & Time</p>
-                    <p className="font-semibold text-lg text-foreground">
+                    <p className="text-xs font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-1">Date & Time</p>
+                    <p className="font-semibold text-lg text-foreground dark:text-white">
                         {(() => {
                             if (!shoot.startTime) return 'Not Set';
                             const startDate = parseISO(shoot.startTime);
@@ -307,7 +308,7 @@ export default function ShootDetailsPage() {
                             return format(startDate, 'MMM d, yyyy');
                         })()}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground dark:text-gray-400">
                         {(() => {
                             if (!shoot.startTime) return 'Time not set';
                             const start = format(parseISO(shoot.startTime), 'h:mm a');
@@ -317,41 +318,41 @@ export default function ShootDetailsPage() {
                     </p>
                 </Card>
 
-                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-purple-500 shadow-sm relative overflow-hidden group">
+                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-purple-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800">
                     <div className="absolute right-0 top-0 p-3 opacity-100">
                         <svg className="w-16 h-16 text-purple-100 dark:text-purple-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                     </div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Location</p>
-                    <p className="font-semibold text-lg text-foreground truncate" title={shoot.location}>{shoot.location || 'No Location'}</p>
-                    <p className="text-sm text-muted-foreground">Site / Venue</p>
+                    <p className="text-xs font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-1">Location</p>
+                    <p className="font-semibold text-lg text-foreground dark:text-white truncate" title={shoot.location}>{shoot.location || 'No Location'}</p>
+                    <p className="text-sm text-muted-foreground dark:text-gray-400">Site / Venue</p>
                 </Card>
 
-                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-green-500 shadow-sm relative overflow-hidden group">
+                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-green-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800">
                     <div className="absolute right-0 top-0 p-3 opacity-100">
                         <svg className="w-16 h-16 text-green-100 dark:text-green-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                         </svg>
                     </div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Point of Contact</p>
-                    <p className="font-semibold text-lg text-foreground truncate">{shoot.pocName || 'No POC'}</p>
-                    <p className="text-sm text-muted-foreground truncate">{shoot.pocContact || 'No contact info'}</p>
+                    <p className="text-xs font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-1">Point of Contact</p>
+                    <p className="font-semibold text-lg text-foreground dark:text-white truncate">{shoot.pocName || 'No POC'}</p>
+                    <p className="text-sm text-muted-foreground dark:text-gray-400 truncate">{shoot.pocContact || 'No contact info'}</p>
                 </Card>
             </div>
 
             {/* Description (if exists) */}
             {
                 shoot.description && (
-                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }} className="rounded-xl p-5 shadow-sm">
-                        <h3 className="text-sm font-bold uppercase tracking-widest mb-2 flex items-center gap-2" style={{ color: '#111827' }}>
-                            <svg className="w-4 h-4" style={{ color: '#4b5563' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="rounded-xl p-5 shadow-sm bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
+                        <h3 className="text-sm font-bold uppercase tracking-widest mb-2 flex items-center gap-2 text-gray-900 dark:text-white">
+                            <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             About this Shoot
                         </h3>
-                        <p className="leading-relaxed max-w-4xl text-[15px]" style={{ color: '#1f2937' }}>
+                        <p className="leading-relaxed max-w-4xl text-[15px] text-gray-800 dark:text-gray-200">
                             {shoot.description}
                         </p>
                     </div>
@@ -362,23 +363,25 @@ export default function ShootDetailsPage() {
                 {/* Crew List - Main Content */}
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between px-1 mb-4">
-                        <h2 style={{ color: '#111827' }} className="text-lg font-bold">Crew Assignments</h2>
-                        <span style={{ backgroundColor: '#f3f4f6', color: '#374151' }} className="px-3 py-1 rounded-full text-sm font-semibold">{assignments.length} Members</span>
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Crew Assignments</h2>
+                        <span className="px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{assignments.length} Members</span>
                     </div>
 
                     <div className="space-y-3">
                         {assignments.length === 0 ? (
-                            <div style={{ backgroundColor: '#f9fafb', border: '2px dashed #d1d5db' }} className="text-center py-12 rounded-2xl">
-                                <div style={{ backgroundColor: '#e5e7eb' }} className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <svg style={{ color: '#6b7280' }} className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <div className="text-center py-12 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-700">
+                                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-gray-200 dark:bg-gray-700">
+                                    <svg className="w-6 h-6 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                     </svg>
                                 </div>
-                                <p style={{ color: '#374151' }} className="font-medium">No crew assigned yet</p>
-                                <p style={{ color: '#6b7280' }} className="text-sm mb-4">Add members to organize this shoot</p>
-                                <Link href={`/admin/shoots/${id}/edit`}>
-                                    <Button size="sm">Add Crew Member</Button>
-                                </Link>
+                                <p className="font-medium text-gray-700 dark:text-gray-300">No crew assigned yet</p>
+                                <p className="text-sm mb-4 text-gray-500 dark:text-gray-400">Add members to organize this shoot</p>
+                                {user?.role === 'ADMIN' && (
+                                    <Link href={`/admin/shoots/${id}/edit`}>
+                                        <Button size="sm">Add Crew Member</Button>
+                                    </Link>
+                                )}
                             </div>
                         ) : (
                             assignments.map((assignment) => {
@@ -386,52 +389,46 @@ export default function ShootDetailsPage() {
                                 if (!assignedUser) return null;
                                 const isIncharge = assignment.role === 'Incharge';
 
-                                // Role-based colors
-                                const roleColors: Record<string, { bg: string; text: string; border: string }> = {
-                                    'ADMIN': { bg: '#fef3c7', text: '#92400e', border: '#fcd34d' },
-                                    'MANAGER': { bg: '#dbeafe', text: '#1e40af', border: '#93c5fd' },
-                                    'CREW': { bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
+                                const getRoleClasses = (role: string) => {
+                                    switch (role) {
+                                        case 'ADMIN': return 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700';
+                                        case 'MANAGER': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-700';
+                                        default: return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700';
+                                    }
                                 };
-                                const roleStyle = isIncharge
-                                    ? { bg: '#c7d2fe', text: '#3730a3', border: '#a5b4fc' }
-                                    : (roleColors[assignedUser.role] || roleColors['CREW']);
+
+                                const roleClass = isIncharge
+                                    ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 border-indigo-300 dark:border-indigo-700'
+                                    : getRoleClasses(assignedUser.role);
 
                                 return (
                                     <div
                                         key={assignment.id}
-                                        style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}
-                                        className="flex items-center justify-between p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200"
+                                        className="flex items-center justify-between p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800"
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="relative">
                                                 <div
-                                                    style={{
-                                                        background: isIncharge ? 'linear-gradient(135deg, #6366f1, #3b82f6)' : '#e5e7eb',
-                                                        color: isIncharge ? '#ffffff' : '#374151'
-                                                    }}
-                                                    className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shadow-sm"
+                                                    className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shadow-sm ${isIncharge
+                                                            ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white'
+                                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                                        }`}
                                                 >
                                                     {assignedUser.name.charAt(0)}
                                                 </div>
                                                 {isIncharge && (
                                                     <div
-                                                        style={{ backgroundColor: '#facc15', color: '#713f12', border: '2px solid #ffffff' }}
-                                                        className="absolute -bottom-1 -right-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm"
+                                                        className="absolute -bottom-1 -right-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm bg-yellow-400 text-yellow-900 border-2 border-white dark:border-gray-900"
                                                     >
                                                         LEAD
                                                     </div>
                                                 )}
                                             </div>
                                             <div>
-                                                <h4 style={{ color: '#111827' }} className="font-bold text-[15px]">{assignedUser.name}</h4>
+                                                <h4 className="font-bold text-[15px] text-gray-900 dark:text-white">{assignedUser.name}</h4>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span
-                                                        style={{
-                                                            backgroundColor: roleStyle.bg,
-                                                            color: roleStyle.text,
-                                                            border: `1px solid ${roleStyle.border}`
-                                                        }}
-                                                        className="text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide"
+                                                        className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide border ${roleClass}`}
                                                     >
                                                         {isIncharge ? 'Shoot Incharge' : assignedUser.role.replace('_', ' ')}
                                                     </span>
@@ -447,7 +444,7 @@ export default function ShootDetailsPage() {
 
                 {/* Sidebar - Activity Log */}
                 <div className="space-y-4">
-                    <h2 className="text-lg font-bold text-[#1d1d1f] px-1">Recent Activity</h2>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white px-1">Recent Activity</h2>
                     <Card className="p-0 overflow-hidden border border-border bg-gray-50/50 dark:bg-gray-900/20">
                         <div className="max-h-[500px] overflow-y-auto px-4 py-4 space-y-6 custom-scrollbar">
                             {logs.length === 0 ? (

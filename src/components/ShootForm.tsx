@@ -282,14 +282,24 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                     </div>
 
                     <div className="space-y-4 pt-1">
-                        <Input
-                            label="Shoot Title"
-                            value={formData.title}
-                            onChange={e => setFormData({ ...formData, title: e.target.value })}
-                            placeholder="e.g. Summer Campaign 2024"
-                            required
-                            className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
-                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                                label="Shoot Title"
+                                value={formData.title}
+                                onChange={e => setFormData({ ...formData, title: e.target.value })}
+                                placeholder="e.g. Summer Campaign 2024"
+                                required
+                                className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
+                            />
+                            <Input
+                                label="Location"
+                                value={formData.location}
+                                onChange={e => setFormData({ ...formData, location: e.target.value })}
+                                placeholder="e.g. Studio A, Central Park"
+                                required
+                                className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
+                            />
+                        </div>
 
                         {showDescription && (
                             <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-200">
@@ -307,7 +317,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                 </Card>
 
                 {/* Schedule Card */}
-                <Card className="space-y-4">
+                <Card className="space-y-4 h-full">
                     <div className="flex items-center justify-between bg-purple-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-purple-100/50 rounded-t-3xl">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
@@ -347,14 +357,13 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                         const newEndTime = e.target.value;
                                         if (formData.startTime && newEndTime < formData.startTime) {
                                             alert('End time cannot be before start time');
-                                            // Reset to start time or keep previous? let's just not update or set to start
                                             return;
                                         }
                                         setFormData({ ...formData, endTime: newEndTime });
                                     }}
                                     className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
                                     autoFocus
-                                    min={formData.startTime} // HTML5 validation helper
+                                    min={formData.startTime}
                                 />
                             </div>
                         )}
@@ -411,28 +420,8 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                     </div>
                 </Card>
 
-                {/* Logistics Card */}
-                <Card className="space-y-4">
-                    <div className="flex items-center gap-3 bg-red-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-red-100/50 rounded-t-3xl">
-                        <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
-                            <MapPin size={16} className="text-red-500" />
-                        </div>
-                        <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Location</h3>
-                    </div>
-
-                    <div className="pt-1">
-                        <Input
-                            value={formData.location}
-                            onChange={e => setFormData({ ...formData, location: e.target.value })}
-                            placeholder="e.g. Studio A, Central Park"
-                            required
-                            className="bg-[#f5f5f7] border-0 rounded-2xl h-12 focus:ring-2 focus:ring-[#0071e3]"
-                        />
-                    </div>
-                </Card>
-
                 {/* Point of Contact Card */}
-                <Card className="md:col-span-2 space-y-4">
+                <Card className="space-y-4 h-full">
                     <div className="flex items-center justify-between bg-green-50/50 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-green-100/50 rounded-t-3xl">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
@@ -452,7 +441,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                     </div>
 
                     {showPOC ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 animate-in slide-in-from-top-2 duration-200">
+                        <div className="grid grid-cols-1 gap-4 pt-1 animate-in slide-in-from-top-2 duration-200">
                             <Input
                                 label="POC Name"
                                 value={formData.pocName || ''}

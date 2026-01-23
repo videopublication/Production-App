@@ -33,6 +33,11 @@ export default function ItemDetailsPage() {
     const [editStatus, setEditStatus] = useState<EquipmentStatus>('AVAILABLE');
     const [editCondition, setEditCondition] = useState<Condition>('OK');
     const [editLocation, setEditLocation] = useState('');
+    const [editName, setEditName] = useState('');
+    const [editCategory, setEditCategory] = useState('');
+    const [editBarcode, setEditBarcode] = useState('');
+    const [editSerialNumber, setEditSerialNumber] = useState('');
+
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
 
@@ -42,6 +47,10 @@ export default function ItemDetailsPage() {
             setEditStatus(item.status);
             setEditCondition(item.condition);
             setEditLocation(item.location);
+            setEditName(item.name);
+            setEditCategory(item.category);
+            setEditBarcode(item.barcode);
+            setEditSerialNumber(item.serialNumber || '');
 
             // QR & Assigned User Logic
             const generateQR = async () => {
@@ -65,6 +74,8 @@ export default function ItemDetailsPage() {
 
     // Check if current user can manage equipment
     const canManage = user && (user.role === 'MANAGER' || user.role === 'ADMIN');
+    // Admin can edit everything including critical fields
+    const canEditEverything = user && user.role === 'ADMIN';
 
     // Handle save changes
     // Handle save changes
@@ -73,13 +84,21 @@ export default function ItemDetailsPage() {
 
         setIsSaving(true);
         try {
-            const updates = {
+            const updates: Partial<Equipment> = {
                 status: editStatus,
                 condition: editCondition,
                 location: editLocation,
                 // Clear assignedTo if status is AVAILABLE
                 assignedTo: editStatus === 'AVAILABLE' ? null as any : item.assignedTo,
             };
+
+            // Only add critical fields if user is ADMIN and they have changed
+            if (canEditEverything) {
+                updates.name = editName;
+                updates.category = editCategory;
+                updates.barcode = editBarcode;
+                updates.serialNumber = editSerialNumber || undefined;
+            }
 
             await updateEquipment({ id: item.id, updates });
 
@@ -111,6 +130,10 @@ export default function ItemDetailsPage() {
             setEditStatus(item.status);
             setEditCondition(item.condition);
             setEditLocation(item.location);
+            setEditName(item.name);
+            setEditCategory(item.category);
+            setEditBarcode(item.barcode);
+            setEditSerialNumber(item.serialNumber || '');
         }
         setIsEditing(false);
     };
@@ -196,12 +219,43 @@ export default function ItemDetailsPage() {
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-border/30">
                     <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">
-                                {item.name}
-                            </h1>
-                            <p className="text-sm text-muted-foreground mt-1">
-                                {item.category} • {item.barcode}
-                            </p>
+                            {isEditing && canEditEverything ? (
+                                <div className="space-y-2 mb-2">
+                                    <input
+                                        type="text"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        className="w-full text-2xl sm:text-3xl font-bold tracking-tight text-foreground bg-transparent border-b border-input focus:border-primary focus:outline-none px-0"
+                                        placeholder="Item Name"
+                                    />
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={editCategory}
+                                            onChange={(e) => setEditCategory(e.target.value)}
+                                            className="text-sm text-muted-foreground bg-transparent border-b border-input focus:border-primary focus:outline-none w-32"
+                                            placeholder="Category"
+                                        />
+                                        <span className="text-muted-foreground">•</span>
+                                        <input
+                                            type="text"
+                                            value={editBarcode}
+                                            onChange={(e) => setEditBarcode(e.target.value)}
+                                            className="text-sm text-muted-foreground bg-transparent border-b border-input focus:border-primary focus:outline-none w-32 font-mono"
+                                            placeholder="Barcode"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">
+                                        {item.name}
+                                    </h1>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        {item.category} • {item.barcode}
+                                    </p>
+                                </>
+                            )}
                         </div>
                         <Badge variant={getStatusVariant(item.status) as any} className="shrink-0 text-xs font-semibold px-2.5 py-1">
                             {item.status.replace('_', ' ')}
@@ -273,7 +327,7 @@ export default function ItemDetailsPage() {
                         )}
 
                         <dl className="space-y-5 flex-1">
-                            {/* Barcode ID - Not editable */}
+                            {/* Barcode ID - Editable for ADMIN */}
                             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
                                 <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -281,10 +335,42 @@ export default function ItemDetailsPage() {
                                     </svg>
                                     Barcode ID
                                 </dt>
-                                <dd className="font-mono text-sm bg-background px-2 py-1 rounded border border-border">{item.barcode}</dd>
+                                {isEditing && canEditEverything ? (
+                                    <input
+                                        type="text"
+                                        value={editBarcode}
+                                        onChange={(e) => setEditBarcode(e.target.value)}
+                                        className="text-sm px-2 py-1 rounded border border-border bg-background focus:ring-2 focus:ring-primary focus:border-transparent w-full max-w-[150px] font-mono text-right"
+                                    />
+                                ) : (
+                                    <dd className="font-mono text-sm bg-background px-2 py-1 rounded border border-border">{item.barcode}</dd>
+                                )}
                             </div>
 
-                            {/* Category - Not editable */}
+                            {/* Serial Number - Editable for ADMIN */}
+                            {(item.serialNumber || (isEditing && canEditEverything)) && (
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                                        </svg>
+                                        Serial Number
+                                    </dt>
+                                    {isEditing && canEditEverything ? (
+                                        <input
+                                            type="text"
+                                            value={editSerialNumber}
+                                            onChange={(e) => setEditSerialNumber(e.target.value)}
+                                            placeholder="Empty"
+                                            className="text-sm px-2 py-1 rounded border border-border bg-background focus:ring-2 focus:ring-primary focus:border-transparent w-full max-w-[150px] text-right"
+                                        />
+                                    ) : (
+                                        <dd className="text-sm font-medium">{item.serialNumber || 'N/A'}</dd>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Category - Editable for ADMIN */}
                             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
                                 <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -292,7 +378,16 @@ export default function ItemDetailsPage() {
                                     </svg>
                                     Category
                                 </dt>
-                                <dd className="text-sm font-medium">{item.category}</dd>
+                                {isEditing && canEditEverything ? (
+                                    <input
+                                        type="text"
+                                        value={editCategory}
+                                        onChange={(e) => setEditCategory(e.target.value)}
+                                        className="text-sm px-2 py-1 rounded border border-border bg-background focus:ring-2 focus:ring-primary focus:border-transparent w-full max-w-[150px] text-right"
+                                    />
+                                ) : (
+                                    <dd className="text-sm font-medium">{item.category}</dd>
+                                )}
                             </div>
 
                             {/* Status - Editable for managers/admins */}

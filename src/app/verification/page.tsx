@@ -329,19 +329,19 @@ export default function VerificationPage() {
     return (
         <div className="space-y-8 select-none mobile-safe-bottom">
             {/* Page Header */}
-            <div className="flex flex-col gap-5 pb-4 border-b border-gray-200/50">
+            <div className="flex flex-col gap-5 pb-4 border-b border-gray-200/50 dark:border-gray-800/50">
                 <div className="flex items-end justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Verification</h1>
-                        <p className="text-[15px] text-gray-500 font-medium mt-1">Review recently returned equipment</p>
+                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Verification</h1>
+                        <p className="text-[15px] text-gray-500 dark:text-gray-400 font-medium mt-1">Review recently returned equipment</p>
                     </div>
 
                     {/* View Toggle */}
-                    <div className="hidden sm:flex items-center gap-2 p-1 bg-gray-100/80 rounded-lg backdrop-blur-sm">
-                        <button onClick={() => setViewMode('card')} className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'card' ? 'bg-white shadow text-primary' : 'text-gray-400 hover:text-gray-600'}`} title="Grid View">
+                    <div className="hidden sm:flex items-center gap-2 p-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-lg backdrop-blur-sm">
+                        <button onClick={() => setViewMode('card')} className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'card' ? 'bg-white dark:bg-[#1c1c1e] shadow text-primary' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}`} title="Grid View">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                         </button>
-                        <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'table' ? 'bg-white shadow text-primary' : 'text-gray-400 hover:text-gray-600'}`} title="List View">
+                        <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'table' ? 'bg-white dark:bg-[#1c1c1e] shadow text-primary' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}`} title="List View">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                         </button>
                     </div>
@@ -355,7 +355,7 @@ export default function VerificationPage() {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                             </span>
-                            <span className="text-sm font-semibold text-gray-600">
+                            <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
                                 {pendingItems.length} items waiting for action
                             </span>
                         </div>
@@ -450,7 +450,7 @@ export default function VerificationPage() {
             {/* Content States */}
             {isLoading ? (
                 viewMode === 'table' ? (
-                    <div className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden shadow-sm">
+                    <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 overflow-hidden shadow-sm">
                         <div className="p-4 space-y-4">
                             {Array.from({ length: 5 }).map((_, i) => (
                                 <div key={i} className="flex gap-4">
@@ -467,24 +467,24 @@ export default function VerificationPage() {
                     </div>
                 )
             ) : pendingItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 text-center bg-white rounded-xl border border-dashed border-gray-200">
-                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <div className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-[#1c1c1e] rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                    <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
                         <svg className="w-8 h-8 text-primary/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900">All Verified</h3>
-                    <p className="text-gray-500 mt-1 max-w-sm">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">All Verified</h3>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
                         There are no items pending verification. Great job!
                     </p>
                 </div>
             ) : viewMode === 'table' ? (
                 /* ========== TABLE VIEW ========== */
-                <div className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden shadow-sm">
+                <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="border-b border-gray-100 bg-gray-50/50">
+                                <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
                                     <th className="w-12 px-5 py-3">
                                         <div className="flex items-center justify-center">
                                             <input
@@ -495,20 +495,20 @@ export default function VerificationPage() {
                                             />
                                         </div>
                                     </th>
-                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('item')} className="flex items-center text-xs font-semibold text-gray-500 hover:text-gray-800">Item <SortIndicator field="item" /></button></th>
-                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('project')} className="flex items-center text-xs font-semibold text-gray-500 hover:text-gray-800">Project <SortIndicator field="project" /></button></th>
-                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('user')} className="flex items-center text-xs font-semibold text-gray-500 hover:text-gray-800">Returned By <SortIndicator field="user" /></button></th>
-                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('date')} className="flex items-center text-xs font-semibold text-gray-500 hover:text-gray-800">Date <SortIndicator field="date" /></button></th>
+                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('item')} className="flex items-center text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Item <SortIndicator field="item" /></button></th>
+                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('project')} className="flex items-center text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Project <SortIndicator field="project" /></button></th>
+                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('user')} className="flex items-center text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Returned By <SortIndicator field="user" /></button></th>
+                                    <th className="px-5 py-3 text-left"><button onClick={() => handleSort('date')} className="flex items-center text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Date <SortIndicator field="date" /></button></th>
                                     <th className="px-5 py-3 text-right"></th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                                 {sortedItems.map((item) => {
                                     const txn = getItemTransaction(item.id);
                                     const isSelected = selectedItems.has(item.id);
 
                                     return (
-                                        <tr key={item.id} onClick={() => toggleItemSelection(item.id)} className={`group transition-all duration-200 cursor-pointer ${isSelected ? 'bg-primary/5' : 'hover:bg-gray-50/80'}`}>
+                                        <tr key={item.id} onClick={() => toggleItemSelection(item.id)} className={`group transition-all duration-200 cursor-pointer ${isSelected ? 'bg-primary/5' : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/80'}`}>
                                             <td className="px-5 py-4">
                                                 <div className="flex items-center justify-center">
                                                     <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(item.id)} className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" />
@@ -516,30 +516,30 @@ export default function VerificationPage() {
                                             </td>
                                             <td className="px-5 py-4">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-400">
+                                                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 text-gray-400 dark:text-gray-500">
                                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                                                     </div>
                                                     <div>
-                                                        <p className="font-semibold text-gray-900">{item.name}</p>
-                                                        <p className="text-xs text-gray-400 font-mono mt-0.5">{item.barcode}</p>
+                                                        <p className="font-semibold text-gray-900 dark:text-white">{item.name}</p>
+                                                        <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">{item.barcode}</p>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4">
                                                 <div className="flex flex-col">
-                                                    <span className="font-medium text-gray-900">{txn?.project || 'General'}</span>
-                                                    <span className="text-[11px] text-gray-400">{txn ? formatTxnId(txn.id) : ''}</span>
+                                                    <span className="font-medium text-gray-900 dark:text-white">{txn?.project || 'General'}</span>
+                                                    <span className="text-[11px] text-gray-400 dark:text-gray-500">{txn ? formatTxnId(txn.id) : ''}</span>
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 border border-white shadow-sm flex items-center justify-center text-[10px] font-bold text-gray-600">
+                                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 border border-white dark:border-gray-600 shadow-sm flex items-center justify-center text-[10px] font-bold text-gray-600 dark:text-gray-300">
                                                         {getUserName(item.assignedTo).charAt(0)}
                                                     </div>
-                                                    <span className="text-gray-600">{getUserName(item.assignedTo)}</span>
+                                                    <span className="text-gray-600 dark:text-gray-400">{getUserName(item.assignedTo)}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-5 py-4 text-gray-500">{formatDate(item.lastActivity)}</td>
+                                            <td className="px-5 py-4 text-gray-500 dark:text-gray-400">{formatDate(item.lastActivity)}</td>
                                             <td className="px-5 py-4">
                                                 {!selectionMode && (
                                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" onClick={(e) => e.stopPropagation()}>
@@ -570,28 +570,28 @@ export default function VerificationPage() {
                                 key={item.id}
                                 onClick={() => toggleItemSelection(item.id)}
                                 className={`
-                                    group bg-white rounded-xl p-5 border transition-all duration-300 cursor-pointer h-full flex flex-col relative
+                                    group bg-white dark:bg-[#1c1c1e] rounded-xl p-5 border transition-all duration-300 cursor-pointer h-full flex flex-col relative
                                     ${isSelected
                                         ? 'border-primary ring-1 ring-primary shadow-sm'
-                                        : 'border-gray-200 hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5'
+                                        : 'border-gray-200 dark:border-gray-800 hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5'
                                     }
                                 `}
                             >
                                 {/* Header */}
                                 <div className="flex items-start justify-between gap-3 mb-3">
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="text-[15px] font-bold text-gray-900 leading-snug truncate group-hover:text-primary transition-colors">
+                                        <h3 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug truncate group-hover:text-primary transition-colors">
                                             {item.name}
                                         </h3>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[11px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                                            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-full border border-gray-100 dark:border-gray-700">
                                                 {txn?.project || 'General'}
                                             </span>
                                         </div>
                                     </div>
                                     <span className={`
                                         text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 uppercase tracking-wider
-                                        ${item.condition === 'OK' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-yellow-50 text-yellow-700 border border-yellow-100'}
+                                        ${item.condition === 'OK' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-900' : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-100 dark:border-yellow-900'}
                                     `}>
                                         {item.condition === 'OK' ? 'Good' : item.condition.replace('_', ' ')}
                                     </span>
@@ -599,8 +599,8 @@ export default function VerificationPage() {
 
                                 {/* Details */}
                                 <div className="flex-1 space-y-3">
-                                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                                        <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-600 border border-gray-200">
+                                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                        <div className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
                                             {getUserName(item.assignedTo)?.charAt(0)}
                                         </div>
                                         <span className="truncate">
@@ -608,15 +608,15 @@ export default function VerificationPage() {
                                         </span>
                                     </div>
 
-                                    <div className="pt-2 border-t border-gray-50 flex items-center justify-between">
-                                        <span className="font-mono text-[10px] text-gray-400">{item.barcode}</span>
-                                        <span className="text-[10px] text-gray-400">{formatDate(item.lastActivity)}</span>
+                                    <div className="pt-2 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between">
+                                        <span className="font-mono text-[10px] text-gray-400 dark:text-gray-500">{item.barcode}</span>
+                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatDate(item.lastActivity)}</span>
                                     </div>
                                 </div>
 
                                 {/* Hover Action Bar - visible only on hover AND when not selecting */}
                                 {!isSelected && !selectionMode && (
-                                    <div className="absolute inset-x-4 bottom-4 pt-2 bg-white/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-200 flex gap-2 translate-y-2 group-hover:translate-y-0">
+                                    <div className="absolute inset-x-4 bottom-4 pt-2 bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-200 flex gap-2 translate-y-2 group-hover:translate-y-0">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();

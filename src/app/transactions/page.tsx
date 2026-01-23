@@ -224,55 +224,79 @@ _Generated via Production App_`;
                             {filteredTransactions.map((txn) => (
                                 <div
                                     key={txn.id}
-                                    className="p-4 rounded-lg border border-border bg-background/50 hover:bg-background/80 transition-all cursor-pointer group"
+                                    className="p-5 rounded-2xl border border-border bg-white dark:bg-[#1c1c1e] shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
                                     onClick={() => router.push(`/transactions/${txn.id}`)}
                                 >
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-[11px] font-bold text-[#0071e3] bg-[#0071e3]/10 px-1.5 py-0.5 rounded tracking-wider">{txn.id}</span>
-                                                    <h3 className="font-semibold text-[17px] text-[#1d1d1f] truncate">
-                                                        {txn.project || 'Unspecified Project'}
-                                                    </h3>
-                                                </div>
-                                                <Badge variant={txn.status === 'OPEN' ? 'success' : 'default'}>
-                                                    {txn.status}
-                                                </Badge>
-                                            </div>
-                                            <div className="space-y-1 text-sm text-muted-foreground">
-                                                <p className="flex items-center gap-2">
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                                    </svg>
-                                                    {getUserName(txn.userId)}
-                                                    {txn.additionalUsers && txn.additionalUsers.length > 0 && (
-                                                        <span className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-full ml-1">
-                                                            +{txn.additionalUsers.length}
-                                                        </span>
-                                                    )}
-                                                </p>
-                                                <p className="flex items-center gap-2">
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                    {new Date(txn.timestampOut).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                                </p>
-                                                <p className="flex items-center gap-2">
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                                    </svg>
-                                                    {txn.items.length} item{txn.items.length !== 1 ? 's' : ''}
-                                                </p>
-                                            </div>
+                                    {/* Top Row: ID Badge & Status */}
+                                    {/* Top Row: ID Badge & Status */}
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="shrink-0 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md tracking-wider font-mono">
+                                            {txn.id}
+                                        </span>
+                                        <Badge variant={txn.status === 'OPEN' ? 'success' : 'default'} className="shrink-0">
+                                            {txn.status}
+                                        </Badge>
+                                    </div>
+
+                                    {/* Project Title */}
+                                    <div className="mb-4">
+                                        <h3 className="font-bold text-[17px] text-gray-900 dark:text-white leading-snug break-words">
+                                            {txn.project || 'Unspecified Project'}
+                                        </h3>
+                                    </div>
+
+                                    {/* Middle Rows: Metadata */}
+                                    <div className="space-y-2 mb-5">
+                                        {/* User */}
+                                        <div className="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-400">
+                                            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                            <span className="font-medium">{getUserName(txn.userId)}</span>
+                                            {txn.additionalUsers && txn.additionalUsers.length > 0 && (
+                                                <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">
+                                                    +{txn.additionalUsers.length}
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="flex sm:flex-col gap-2 sm:items-end">
+
+                                        {/* Date */}
+                                        <div className="flex items-center gap-2.5 text-sm text-gray-500 dark:text-gray-400">
+                                            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span>
+                                                {new Date(txn.timestampOut).toLocaleString(undefined, {
+                                                    month: 'numeric',
+                                                    day: 'numeric',
+                                                    year: 'numeric',
+                                                    hour: 'numeric',
+                                                    minute: '2-digit',
+                                                    hour12: true
+                                                })}
+                                            </span>
+                                        </div>
+
+                                        {/* Item Count */}
+                                        <div className="flex items-center gap-2.5 text-sm text-gray-500 dark:text-gray-400">
+                                            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                            </svg>
+                                            <span>
+                                                {txn.items.length} item{txn.items.length !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Bottom Row: Actions */}
+                                    <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800 gap-3">
+                                        <div className="flex gap-2.5 flex-1">
                                             <Button
                                                 size="sm"
-                                                className="flex-1 sm:flex-none bg-[#25D366] hover:bg-[#128C7E] text-white border-0"
+                                                className="bg-[#0071e3] hover:bg-[#0077ED] text-white border-0 rounded-full px-5 h-9 text-xs font-semibold shadow-sm shadow-blue-200"
                                                 onClick={(e) => handleShareWhatsApp(e, txn)}
                                             >
-                                                <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 24 24">
                                                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                                                 </svg>
                                                 Share
@@ -282,37 +306,35 @@ _Generated via Production App_`;
                                                 size="sm"
                                                 variant="secondary"
                                                 onClick={(e) => handleCopyMessage(e, txn)}
-                                                className="flex-1 sm:flex-none"
+                                                className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border-0 rounded-full px-5 h-9 text-xs font-medium"
                                             >
                                                 {copiedId === txn.id ? (
                                                     <>
-                                                        <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                         </svg>
                                                         Copied
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                                                         </svg>
                                                         Copy
                                                     </>
                                                 )}
                                             </Button>
-
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    router.push(`/transactions/${txn.id}`);
-                                                }}
-                                                className="flex-1 sm:flex-none group-hover:border-primary group-hover:text-primary"
-                                            >
-                                                {txn.status === 'OPEN' ? 'Manage' : 'View'}
-                                            </Button>
                                         </div>
+
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                router.push(`/transactions/${txn.id}`);
+                                            }}
+                                            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                        >
+                                            {txn.status === 'OPEN' ? 'Manage' : 'View'}
+                                        </button>
                                     </div>
                                 </div>
                             ))}

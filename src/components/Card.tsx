@@ -20,7 +20,7 @@ export const Card: React.FC<CardProps> = ({
     hover = false
 }) => {
     const variants = {
-        default: 'card-matte bg-white',
+        default: 'card-matte',
         glass: 'glass text-foreground rounded-3xl',
         outline: 'bg-transparent border border-input text-foreground rounded-3xl'
     };

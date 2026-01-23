@@ -96,8 +96,14 @@ export async function middleware(request: NextRequest) {
                 return NextResponse.redirect(new URL('/', request.url))
             }
 
-            // Admin protection for /admin routes
-            if (path.startsWith('/admin') && role !== 'ADMIN') {
+            // Admin protection for /admin and /api/admin routes
+            const isShootsRoute = path.startsWith('/admin/shoots') || path.startsWith('/api/admin/shoots');
+
+            // Allow Managers and Crew to access Shoots, but restrict other Admin routes to Admin only
+            if ((path.startsWith('/admin') || path.startsWith('/api/admin')) && role !== 'ADMIN' && !isShootsRoute) {
+                if (path.startsWith('/api/')) {
+                    return NextResponse.json({ error: 'Unauthorized: Admin access required' }, { status: 403 });
+                }
                 return NextResponse.redirect(new URL('/dashboard', request.url))
             }
         }

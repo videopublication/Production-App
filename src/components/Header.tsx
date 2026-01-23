@@ -9,6 +9,7 @@ import { storage } from '@/lib/storage';
 import { Notification as AppNotification } from '@/types';
 import { useNotifications } from '@/hooks/useNotifications';
 import useFcmToken from '@/hooks/useFcmToken';
+import { SettingsDrawer } from '@/components/SettingsDrawer';
 
 export const Header = () => {
     const { user } = useAuth();
@@ -19,6 +20,7 @@ export const Header = () => {
     // Notification Hook
     const { notifications, unreadCount, markAsRead } = useNotifications();
     const [showNotifications, setShowNotifications] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const handleNotificationClick = async (notif: AppNotification) => {
         if (!notif.read) {
@@ -39,10 +41,10 @@ export const Header = () => {
     return (
         // Desktop only - mobile uses MobileHeader component
         <header className={`h-[44px] fixed top-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#f5f5f7] px-4 hidden md:flex items-center justify-between transition-all duration-300 ${isCollapsed ? 'left-[72px]' : 'left-[260px]'
-            } pl-6`}>
+            } pl-6 dark:bg-[#1c1c1e]/80 dark:border-gray-800`}>
             {/* Page title area */}
             <div className="flex-1">
-                <span className="font-semibold text-[#1d1d1f] text-[15px]">Vpub App</span>
+                <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">Vpub App</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -54,7 +56,7 @@ export const Header = () => {
                             }
                             setShowNotifications(!showNotifications);
                         }}
-                        className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors relative"
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors relative dark:hover:bg-gray-800 dark:hover:text-gray-200"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -66,11 +68,11 @@ export const Header = () => {
 
                     {/* Notification Dropdown */}
                     {showNotifications && (
-                        <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50">
-                            <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                                <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+                        <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50 dark:bg-[#1c1c1e] dark:border-gray-700">
+                            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
                                 {unreadCount > 0 && (
-                                    <button onClick={markAllRead} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Mark all read</button>
+                                    <button onClick={markAllRead} className="text-xs text-blue-600 hover:text-blue-500 font-medium">Mark all read</button>
                                 )}
                             </div>
                             <div className="max-h-80 overflow-y-auto">
@@ -81,13 +83,13 @@ export const Header = () => {
                                         {notifications.slice(0, 5).map((n, i) => (
                                             <div
                                                 key={n.id}
-                                                className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${i !== Math.min(4, notifications.length - 1) ? 'border-b border-gray-100' : ''} ${!n.read ? 'bg-blue-50/50' : ''}`}
+                                                className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer dark:hover:bg-gray-800 ${i !== Math.min(4, notifications.length - 1) ? 'border-b border-gray-100 dark:border-gray-800' : ''} ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
                                                 onClick={() => handleNotificationClick(n)}
                                             >
                                                 <div className="flex gap-2">
                                                     <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-blue-500'}`} />
                                                     <div className="flex-1 min-w-0">
-                                                        <p className={`text-sm leading-snug truncate ${!n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
+                                                        <p className={`text-sm leading-snug truncate ${!n.read ? 'font-semibold text-gray-900 dark:text-gray-100' : 'font-medium text-gray-700 dark:text-gray-300'}`}>{n.title}</p>
                                                         <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{n.message}</p>
                                                     </div>
                                                 </div>
@@ -96,8 +98,8 @@ export const Header = () => {
                                     </div>
                                 )}
                             </div>
-                            <div className="px-4 py-2.5 border-t border-gray-100 text-center">
-                                <Link href="/notifications" onClick={() => setShowNotifications(false)} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 text-center">
+                                <Link href="/notifications" onClick={() => setShowNotifications(false)} className="text-sm font-medium text-blue-600 hover:text-blue-500">
                                     View all
                                 </Link>
                             </div>
@@ -105,12 +107,20 @@ export const Header = () => {
                     )}
                 </div>
 
-                <button className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors">
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsSettingsOpen(true);
+                    }}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                 </button>
+
+                <SettingsDrawer isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
             </div>
         </header>
     );

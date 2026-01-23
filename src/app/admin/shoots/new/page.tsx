@@ -21,7 +21,10 @@ export default function NewShootPage() {
 
     useEffect(() => {
         loadUsers();
-    }, []);
+        if (user && user.role !== 'ADMIN') {
+            router.push('/admin/shoots');
+        }
+    }, [user, router]);
 
     const loadUsers = async () => {
         try {
@@ -90,7 +93,7 @@ export default function NewShootPage() {
                         <ArrowLeft size={20} />
                     </Button>
                 </Link>
-                <h1 className="text-xl sm:text-2xl font-bold text-[#1d1d1f]">New Shoot</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">New Shoot</h1>
             </div>
 
             <div className="max-w-4xl">

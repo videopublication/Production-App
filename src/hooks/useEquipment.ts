@@ -74,3 +74,13 @@ export function useSaveEquipment() {
         }
     })
 }
+export function useDeleteEquipment() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (ids: string[]) => storage.bulkDeleteEquipment(ids),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: EQUIPMENT_KEYS.all });
+        },
+    });
+}
