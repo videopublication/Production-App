@@ -47,7 +47,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     const [inchargeId, setInchargeId] = useState<string>(initialInchargeId);
 
     // Toggle states for optional fields
-    const [showDescription, setShowDescription] = useState(!!initialData.description);
+    const [showDescription, setShowDescription] = useState(true);
     const [showEndTime, setShowEndTime] = useState(true);
     const [showPOC, setShowPOC] = useState(true);
 
@@ -258,7 +258,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     });
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-6 max-w-4xl mx-auto">
+        <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-6 w-full">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
 
                 {/* Shoot Details Card */}

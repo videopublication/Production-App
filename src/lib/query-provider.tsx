@@ -13,10 +13,10 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
             new QueryClient({
                 defaultOptions: {
                     queries: {
-                        staleTime: 5 * 60 * 1000, // Data matches cache for 5 minutes
+                        staleTime: 60 * 1000, // Data matches cache for 1 minute
                         gcTime: 24 * 60 * 60 * 1000, // Keep in garbage collector for 24 hours
                         retry: 1,
-                        refetchOnWindowFocus: false,
+                        refetchOnWindowFocus: true,
                         refetchOnReconnect: 'always',
                     },
                 },

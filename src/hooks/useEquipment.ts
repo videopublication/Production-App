@@ -11,7 +11,7 @@ export function useEquipment() {
     return useQuery({
         queryKey: EQUIPMENT_KEYS.all,
         queryFn: () => storage.getEquipment(),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 0,
     });
 }
 

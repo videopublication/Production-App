@@ -12,7 +12,7 @@ export function useTransactions() {
     return useQuery({
         queryKey: TRANSACTION_KEYS.all,
         queryFn: () => storage.getTransactions(),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 0,
     });
 }
 

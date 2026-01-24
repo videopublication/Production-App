@@ -13,7 +13,7 @@ export function useShoots() {
     return useQuery({
         queryKey: SHOOT_KEYS.all,
         queryFn: () => storage.getShoots(),
-        staleTime: 5 * 60 * 1000, // Data is fresh for 5 minutes
+        staleTime: 0, // Always check for fresh data
     });
 }
 

@@ -11,6 +11,6 @@ export function useUsers() {
     return useQuery({
         queryKey: USER_KEYS.all,
         queryFn: () => storage.getUsers(),
-        staleTime: 10 * 60 * 1000, // Users change less often, cache for 10 mins
+        staleTime: 60 * 1000, // 1 minute
     });
 }

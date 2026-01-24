@@ -14,7 +14,7 @@ export function useNotifications() {
             return storage.getNotifications(user.id);
         },
         enabled: !!user,
-        staleTime: 60 * 1000, // 1 minute
+        staleTime: 10 * 1000, // 10 seconds
         refetchInterval: 30 * 1000, // Poll every 30 seconds
         retry: false, // Don't retry immediately on failure (e.g. offline), wait for next poll or reconnect
     });

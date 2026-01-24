@@ -222,7 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user]);
 
     const login = async (email: string, password: string) => {
-        setIsLoading(true);
+        // isLoading is handled locally by the caller to prevent full app unmount/remount
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
@@ -238,7 +238,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 details: `Failed login attempt for email: ${email}`
             }).catch(err => console.error('Error logging failed login:', err));
 
-            setIsLoading(false);
             return { error };
         }
 
@@ -275,7 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const signUp = async (email: string, password: string, name: string) => {
-        setIsLoading(true);
+        // isLoading is handled locally
         // 1. Sign up in Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
@@ -283,7 +282,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (authError) {
-            setIsLoading(false);
             const message = authError.message === 'User already registered'
                 ? 'An account with this email already exists. Try logging in.'
                 : authError.message;

@@ -8,13 +8,13 @@ export function useInventory() {
     const equipmentQuery = useQuery({
         queryKey: ['equipment'],
         queryFn: () => storage.getEquipment(),
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 0, // Always check for fresh data
     });
 
     const usersQuery = useQuery({
         queryKey: ['users'],
         queryFn: () => storage.getUsers(),
-        staleTime: 10 * 60 * 1000, // 10 minutes (users change less often)
+        staleTime: 60 * 1000, // 1 minute
     });
 
     const updateEquipmentMutation = useMutation({
