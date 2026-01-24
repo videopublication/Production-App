@@ -68,7 +68,7 @@ export const Select: React.FC<SelectProps> = ({
                         searchInputRef.current?.focus();
                     }}
                     className={`flex h-12 w-full items-center gap-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] px-3 text-[15px] transition-all duration-200 border border-transparent ${isOpen
-                        ? 'ring-2 ring-[#0071e3] bg-white dark:bg-[#1c1c1e]'
+                        ? 'ring-2 ring-primary bg-white dark:bg-[#1c1c1e]'
                         : 'hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
                         }`}
                 >
@@ -91,7 +91,7 @@ export const Select: React.FC<SelectProps> = ({
 
                     <div className="flex items-center gap-1">
                         {selectedOption && !search && (
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-[#0071e3]/10 text-[#0071e3]">
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-primary/10 text-primary">
                                 Selected
                             </span>
                         )}
@@ -130,7 +130,7 @@ export const Select: React.FC<SelectProps> = ({
                                         }}
                                         className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[15px] transition-colors ${index < filteredOptions.length - 1 ? 'mb-1' : ''
                                             } ${value === option.value
-                                                ? 'bg-[#0071e3] text-white shadow-lg shadow-[#0071e3]/20'
+                                                ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
                                                 : 'text-foreground hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e]'
                                             }`}
                                     >

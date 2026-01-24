@@ -86,7 +86,7 @@ export default function NewShootPage() {
     };
 
     return (
-        <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-5xl mx-auto w-full">
+        <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
                 <Link href="/admin/shoots">
                     <Button variant="ghost" size="icon" className="rounded-full">

@@ -252,7 +252,10 @@ body {
   --ring: #8e8e93;
 }
 
-/* Blue is default, so no need for explicit override unless needed */
+[data-accent='blue'] {
+  --primary: #0071e3;
+  --ring: #0071e3;
+}
 
 /* Density Overrides */
 [data-density='compact'] {

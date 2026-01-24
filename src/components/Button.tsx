@@ -18,13 +18,13 @@ export const Button: React.FC<ButtonProps> = ({
     const baseStyles = 'inline-flex items-center justify-center rounded-full font-medium transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
 
     const variants = {
-        primary: 'bg-[#0071e3] text-white hover:bg-[#0077ed] active:scale-[0.98]',
-        secondary: 'bg-[#e8e8ed] text-[#1d1d1f] hover:bg-[#dcdce0] active:scale-[0.98] dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
-        outline: 'bg-transparent text-[#1d1d1f] border border-[#d2d2d7] hover:bg-[#f5f5f7] active:scale-[0.98] dark:text-white dark:border-gray-700 dark:hover:bg-white/10',
-        ghost: 'bg-transparent text-[#1d1d1f] hover:bg-[#f5f5f7] active:scale-[0.98] dark:text-gray-300 dark:hover:bg-white/5',
-        danger: 'bg-[#ff3b30] text-white hover:bg-[#ff453a] active:scale-[0.98]',
-        success: 'bg-[#34c759] text-white hover:bg-[#30d158] active:scale-[0.98]',
-        glass: 'bg-white/70 backdrop-blur-xl text-[#1d1d1f] hover:bg-white/90 active:scale-[0.98] dark:bg-white/10 dark:text-white dark:hover:bg-white/20',
+        primary: 'bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98]',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-[0.98] dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
+        outline: 'bg-transparent text-foreground border border-border hover:bg-secondary active:scale-[0.98] dark:text-white dark:border-gray-700 dark:hover:bg-white/10',
+        ghost: 'bg-transparent text-foreground hover:bg-secondary active:scale-[0.98] dark:text-gray-300 dark:hover:bg-white/5',
+        danger: 'bg-destructive text-destructive-foreground hover:opacity-90 active:scale-[0.98]',
+        success: 'bg-success text-success-foreground hover:opacity-90 active:scale-[0.98]',
+        glass: 'bg-white/70 backdrop-blur-xl text-foreground hover:bg-white/90 active:scale-[0.98] dark:bg-white/10 dark:text-white dark:hover:bg-white/20',
     };
 
     const sizes = {

@@ -177,15 +177,15 @@ export default function EditShootPage() {
     const currentInchargeId = assignments.find(a => a.role === 'Incharge')?.userId;
 
     return (
-        <div className="p-6 space-y-6">
-            <div className="flex items-center gap-4">
+        <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
+            <div className="flex items-center gap-3">
                 <Link href={`/admin/shoots/${id}`}>
                     <Button variant="ghost" size="icon" className="rounded-full">
                         <ArrowLeft size={20} />
                     </Button>
                 </Link>
-                <h1 className="text-2xl font-bold text-[#1d1d1f]">
-                    Edit Shoot {shoot?.shootNumber ? <span className="text-gray-500">#{shoot.shootNumber}</span> : ''}
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    Edit Shoot {shoot?.shootNumber ? <span className="text-gray-500 dark:text-gray-400">#{shoot.shootNumber}</span> : ''}
                 </h1>
             </div>
 

@@ -765,9 +765,9 @@ export default function CheckoutPage() {
                                 {!showNotes && !notes ? (
                                     <button
                                         onClick={() => setShowNotes(true)}
-                                        className="flex items-center gap-2 text-[14px] font-medium text-[#0071e3] py-2 px-1 transition-opacity active:opacity-60"
+                                        className="flex items-center gap-2 text-[14px] font-medium text-primary py-2 px-1 transition-opacity active:opacity-60"
                                     >
-                                        <div className="w-5 h-5 rounded-full bg-[#0071e3]/10 flex items-center justify-center">
+                                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
                                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                             </svg>

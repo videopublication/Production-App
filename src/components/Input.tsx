@@ -14,7 +14,7 @@ export const Input: React.FC<InputProps> = ({ label, error, className = '', ...p
                 </label>
             )}
             <input
-                className={`flex h-12 w-full rounded-2xl border border-input bg-secondary px-4 py-2 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#0071e3] focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 ${error ? 'border-destructive focus:ring-destructive' : ''
+                className={`flex h-12 w-full rounded-2xl border border-input bg-secondary px-4 py-2 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 ${error ? 'border-destructive focus:ring-destructive' : ''
                     } ${className}`}
                 {...props}
             />

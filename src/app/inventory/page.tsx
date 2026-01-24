@@ -480,7 +480,7 @@ export default function InventoryPage() {
                                 </svg>
                                 Small QR
                             </Button>
-                            {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
+                            {user?.role === 'ADMIN' && (
                                 <Button
                                     variant="danger"
                                     size="sm"

@@ -81,7 +81,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                         searchInputRef.current?.focus();
                     }}
                     className={`flex h-12 w-full items-center gap-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] px-3 text-[15px] transition-all duration-200 border border-transparent ${isOpen
-                        ? 'ring-2 ring-[#0071e3] bg-white dark:bg-[#1c1c1e]'
+                        ? 'ring-2 ring-primary bg-white dark:bg-[#1c1c1e]'
                         : 'hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
                         }`}
                 >
@@ -104,7 +104,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
 
                     <div className="flex items-center gap-1">
                         {selectedOptions.length > 0 && (
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-[#0071e3]/10 text-[#0071e3]">
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-primary/10 text-primary">
                                 {selectedOptions.length}
                             </span>
                         )}
@@ -145,12 +145,12 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                                             }}
                                             className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[15px] transition-colors ${index < filteredOptions.length - 1 ? 'mb-1' : ''
                                                 } ${isSelected
-                                                    ? 'bg-[#0071e3]/5 dark:bg-[#0071e3]/20 text-[#0071e3] font-semibold'
+                                                    ? 'bg-primary/5 dark:bg-primary/20 text-primary font-semibold'
                                                     : 'text-foreground hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e]'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#0071e3] border-[#0071e3]' : 'border-border bg-white dark:bg-black'
+                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-border bg-white dark:bg-black'
                                                     }`}>
                                                     {isSelected && (
                                                         <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>

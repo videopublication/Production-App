@@ -216,7 +216,7 @@ export default function ItemDetailsPage() {
                 </div>
 
                 {/* Hero Section: Equipment Name + Status */}
-                <div className="bg-white rounded-2xl p-5 shadow-sm border border-border/30">
+                <div className="bg-card rounded-2xl p-5 shadow-sm border border-border/30">
                     <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                             {isEditing && canEditEverything ? (

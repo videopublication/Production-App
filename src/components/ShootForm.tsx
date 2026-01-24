@@ -289,7 +289,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 onChange={e => setFormData({ ...formData, title: e.target.value })}
                                 placeholder="e.g. Summer Campaign 2024"
                                 required
-                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-[#0071e3]"
+                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                             />
                             <Input
                                 label="Location"
@@ -297,7 +297,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 onChange={e => setFormData({ ...formData, location: e.target.value })}
                                 placeholder="e.g. Studio A, Central Park"
                                 required
-                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-[#0071e3]"
+                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                             />
                         </div>
 
@@ -307,7 +307,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 <textarea
                                     value={formData.description}
                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                    className="flex min-h-[100px] w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#0071e3] focus:border-transparent resize-none transition-all duration-200"
+                                    className="flex min-h-[100px] w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none transition-all duration-200"
                                     placeholder="Brief description of the shoot..."
                                     autoFocus
                                 />
@@ -344,7 +344,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                             value={formData.startTime}
                             onChange={e => setFormData({ ...formData, startTime: e.target.value })}
                             required
-                            className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-[#0071e3]"
+                            className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                         />
 
                         {showEndTime && (
@@ -361,7 +361,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                         }
                                         setFormData({ ...formData, endTime: newEndTime });
                                     }}
-                                    className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-[#0071e3]"
+                                    className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                                     autoFocus
                                     min={formData.startTime}
                                 />
@@ -381,7 +381,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                                 setAddToCalendar(e.target.checked);
                                                 localStorage.setItem('addToCalendarPreference', e.target.checked ? 'true' : 'false');
                                             }}
-                                            className="w-5 h-5 text-[#0071e3] border-gray-300 dark:border-gray-600 rounded focus:ring-[#0071e3] transition-colors"
+                                            className="w-5 h-5 text-primary border-gray-300 dark:border-gray-600 rounded focus:ring-primary transition-colors"
                                         />
                                     </div>
                                     <label htmlFor="google-calendar" className="flex items-center gap-2 text-sm font-medium text-[#1d1d1f] dark:text-white cursor-pointer select-none">
@@ -447,14 +447,14 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 value={formData.pocName || ''}
                                 onChange={e => setFormData({ ...formData, pocName: e.target.value })}
                                 placeholder="Name of contact person"
-                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-[#0071e3]"
+                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                             />
                             <Input
                                 label="POC Contact"
                                 value={formData.pocContact || ''}
                                 onChange={e => setFormData({ ...formData, pocContact: e.target.value })}
                                 placeholder="Phone or Email"
-                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-[#0071e3]"
+                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                             />
                         </div>
                     ) : (
@@ -500,9 +500,9 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                     {selectedCrewIds.map(id => {
                                         const user = users.find(u => u.id === id);
                                         return (
-                                            <div key={id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${id === inchargeId ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-white border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300'}`}>
+                                            <div key={id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${id === inchargeId ? 'bg-primary/10 border-primary/20 text-primary dark:bg-primary/20 dark:border-primary/30 dark:text-primary' : 'bg-white border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300'}`}>
                                                 <span>{user?.name}</span>
-                                                {id === inchargeId && <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded">INCHARGE</span>}
+                                                {id === inchargeId && <span className="text-[10px] font-bold bg-primary/20 text-primary dark:bg-primary/30 px-1.5 py-0.5 rounded">INCHARGE</span>}
                                                 <button
                                                     type="button"
                                                     onClick={() => {
