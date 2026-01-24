@@ -12,8 +12,6 @@ import { ToastProvider } from '@/lib/toast-context';
 import { DialogProvider } from '@/lib/dialog-context';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { OfflineIndicator } from './OfflineIndicator';
-import { Button } from './Button';
-import { RefreshCcw } from 'lucide-react';
 
 const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; isPublicPage: boolean }) => {
     const { user } = useAuth();
@@ -47,27 +45,6 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
     const router = useRouter();
 
     // PWA Update Logic
-    useEffect(() => {
-        if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-            const sw = navigator.serviceWorker;
-
-            // Check for updates on every mount/navigation
-            sw.getRegistration().then(registration => {
-                if (registration) {
-                    registration.update();
-                }
-            });
-
-            // Listen for new service worker
-            let refreshing = false;
-            sw.addEventListener('controllerchange', () => {
-                if (!refreshing) {
-                    refreshing = true;
-                    window.location.reload();
-                }
-            });
-        }
-    }, [pathname]);
 
     const isPublicPage = pathname === '/login' || pathname === '/' || pathname === '/inactive';
 
@@ -75,23 +52,11 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
     const { user, isLoading } = useAuth();
 
     // Loading state with safety recovery
+    // Loading state
     if (isLoading) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4 text-center">
-                <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-6" />
-                <h2 className="text-lg font-medium mb-2">Connecting to Vpub...</h2>
-                <p className="text-sm text-muted-foreground max-w-[250px] mb-8">
-                    This is taking longer than usual. If it persists, try refreshing.
-                </p>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.location.reload()}
-                    className="gap-2"
-                >
-                    <RefreshCcw size={16} />
-                    Refresh Page
-                </Button>
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
         );
     }
