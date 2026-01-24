@@ -11,7 +11,7 @@ export function useAssignments() {
     return useQuery({
         queryKey: ASSIGNMENT_KEYS.all,
         queryFn: () => storage.getAssignments(),
-        staleTime: 0,
+        // staleTime: 0, // REMOVED
     });
 }
 

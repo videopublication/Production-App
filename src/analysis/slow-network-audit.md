@@ -39,7 +39,7 @@ This audit identifies potential issues with the application's performance and us
 ## ✅ Todo List
 
 - [x] **Add Pull-to-Refresh**: implemented in Calendar and Shoots list to allow user-triggered updates.
-- [ ] **Refactor Calendar Fetching**: Switch `CalendarPage` to use `useShoots` hooks.
-- [ ] **Standardize Loading**: Replace full-screen spinners with Skeletons in `Dashboard` and `ShootList`.
-- [ ] **Optimistic UI**: Add optimistic updates to `useInventory` (Verify/Return) and `useShoots` (Create/Edit).
+- [x] **Refactor Calendar Fetching**: Switch `CalendarPage` to use `useShoots` hooks.
+- [x] **Standardize Loading**: Replace full-screen spinners with Skeletons in `Dashboard` and `ShootList`.
+- [x] **Optimistic UI**: Add optimistic updates to `useInventory` (Verify/Return) and `useShoots` (Create/Edit).
 - [ ] **Offline Queue**: Research and implement `tanstack/query-persist-client-core` or similar for offline mutation resilience.

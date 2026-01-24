@@ -170,6 +170,40 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
                                 </div>
                             </section>
 
+                            <section>
+                                <h3 className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-3">Danger Zone</h3>
+                                <button
+                                    onClick={async () => {
+                                        if (confirm("Are you sure? This will clear all local data and reload the app.")) {
+                                            if ('serviceWorker' in navigator) {
+                                                const registrations = await navigator.serviceWorker.getRegistrations();
+                                                for (const registration of registrations) {
+                                                    await registration.unregister();
+                                                }
+                                            }
+                                            // Clear IndexedDB using idb-keyval logic or standard API
+                                            // Simple nuking of all databases
+                                            const dbs = await window.indexedDB.databases();
+                                            dbs.forEach(db => {
+                                                if (db.name) window.indexedDB.deleteDatabase(db.name);
+                                            });
+                                            localStorage.clear();
+                                            sessionStorage.clear();
+                                            window.location.reload();
+                                        }
+                                    }}
+                                    className="w-full p-4 rounded-xl border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 font-medium flex items-center justify-center gap-2 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Reset App Data
+                                </button>
+                                <p className="text-[10px] text-gray-400 mt-2 text-center">
+                                    Use this if the app feels stuck or data isn't determining correctly.
+                                </p>
+                            </section>
+
                         </div>
 
                         {/* Footer */}

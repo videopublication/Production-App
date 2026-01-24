@@ -137,15 +137,25 @@ const getDefaultActionsForRole = (role: UserRole): string[] => {
 
 const STORAGE_KEY = 'dashboard_quick_actions';
 
+import { useInventory } from '@/hooks/useInventory';
+
+// ... (other imports remain)
+
 export default function DashboardPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
-    const [stats, setStats] = useState({
-        available: 0,
-        checkedOut: 0,
-        pendingVerification: 0,
-        attention: 0,
-    });
+
+    // Use the hook instead of manual fetching
+    const { equipment, isLoading: inventoryLoading, refresh } = useInventory();
+
+    // Derive stats from the cached/live data
+    const stats = useMemo(() => ({
+        available: equipment.filter(i => i.status === 'AVAILABLE').length,
+        checkedOut: equipment.filter(i => i.status === 'CHECKED_OUT').length,
+        pendingVerification: equipment.filter(i => i.status === 'PENDING_VERIFICATION').length,
+        attention: equipment.filter(i => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(i.status)).length,
+    }), [equipment]);
+
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedActionIds, setSelectedActionIds] = useState<string[]>([]);
 
@@ -197,17 +207,6 @@ export default function DashboardPage() {
         setSelectedActionIds(ids);
     }, [user]);
 
-    const loadDashboardData = useCallback(async () => {
-        const items = await storage.getEquipment();
-
-        setStats({
-            available: items.filter(i => i.status === 'AVAILABLE').length,
-            checkedOut: items.filter(i => i.status === 'CHECKED_OUT').length,
-            pendingVerification: items.filter(i => i.status === 'PENDING_VERIFICATION').length,
-            attention: items.filter(i => i.status === 'MAINTENANCE' || i.status === 'DAMAGED' || i.status === 'LOST').length,
-        });
-    }, []);
-
     useEffect(() => {
         if (authLoading) return;
 
@@ -215,10 +214,43 @@ export default function DashboardPage() {
             router.replace('/login');
             return;
         }
+    }, [user, router, authLoading]);
 
-        // Allow CREW to access dashboard too (they have limited actions)
-        loadDashboardData();
-    }, [user, router, loadDashboardData, authLoading]);
+    // Loading state handling
+    // We show skeleton if auth is loading OR if inventory is loading AND we have no data yet (initial load)
+    // If we have data (stale), we show it (standard stale-while-revalidate pattern)
+    if (authLoading || (inventoryLoading && equipment.length === 0)) {
+        return (
+            <div className="max-w-6xl mx-auto animate-pulse p-4">
+                <div className="h-10 w-48 bg-gray-200 dark:bg-gray-800 rounded-lg mb-2"></div>
+                <div className="h-5 w-64 bg-gray-200 dark:bg-gray-800 rounded-lg mb-8"></div>
+
+                <div className="rounded-3xl border border-gray-200 dark:border-gray-800 p-6 mb-8">
+                    <div className="h-4 w-32 bg-gray-200 dark:bg-gray-800 rounded mb-4"></div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="h-32 rounded-2xl bg-gray-200 dark:bg-gray-800"></div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="rounded-3xl border border-gray-200 dark:border-gray-800 p-6">
+                    <div className="flex justify-between mb-6">
+                        <div className="h-4 w-32 bg-gray-200 dark:bg-gray-800 rounded"></div>
+                        <div className="h-8 w-16 bg-gray-200 dark:bg-gray-800 rounded-lg"></div>
+                    </div>
+                    <div className="grid grid-cols-5 lg:grid-cols-10 gap-4">
+                        {[1, 2, 3, 4, 5].map(i => (
+                            <div key={i} className="flex flex-col items-center gap-2">
+                                <div className="w-16 h-16 rounded-2xl bg-gray-200 dark:bg-gray-800"></div>
+                                <div className="h-3 w-12 bg-gray-200 dark:bg-gray-800 rounded"></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // Toggle action visibility
     const toggleAction = (id: string) => {
@@ -288,7 +320,7 @@ export default function DashboardPage() {
     }
 
     return (
-        <PullToRefresh onRefresh={loadDashboardData}>
+        <PullToRefresh onRefresh={refresh}>
             <div className="max-w-6xl mx-auto animate-fade-in">
                 {/* Header */}
                 <div className="mb-8">

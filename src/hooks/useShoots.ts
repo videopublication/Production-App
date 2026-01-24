@@ -13,7 +13,7 @@ export function useShoots() {
     return useQuery({
         queryKey: SHOOT_KEYS.all,
         queryFn: () => storage.getShoots(),
-        staleTime: 0, // Always check for fresh data
+        // staleTime: 0, // REMOVED: Rely on global defaults (5 mins) and invalidation to prevent over-fetching on slow networks.
     });
 }
 
@@ -36,9 +36,24 @@ export function useSaveShoot() {
     return useMutation({
         mutationFn: (shoot: Shoot) => storage.saveShoot(shoot),
         onSuccess: (_, variables) => {
-            // Invalidate list
+            // Manually update cache for immediate feedback
+            queryClient.setQueryData(SHOOT_KEYS.all, (old: Shoot[] | undefined) => {
+                if (!old) return [variables];
+                // Check if it's an update
+                const existingIndex = old.findIndex(s => s.id === variables.id);
+                if (existingIndex >= 0) {
+                    return old.map(s => s.id === variables.id ? variables : s);
+                }
+                // It's a new shoot
+                return [...old, variables];
+            });
+
+            if (variables.id) {
+                queryClient.setQueryData(SHOOT_KEYS.detail(variables.id), variables);
+            }
+
+            // Invalidate to ensure sync with server eventually
             queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
-            // Invalidate detail if it was an update
             if (variables.id) {
                 queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.detail(variables.id) });
             }
@@ -53,7 +68,36 @@ export function useUpdateShoot() {
     return useMutation({
         mutationFn: ({ id, updates }: { id: string; updates: Partial<Shoot> }) =>
             storage.updateShoot(id, updates),
-        onSuccess: (_, { id }) => {
+        onMutate: async ({ id, updates }) => {
+            await queryClient.cancelQueries({ queryKey: SHOOT_KEYS.all });
+            await queryClient.cancelQueries({ queryKey: SHOOT_KEYS.detail(id) });
+
+            const previousShoots = queryClient.getQueryData<Shoot[]>(SHOOT_KEYS.all);
+            const previousShoot = queryClient.getQueryData<Shoot>(SHOOT_KEYS.detail(id));
+
+            // Update List
+            queryClient.setQueryData(SHOOT_KEYS.all, (old: Shoot[] | undefined) => {
+                if (!old) return old;
+                return old.map(s => s.id === id ? { ...s, ...updates } : s);
+            });
+
+            // Update Detail
+            queryClient.setQueryData(SHOOT_KEYS.detail(id), (old: Shoot | undefined) => {
+                if (!old) return old;
+                return { ...old, ...updates };
+            });
+
+            return { previousShoots, previousShoot };
+        },
+        onError: (_err, _newTodo, context) => {
+            if (context?.previousShoots) {
+                queryClient.setQueryData(SHOOT_KEYS.all, context.previousShoots);
+            }
+            if (context?.previousShoot) {
+                queryClient.setQueryData(SHOOT_KEYS.detail(_newTodo.id), context.previousShoot);
+            }
+        },
+        onSettled: (_, __, { id }) => {
             queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
             queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.detail(id) });
         },
@@ -66,8 +110,25 @@ export function useDeleteShoot() {
 
     return useMutation({
         mutationFn: (id: string) => storage.deleteShoot(id),
-        onSuccess: () => {
+        onMutate: async (id) => {
+            await queryClient.cancelQueries({ queryKey: SHOOT_KEYS.all });
+            const previousShoots = queryClient.getQueryData<Shoot[]>(SHOOT_KEYS.all);
+
+            queryClient.setQueryData(SHOOT_KEYS.all, (old: Shoot[] | undefined) => {
+                if (!old) return old;
+                return old.filter(s => s.id !== id);
+            });
+
+            return { previousShoots };
+        },
+        onError: (_err, id, context) => {
+            if (context?.previousShoots) {
+                queryClient.setQueryData(SHOOT_KEYS.all, context.previousShoots);
+            }
+        },
+        onSettled: (_, __, id) => {
             queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.detail(id) });
         },
     });
 }

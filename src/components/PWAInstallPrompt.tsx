@@ -41,7 +41,9 @@ export const PWAInstallPrompt = () => {
 
         // 2. Check if iOS (fallback since it doesn't support beforeinstallprompt)
         const userAgent = window.navigator.userAgent.toLowerCase();
-        const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
+        const isIOSDevice =
+            /iphone|ipad|ipod/.test(userAgent) ||
+            (userAgent.includes('mac') && navigator.maxTouchPoints > 2); // Modern iPads
         setIsIOS(isIOSDevice);
 
         if (isIOSDevice) {

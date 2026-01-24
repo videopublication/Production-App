@@ -6,6 +6,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { get, set, del } from 'idb-keyval';
 import { useState, useEffect } from "react";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
@@ -13,17 +14,24 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
             new QueryClient({
                 defaultOptions: {
                     queries: {
-                        staleTime: 60 * 1000, // Data matches cache for 1 minute
-                        gcTime: 24 * 60 * 60 * 1000, // Keep in garbage collector for 24 hours
-                        retry: 1,
+                        staleTime: 5 * 60 * 1000, // 5 minutes
+                        gcTime: 24 * 60 * 60 * 1000, // 24 hours
+                        retry: 3, // Increase retry count for unstable networks
+                        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
                         refetchOnWindowFocus: true,
-                        refetchOnReconnect: 'always',
+                        refetchOnReconnect: true, // simplified from 'always'
+                        networkMode: 'offlineFirst', // Handle offline/slow network gracefully
                     },
+                    mutations: {
+                        retry: 3,
+                        networkMode: 'offlineFirst',
+                    }
                 },
             })
     );
 
     const [persister, setPersister] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -49,27 +57,25 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
                         await del(key);
                     },
                 },
-                key: 'OFFLINE_CACHE', // specialized key for app data
+                key: 'OFFLINE_CACHE',
                 throttleTime: 1000,
             });
             setPersister(idbPersister);
+            setIsLoading(false);
         }
     }, []);
 
-    if (!persister) {
-        // Provide basic query client without persistence during SSR/hydration
-        // Also serves as a fallback while the async persister is unavailable
-        return (
-            <QueryClientProvider client={queryClient}>
-                {children}
-            </QueryClientProvider>
-        );
+    if (isLoading || !persister) {
+        return <LoadingScreen message="Initializing App..." />;
     }
 
     return (
         <PersistQueryClientProvider
             client={queryClient}
-            persistOptions={{ persister }}
+            persistOptions={{
+                persister,
+                maxAge: 24 * 60 * 60 * 1000, // Sync matches gcTime
+            }}
             onSuccess={() => console.log("Cache restored from persistence (IndexedDB)")}
         >
             {children}
@@ -77,3 +83,4 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
         </PersistQueryClientProvider>
     );
 }
+

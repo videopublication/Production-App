@@ -8,19 +8,42 @@ export function useInventory() {
     const equipmentQuery = useQuery({
         queryKey: ['equipment'],
         queryFn: () => storage.getEquipment(),
-        staleTime: 0, // Always check for fresh data
+        // global staleTime (5 min) applies
     });
 
     const usersQuery = useQuery({
         queryKey: ['users'],
         queryFn: () => storage.getUsers(),
-        staleTime: 60 * 1000, // 1 minute
+        staleTime: 60 * 60 * 1000, // 1 hour for users is probably fine
     });
 
     const updateEquipmentMutation = useMutation({
         mutationFn: ({ id, updates }: { id: string; updates: Partial<Equipment> }) =>
             storage.updateEquipment(id, updates),
-        onSuccess: () => {
+        onMutate: async ({ id, updates }) => {
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await queryClient.cancelQueries({ queryKey: ['equipment'] });
+
+            // Snapshot the previous value
+            const previousEquipment = queryClient.getQueryData<Equipment[]>(['equipment']);
+
+            // Optimistically update to the new value
+            queryClient.setQueryData(['equipment'], (old: Equipment[] | undefined) => {
+                if (!old) return [];
+                return old.map(item => item.id === id ? { ...item, ...updates } : item);
+            });
+
+            // Return a context object with the snapshotted value
+            return { previousEquipment };
+        },
+        onError: (_err, _newTodo, context) => {
+            // If the mutation fails, use the context returned from onMutate to roll back
+            if (context?.previousEquipment) {
+                queryClient.setQueryData(['equipment'], context.previousEquipment);
+            }
+        },
+        onSettled: () => {
+            // Always refetch after error or success:
             queryClient.invalidateQueries({ queryKey: ['equipment'] });
         },
     });
@@ -33,7 +56,24 @@ export function useInventory() {
                 )
             );
         },
-        onSuccess: () => {
+        onMutate: async (itemsToCleanup) => {
+            await queryClient.cancelQueries({ queryKey: ['equipment'] });
+            const previousEquipment = queryClient.getQueryData<Equipment[]>(['equipment']);
+
+            queryClient.setQueryData(['equipment'], (old: Equipment[] | undefined) => {
+                if (!old) return [];
+                const idsToClean = new Set(itemsToCleanup.map(i => i.id));
+                return old.map(item => idsToClean.has(item.id) ? { ...item, assignedTo: null as any } : item);
+            });
+
+            return { previousEquipment };
+        },
+        onError: (_err, _newTodo, context) => {
+            if (context?.previousEquipment) {
+                queryClient.setQueryData(['equipment'], context.previousEquipment);
+            }
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['equipment'] });
         },
     });
