@@ -212,7 +212,7 @@ export default function DashboardPage() {
         if (authLoading) return;
 
         if (!user) {
-            router.push('/login');
+            router.replace('/login');
             return;
         }
 

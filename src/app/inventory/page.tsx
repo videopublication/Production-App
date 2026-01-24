@@ -68,7 +68,7 @@ export default function InventoryPage() {
     // Redirect if not authenticated
     useEffect(() => {
         if (!authLoading && !user) {
-            router.push('/login');
+            router.replace('/login');
         }
     }, [user, router, authLoading]);
 

@@ -23,7 +23,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [authError, setAuthError] = useState<string | null>(null);
     const router = useRouter();
+
+    // Safety timeout: If auth takes more than 10 seconds, force stop loading
+    useEffect(() => {
+        if (!isLoading) return;
+
+        const timeoutId = setTimeout(() => {
+            if (isLoading) {
+                console.warn('Auth check timed out after 10s. Forcing loading state to false.');
+                setIsLoading(false);
+            }
+        }, 12000); // 12 seconds safety net
+
+        return () => clearTimeout(timeoutId);
+    }, [isLoading]);
 
     useEffect(() => {
         let channel: RealtimeChannel | null = null;
@@ -42,14 +57,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         const reason = data.status === 'SUSPENDED' ? 'suspended' : 'pending';
                         setUser(null);
                         setIsLoading(false);
-                        router.push(`/inactive?reason=${reason}`);
+                        router.replace(`/inactive?reason=${reason}`);
                         await supabase.auth.signOut();
                         return;
                     }
 
                     // Case: User was on inactive page but just got reactivated
                     if (window.location.pathname === '/inactive' && data.status === 'ACTIVE') {
-                        router.push('/login');
+                        router.replace('/login');
                     }
 
                     setUser(data as User);
@@ -75,12 +90,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                 if (updatedUser.status === 'PENDING' || updatedUser.status === 'SUSPENDED') {
                                     const reason = updatedUser.status === 'SUSPENDED' ? 'suspended' : 'pending';
                                     setUser(null);
-                                    router.push(`/inactive?reason=${reason}`);
+                                    router.replace(`/inactive?reason=${reason}`);
                                     await supabase.auth.signOut();
                                 } else {
                                     // Case: User was on inactive page but just got reactivated
                                     if (window.location.pathname === '/inactive' && updatedUser.status === 'ACTIVE') {
-                                        router.push('/login');
+                                        router.replace('/login');
                                     }
                                     // Update local user state
                                     setUser(updatedUser as User);
@@ -340,7 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setUser(null);
-        router.push('/login');
+        router.replace('/login');
     };
 
     const linkGoogleCalendar = async () => {

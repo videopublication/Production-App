@@ -31,7 +31,7 @@ export default function ReturnsPage() {
     useEffect(() => {
         if (authLoading) return;
 
-        if (!user) router.push('/login');
+        if (!user) router.replace('/login');
     }, [user, router, authLoading]);
 
     if (authLoading || isInventoryLoading) {

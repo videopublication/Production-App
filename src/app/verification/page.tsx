@@ -59,12 +59,12 @@ export default function VerificationPage() {
         if (authLoading) return;
 
         if (!user) {
-            router.push('/login');
+            router.replace('/login');
             return;
         }
 
         if (!['MANAGER', 'ADMIN'].includes(user.role)) {
-            router.push('/');
+            router.replace('/');
             return;
         }
         loadItems();

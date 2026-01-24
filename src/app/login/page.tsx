@@ -18,9 +18,9 @@ export default function LoginPage() {
     React.useEffect(() => {
         if (user) {
             if (user.role === 'MANAGER' || user.role === 'ADMIN') {
-                router.push('/dashboard');
+                router.replace('/dashboard');
             } else {
-                router.push('/checkout');
+                router.replace('/checkout');
             }
         }
     }, [user, router]);
@@ -41,7 +41,7 @@ export default function LoginPage() {
             if (isLogin) {
                 const { error } = await login(formData.email, formData.password);
                 if (error) throw error;
-                router.push('/');
+                router.replace('/');
             } else {
                 const { error } = await signUp(
                     formData.email,
@@ -50,7 +50,7 @@ export default function LoginPage() {
                 );
                 if (error) throw error;
                 // Since new accounts are inactive by default, redirect to the approval pending page
-                router.push('/inactive');
+                router.replace('/inactive');
             }
         } catch (err: any) {
             setError(err.message || 'Authentication failed');
