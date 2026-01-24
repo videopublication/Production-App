@@ -54,11 +54,31 @@ export default function CheckoutPage() {
         }
     }, [showScanner]);
 
+    // Handle back button for search focus
+    useEffect(() => {
+        if (isSearchFocused) {
+            window.history.pushState({ searchFocused: true }, '', window.location.href);
+
+            const handlePopState = () => {
+                setIsSearchFocused(false);
+                // Blur the input if it's still focused
+                (document.activeElement as HTMLElement)?.blur();
+            };
+
+            window.addEventListener('popstate', handlePopState);
+
+            return () => {
+                window.removeEventListener('popstate', handlePopState);
+            };
+        }
+    }, [isSearchFocused]);
+
     const toggleScanner = () => {
         if (showScanner) {
             window.history.back(); // This triggers popstate -> closes scanner
         } else {
-            setShowScanner(true);
+            // Slight delay to ensure animation starts smoothly
+            requestAnimationFrame(() => setShowScanner(true));
         }
     };
     const [suggestions, setSuggestions] = useState<Equipment[]>([]);
@@ -369,7 +389,7 @@ export default function CheckoutPage() {
     return (
         <>
             {/* Desktop Layout */}
-            <div className="hidden md:block max-w-4xl mx-auto space-y-8 pb-20">
+            <div className="hidden md:block max-w-7xl mx-auto space-y-8 pb-20">
                 <div className="flex flex-col space-y-2">
                     <h1 className="text-3xl font-bold tracking-tight">Checkout Equipment</h1>
                     <p className="text-sm text-muted-foreground">Scan or select items to begin checkout.</p>
@@ -488,13 +508,13 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="space-y-6">
-                        <div className="bg-card rounded-3xl p-6 shadow-sm border border-border lg:sticky lg:top-20">
+                        <div className="bg-card rounded-3xl p-6 shadow-sm border border-border lg:sticky lg:top-20 overflow-visible">
                             <h3 className="text-[17px] font-bold text-foreground mb-5">Flow Details</h3>
 
                             <div className="space-y-5">
                                 {/* Shoot Selector - Premium Card (Moved to Top) */}
-                                {availableShoots.length > 0 && (
-                                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 border border-indigo-100">
+                                {(availableShoots.length > 0 || selectedShootId) && (
+                                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/50 relative">
                                         <div className="flex items-center gap-3 mb-3">
                                             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
                                                 <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -502,8 +522,8 @@ export default function CheckoutPage() {
                                                 </svg>
                                             </div>
                                             <div>
-                                                <p className="text-[13px] font-bold text-indigo-900">Link to Shoot</p>
-                                                <p className="text-[11px] text-indigo-600/70">Optional • Auto-fills project name</p>
+                                                <p className="text-[13px] font-bold text-indigo-900 dark:text-indigo-200">Link to Shoot</p>
+                                                <p className="text-[11px] text-indigo-600/70 dark:text-indigo-300/70">Optional • Auto-fills project name</p>
                                             </div>
                                         </div>
 
@@ -513,9 +533,13 @@ export default function CheckoutPage() {
                                                 setSelectedShootId(val);
                                                 if (val) {
                                                     const shoot = availableShoots.find(s => s.id === val);
-                                                    if (shoot && !project.trim()) {
+                                                    if (shoot) {
                                                         setProject(shoot.title);
                                                     }
+                                                } else {
+                                                    setProject('');
+                                                    if (user) setSelectedUserIds([user.id]);
+                                                    else setSelectedUserIds([]);
                                                 }
                                             }}
                                             options={[
@@ -528,6 +552,22 @@ export default function CheckoutPage() {
                                             placeholder="Select a shoot..."
                                             className="w-full"
                                         />
+                                        {selectedShootId && (
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedShootId('');
+                                                    setProject('');
+                                                    if (user) setSelectedUserIds([user.id]);
+                                                    else setSelectedUserIds([]);
+                                                }}
+                                                className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-indigo-900 dark:text-indigo-200 transition-colors z-20"
+                                                title="Clear selection"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                    <path d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        )}
 
                                         {selectedShootId && (
                                             <div className="flex items-center gap-2 mt-2.5 px-1">
@@ -536,7 +576,7 @@ export default function CheckoutPage() {
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                     </svg>
                                                 </div>
-                                                <p className="text-xs font-medium text-green-700">
+                                                <p className="text-xs font-medium text-green-700 dark:text-green-400">
                                                     Equipment will be linked to this shoot
                                                 </p>
                                             </div>
@@ -603,15 +643,15 @@ export default function CheckoutPage() {
                 {/* Project Details Section - Premium Mobile Card */}
                 {/* Project Brief */}
                 {/* Project Details Section - Premium Mobile Card */}
-                <div className={`px-0.5 relative z-20 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] overflow-hidden ${(showScanner || isSearchFocused)
-                    ? 'max-h-0 opacity-0 mb-0 pt-0'
-                    : 'max-h-[1200px] opacity-100 pt-4 mb-6'
+                <div className={`px-0.5 relative z-40 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${(showScanner || isSearchFocused)
+                    ? 'max-h-0 opacity-0 mb-0 pt-0 overflow-hidden'
+                    : 'max-h-[1200px] opacity-100 pt-4 mb-6 overflow-visible'
                     }`}>
                     <div className="bg-card rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-border">
                         <div className="p-4">
                             {/* Shoot Selector for Mobile - Premium Card */}
-                            {availableShoots.length > 0 && (
-                                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/50 mb-4">
+                            {(availableShoots.length > 0 || selectedShootId) && (
+                                <div className="relative bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/50 mb-4">
                                     <div className="flex items-center gap-3 mb-3">
                                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
                                             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -630,9 +670,13 @@ export default function CheckoutPage() {
                                             setSelectedShootId(val);
                                             if (val) {
                                                 const shoot = availableShoots.find(s => s.id === val);
-                                                if (shoot && !project.trim()) {
+                                                if (shoot) {
                                                     setProject(shoot.title);
                                                 }
+                                            } else {
+                                                setProject('');
+                                                if (user) setSelectedUserIds([user.id]);
+                                                else setSelectedUserIds([]);
                                             }
                                         }}
                                         options={[
@@ -647,14 +691,31 @@ export default function CheckoutPage() {
                                     />
 
                                     {selectedShootId && (
+                                        <button
+                                            onClick={() => {
+                                                setSelectedShootId('');
+                                                setProject('');
+                                                if (user) setSelectedUserIds([user.id]);
+                                                else setSelectedUserIds([]);
+                                            }}
+                                            className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-indigo-900 dark:text-indigo-200 transition-colors z-20"
+                                            title="Clear selection"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                <path d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+
+                                    {selectedShootId && (
                                         <div className="flex items-center gap-2 mt-3 px-1">
-                                            <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                                            <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shrink-0">
                                                 <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                 </svg>
                                             </div>
                                             <p className="text-[13px] font-medium text-green-700 dark:text-green-400">
-                                                Equipment will be linked to this shoot
+                                                Linked to shoot
                                             </p>
                                         </div>
                                     )}
@@ -663,15 +724,17 @@ export default function CheckoutPage() {
 
                             {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
                                 <div className="mb-4">
-                                    <MultiSelect
-                                        label="Checkout For"
-                                        value={selectedUserIds}
-                                        onChange={setSelectedUserIds}
-                                        options={users.map(u => ({
-                                            value: u.id,
-                                            label: `${u.name} (${u.role})`
-                                        }))}
-                                    />
+                                    <div className="relative z-20">
+                                        <MultiSelect
+                                            label="Checkout For"
+                                            value={selectedUserIds}
+                                            onChange={setSelectedUserIds}
+                                            options={users.map(u => ({
+                                                value: u.id,
+                                                label: `${u.name} (${u.role})`
+                                            }))}
+                                        />
+                                    </div>
                                 </div>
                             )}
 
@@ -744,7 +807,10 @@ export default function CheckoutPage() {
 
                     <div className={`sticky top-0 z-30 px-2 pb-2 bg-background transition-all duration-300 ${isSearchFocused ? 'pt-4' : 'pt-0'}`}>
                         <div className="flex gap-2">
-                            <div className="flex-1 bg-card h-12 rounded-xl shadow-sm border border-border flex items-center overflow-hidden focus-within:ring-2 focus-within:ring-primary transition-all">
+                            <div className="flex-1 bg-card h-12 rounded-xl shadow-sm border border-border flex items-center overflow-hidden transition-all dark:bg-[#1c1c1e] relative">
+                                {!scanInput && !isSearchFocused && (
+                                    <div className="absolute inset-x-0 bottom-0 h-[1px]" />
+                                )}
                                 <div className="pl-3 text-muted-foreground">
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -755,7 +821,8 @@ export default function CheckoutPage() {
                                     value={scanInput}
                                     onChange={(e) => handleInputChange(e.target.value)}
                                     onFocus={() => setIsSearchFocused(true)}
-                                    className="flex-1 min-w-0 h-full bg-transparent border-0 px-2 text-[16px] text-foreground placeholder:text-muted-foreground focus:ring-0 transition-all"
+                                    className="flex-1 min-w-0 h-full bg-transparent border-0 px-2 text-[16px] text-foreground placeholder:text-muted-foreground focus:ring-0 transition-all focus:border-0"
+                                    style={{ boxShadow: 'none' }}
                                 />
                                 {scanInput && (
                                     <button
@@ -772,9 +839,7 @@ export default function CheckoutPage() {
                             {isSearchFocused ? (
                                 <button
                                     onClick={() => {
-                                        setIsSearchFocused(false);
-                                        // Optional: Blur input
-                                        (document.activeElement as HTMLElement)?.blur();
+                                        window.history.back();
                                     }}
                                     className="h-12 px-5 shrink-0 rounded-xl flex items-center justify-center font-semibold text-primary bg-background shadow-sm border border-border active:scale-95 transition-all"
                                 >

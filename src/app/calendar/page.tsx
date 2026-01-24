@@ -250,9 +250,8 @@ export default function CalendarPage() {
                                 <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
                             </button>
 
-                            {/* Dropdown Menu */}
                             <div
-                                className={`absolute right-0 top-full mt-2 w-[240px] bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-right ${isFilterOpen
+                                className={`absolute left-0 sm:right-0 top-full mt-2 w-[240px] bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl overflow-hidden transition-all duration-200 origin-top-left sm:origin-top-right z-30 ${isFilterOpen
                                     ? 'opacity-100 scale-100 translate-y-0'
                                     : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
                                     }`}
@@ -430,10 +429,10 @@ export default function CalendarPage() {
                                         }
                                     });
 
-                                    const rowCount = Math.max(3, occupied.length); // Min height ensures grid looks consistent
-                                    const rowHeight = 28; // height of each event bar + gap
-                                    const headerHeight = 40; // Approx height for date number area
-                                    const minWeekHeight = Math.max(100, (rowCount * rowHeight) + headerHeight);
+                                    const rowCount = Math.max(2, occupied.length); // Min height ensures grid looks consistent
+                                    const rowHeight = 24; // height of each event bar + gap
+                                    const headerHeight = 32; // Approx height for date number area
+                                    const minWeekHeight = Math.max(70, (rowCount * rowHeight) + headerHeight);
 
                                     return (
                                         <div

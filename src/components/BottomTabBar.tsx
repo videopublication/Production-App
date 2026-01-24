@@ -133,7 +133,7 @@ export const BottomTabBar = () => {
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
             {/* Glassmorphic background */}
-            <div className="absolute inset-0 bg-white/80 backdrop-blur-xl border-t border-[#e5e5ea]" />
+            <div className="absolute inset-0 bg-white/80 dark:bg-[#1c1c1e]/90 backdrop-blur-xl border-t border-[#e5e5ea] dark:border-gray-800" />
 
             {/* Tab container */}
             <div className="relative flex items-center justify-around px-2 pb-safe-bottom pt-2">
@@ -143,13 +143,14 @@ export const BottomTabBar = () => {
                         <Link
                             key={tab.path}
                             href={tab.path}
-                            className={`flex flex-col items-center justify-center min-w-[64px] py-1 px-3 transition-all duration-200 ${active ? 'text-[#0071e3]' : 'text-[#8e8e93]'
+                            replace
+                            className={`flex flex-col items-center justify-center min-w-[64px] py-1 px-3 transition-all duration-200 ${active ? 'text-[var(--primary)]' : 'text-[#8e8e93] dark:text-gray-500'
                                 }`}
                         >
                             <div className={`relative transition-transform duration-200 ${active ? 'scale-110' : 'scale-100'}`}>
                                 {active ? tab.activeIcon : tab.icon}
                                 {active && (
-                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#0071e3] rounded-full" />
+                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[var(--primary)] rounded-full" />
                                 )}
                             </div>
                             <span className={`text-[10px] mt-1 font-medium ${active ? 'font-semibold' : ''}`}>
