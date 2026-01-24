@@ -128,6 +128,28 @@ export default function CheckoutPage() {
         }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     }, [shoots]);
 
+    // Ensure selected shoot is always in options even if hidden from main list
+    const activeShootOptions = useMemo(() => {
+        const baseOptions = availableShoots.map(shoot => ({
+            value: shoot.id,
+            label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+        }));
+
+        if (selectedShootId) {
+            const selectedInAvailable = availableShoots.find(s => s.id === selectedShootId);
+            if (!selectedInAvailable) {
+                const shoot = shoots.find(s => s.id === selectedShootId);
+                if (shoot) {
+                    baseOptions.unshift({
+                        value: shoot.id,
+                        label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                    });
+                }
+            }
+        }
+        return [{ value: '', label: 'Select a shoot...' }, ...baseOptions];
+    }, [availableShoots, selectedShootId, shoots]);
+
     // Initialize/Load State (Session Persistence)
     useEffect(() => {
         const savedCart = sessionStorage.getItem('checkout-cart');
@@ -532,7 +554,7 @@ export default function CheckoutPage() {
                                             onChange={(val: string) => {
                                                 setSelectedShootId(val);
                                                 if (val) {
-                                                    const shoot = availableShoots.find(s => s.id === val);
+                                                    const shoot = shoots.find(s => s.id === val);
                                                     if (shoot) {
                                                         setProject(shoot.title);
                                                     }
@@ -542,13 +564,7 @@ export default function CheckoutPage() {
                                                     else setSelectedUserIds([]);
                                                 }
                                             }}
-                                            options={[
-                                                { value: '', label: 'Select a shoot...' },
-                                                ...availableShoots.map(shoot => ({
-                                                    value: shoot.id,
-                                                    label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                                                }))
-                                            ]}
+                                            options={activeShootOptions}
                                             placeholder="Select a shoot..."
                                             className="w-full"
                                         />
@@ -669,7 +685,7 @@ export default function CheckoutPage() {
                                         onChange={(val: string) => {
                                             setSelectedShootId(val);
                                             if (val) {
-                                                const shoot = availableShoots.find(s => s.id === val);
+                                                const shoot = shoots.find(s => s.id === val);
                                                 if (shoot) {
                                                     setProject(shoot.title);
                                                 }
@@ -679,13 +695,7 @@ export default function CheckoutPage() {
                                                 else setSelectedUserIds([]);
                                             }
                                         }}
-                                        options={[
-                                            { value: '', label: 'Select a shoot...' },
-                                            ...availableShoots.map(shoot => ({
-                                                value: shoot.id,
-                                                label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                                            }))
-                                        ]}
+                                        options={activeShootOptions}
                                         placeholder="Select a shoot..."
                                         className="w-full"
                                     />
