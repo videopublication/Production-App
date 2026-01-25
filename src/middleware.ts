@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
     const path = request.nextUrl.pathname
 
     // Public paths we always allow without auth
-    const isPublicPath = path === '/login' || path === '/auth/callback' || path.startsWith('/_next') || path.startsWith('/static') || path === '/favicon.ico'
+    const isPublicPath = path === '/' || path === '/login' || path === '/auth/callback' || path.startsWith('/_next') || path.startsWith('/static') || path === '/favicon.ico'
 
     // If no user and trying to access protected route
     if (!user && !isPublicPath) {
@@ -88,12 +88,12 @@ export async function middleware(request: NextRequest) {
 
             // If active and ON inactive page -> Redirect to dashboard
             if (!isInactive && isOnInactivePage) {
-                return NextResponse.redirect(new URL('/', request.url))
+                return NextResponse.redirect(new URL('/dashboard', request.url))
             }
 
             // If active and ON login page -> Redirect to dashboard
             if (!isInactive && path === '/login') {
-                return NextResponse.redirect(new URL('/', request.url))
+                return NextResponse.redirect(new URL('/dashboard', request.url))
             }
 
             // Admin protection for /admin and /api/admin routes

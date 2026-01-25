@@ -61,15 +61,10 @@ export default function Home() {
 
             <div className="mt-8 sm:mt-12 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-x-6 w-full sm:w-auto animate-slide-up opacity-0 px-4" style={{ animationDelay: '0.6s' }}>
               <Link href="/login" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto rounded-full px-8 sm:px-10 text-base sm:text-[17px] shadow-lg hover:shadow-xl transition-all duration-300 bg-[#0071e3] hover:bg-[#0077ed]">
+                <div className="inline-flex items-center justify-center rounded-full font-medium transition-all duration-200 active:scale-[0.98] w-full sm:w-auto h-12 px-8 sm:px-10 text-base sm:text-[17px] shadow-lg hover:shadow-xl bg-[#0071e3] hover:bg-[#0077ed] text-white cursor-pointer">
                   Get Started
-                </Button>
+                </div>
               </Link>
-              {/* <Link href="/about" className="w-full sm:w-auto">
-                <Button variant="secondary" size="lg" className="w-full sm:w-auto rounded-full px-8 sm:px-10 text-base sm:text-[17px] bg-white/50 backdrop-blur-sm border-white/40">
-                  Learn more
-                </Button>
-              </Link> */}
             </div>
 
             {/* Floating Elements for Visual Interest - Hidden on mobile for cleaner look */}
