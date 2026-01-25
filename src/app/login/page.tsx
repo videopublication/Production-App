@@ -64,7 +64,7 @@ export default function LoginPage() {
             <div className="w-full max-w-sm space-y-6">
                 <div className="text-center">
                     <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-violet-600 bg-clip-text text-transparent">
-                        Vpub App
+                        VP App
                     </h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                         {isLogin ? 'Sign in to your account' : 'Create a new account'}

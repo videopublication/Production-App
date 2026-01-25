@@ -7,22 +7,32 @@ import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 
+import { SplashScreen } from '@/components/SplashScreen';
+
 export default function Home() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const router = useRouter();
 
   React.useEffect(() => {
-    if (user) {
+    // PREFETCHING: While we wait for auth, let's silently download the code for the main apps.
+    // This makes the transition instant once we know where to send them.
+    if (isLoading) {
+      router.prefetch('/dashboard');
+      router.prefetch('/checkout');
+    }
+
+    if (!isLoading && user) {
       if (user.role === 'MANAGER' || user.role === 'ADMIN') {
         router.push('/dashboard');
       } else {
         router.push('/checkout');
       }
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
 
-  if (user) {
-    return null; // Or a loading spinner
+  // Show the premium splash screen while checking auth state
+  if (isLoading || user) {
+    return <SplashScreen />;
   }
 
   return (
@@ -55,11 +65,11 @@ export default function Home() {
                   Get Started
                 </Button>
               </Link>
-              <Link href="/about" className="w-full sm:w-auto">
+              {/* <Link href="/about" className="w-full sm:w-auto">
                 <Button variant="secondary" size="lg" className="w-full sm:w-auto rounded-full px-8 sm:px-10 text-base sm:text-[17px] bg-white/50 backdrop-blur-sm border-white/40">
                   Learn more
                 </Button>
-              </Link>
+              </Link> */}
             </div>
 
             {/* Floating Elements for Visual Interest - Hidden on mobile for cleaner look */}

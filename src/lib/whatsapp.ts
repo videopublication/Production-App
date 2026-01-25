@@ -33,8 +33,6 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
         message += `- No crew assigned yet\n`;
     }
 
-    message += `\n_Generated via VP App_`;
-
     return message;
 };
 

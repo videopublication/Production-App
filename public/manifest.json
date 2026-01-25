@@ -1,6 +1,6 @@
 {
-  "name": "Vpub App",
-  "short_name": "Vpub",
+  "name": "VP App",
+  "short_name": "VP App",
   "description": "Manage equipment checkout and returns",
   "start_url": "/",
   "scope": "/",

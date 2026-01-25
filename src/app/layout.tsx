@@ -18,13 +18,18 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Vpub App",
+  title: "VP App",
   description: "Manage equipment checkout and returns",
   manifest: "/manifest.json",
+  icons: {
+    icon: '/favicon.png',
+    shortcut: '/favicon.png',
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Vpub App',
+    title: 'VP App',
   },
   formatDetection: {
     telephone: false,
