@@ -133,7 +133,7 @@ export const BottomTabBar = () => {
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
             {/* Glassmorphic background */}
-            <div className="absolute inset-0 bg-white/80 dark:bg-card/90 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800" />
+            <div className="absolute inset-0 bg-white/80 dark:bg-background/90 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800" />
 
             {/* Tab container */}
             <div className="relative flex items-center justify-around px-2 pb-safe-bottom pt-2">
@@ -144,7 +144,7 @@ export const BottomTabBar = () => {
                             key={tab.path}
                             href={tab.path}
                             replace
-                            className={`flex flex-col items-center justify-center min-w-[64px] py-1 px-3 transition-all duration-200 ${active ? 'text-primary' : 'text-gray-500 dark:text-gray-400'
+                            className={`flex flex-col items-center justify-center min-w-[64px] py-1 px-3 transition-all duration-200 ${active ? 'text-primary' : 'text-gray-500 dark:text-zinc-400'
                                 }`}
                         >
                             <div className={`relative transition-transform duration-200 ${active ? 'scale-110' : 'scale-100'}`}>

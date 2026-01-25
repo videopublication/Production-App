@@ -50,6 +50,15 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
     // Wrap with SidebarProvider only for authenticated pages
     const { user, isLoading } = useAuth();
 
+    // Lock orientation to portrait
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.screen?.orientation?.lock) {
+            window.screen.orientation.lock('portrait').catch(() => {
+                // Silently fail if not supported or requires gesture
+            });
+        }
+    }, []);
+
     // Loading state
     if (isLoading) {
         return (

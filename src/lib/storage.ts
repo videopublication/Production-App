@@ -518,6 +518,53 @@ class StorageService {
 
         if (error) console.error('Error deleting assignment:', error);
     }
+
+    // Sessions tracking
+    async getUserSessions(userId: string): Promise<any[]> {
+        const { data, error } = await supabase
+            .from('user_sessions')
+            .select('*')
+            .eq('user_id', userId)
+            .order('last_active_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching sessions:', error);
+            return [];
+        }
+        return data;
+    }
+
+    async upsertSession(userId: string, userAgent: string): Promise<void> {
+        const { error } = await supabase
+            .from('user_sessions')
+            .upsert({
+                user_id: userId,
+                user_agent: userAgent,
+                last_active_at: new Date().toISOString()
+            }, {
+                onConflict: 'user_id, user_agent'
+            });
+
+        if (error) {
+            console.error('Error upserting session:', error);
+        }
+    }
+
+    async deleteSession(userId: string, userAgent: string): Promise<void> {
+        await supabase
+            .from('user_sessions')
+            .delete()
+            .match({ user_id: userId, user_agent: userAgent });
+    }
+
+    async deleteAllUserSessions(userId: string): Promise<void> {
+        const { error } = await supabase
+            .from('user_sessions')
+            .delete()
+            .eq('user_id', userId);
+
+        if (error) console.error('Error deleting all user sessions:', error);
+    }
 }
 
 export const storage = new StorageService();

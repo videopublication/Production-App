@@ -69,6 +69,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                     setUser(data as User);
 
+                    // Track this session
+                    storage.upsertSession(data.id, navigator.userAgent).catch(console.error);
+
                     // Subscribe to real-time changes
                     if (channel) supabase.removeChannel(channel);
 
@@ -343,6 +346,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Log logout
         if (currentUser) {
+            // Remove this session from our tracker
+            storage.deleteSession(currentUser.id, navigator.userAgent).catch(console.error);
+
             storage.addLog({
                 id: generateUUID(),
                 action: 'LOGOUT',
