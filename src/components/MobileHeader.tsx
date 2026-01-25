@@ -53,7 +53,7 @@ export const MobileHeader = () => {
         <>
             <header className="fixed top-0 left-0 right-0 z-[100] md:hidden">
                 {/* Glassmorphic background */}
-                <div className="absolute inset-0 bg-gray-100/95 dark:bg-neutral-800/95 backdrop-blur-xl backdrop-saturate-150 border-b border-gray-300/50 dark:border-neutral-600/50" />
+                <div className="absolute inset-0 bg-gray-200 dark:bg-neutral-800 backdrop-blur-xl backdrop-saturate-150 border-b border-gray-300 dark:border-neutral-700" />
 
                 {/* Content */}
                 <div className="relative flex items-center justify-between h-11 px-4 pt-safe-top">
