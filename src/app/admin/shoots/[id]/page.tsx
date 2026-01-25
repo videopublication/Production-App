@@ -254,8 +254,8 @@ export default function ShootDetailsPage() {
                             <AlertCircle size={20} className="text-blue-600 dark:text-blue-400" />
                         </div>
                         <div>
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Not Connected to Google Calendar</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Sync this shoot to automatically invite crew members and track it in your calendar.</p>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Sync with Google Calendar</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Automatically invite crew and track this shoot.</p>
                         </div>
                     </div>
                     <Button
@@ -282,7 +282,7 @@ export default function ShootDetailsPage() {
                 <div className="flex items-start gap-4">
                     <Link href="/admin/shoots">
                         <button
-                            className="h-10 w-10 rounded-full flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 transition-all"
+                            className="h-10 w-10 rounded-full flex items-center justify-center bg-white dark:bg-[#2c2c2e] border border-gray-300 dark:border-[#3a3a3c] shadow-sm hover:bg-gray-50 dark:hover:bg-[#3a3a3c] text-gray-800 dark:text-gray-200 transition-all"
                         >
                             <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
@@ -355,7 +355,7 @@ export default function ShootDetailsPage() {
                                 console.error('Failed to copy', err);
                             }
                         }}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-95 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-xs sm:text-sm whitespace-nowrap"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-95 bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3a3a3c] text-xs sm:text-sm whitespace-nowrap"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -365,7 +365,7 @@ export default function ShootDetailsPage() {
 
                     <Link href={`/admin/shoots/${shoot.id}/edit`} className="flex-1 sm:flex-none">
                         {user?.role === 'ADMIN' && (
-                            <Button variant="outline" className="w-full gap-1.5 bg-white dark:bg-[#1c1c1e] hover:bg-gray-50 dark:hover:bg-gray-800 h-[38px] px-3 rounded-lg font-semibold border-gray-200 dark:border-gray-800 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+                            <Button variant="outline" className="w-full gap-1.5 bg-white dark:bg-[#2c2c2e] hover:bg-gray-50 dark:hover:bg-[#3a3a3c] h-[38px] px-3 rounded-lg font-semibold border-gray-200 dark:border-[#3a3a3c] text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                                 <Edit size={14} /> Edit
                             </Button>
                         )}
@@ -373,16 +373,19 @@ export default function ShootDetailsPage() {
 
 
                     {shoot.status !== 'CANCELLED' && user?.role === 'ADMIN' && (
-                        <Button variant="danger" onClick={handleCancelShoot} className="flex-1 sm:flex-none gap-1.5 h-[38px] px-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap">
+                        <button
+                            onClick={handleCancelShoot}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 h-[38px] px-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap bg-red-600 hover:bg-red-700 text-white transition-all shadow-sm active:scale-95 border-none"
+                        >
                             <XCircle size={14} /> Cancel
-                        </Button>
+                        </button>
                     )}
                 </div>
             </div>
 
             {/* Quick Info Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-blue-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800">
+                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-blue-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#2c2c2e] border-gray-200 dark:border-[#3a3a3c]">
                     <div className="absolute right-0 top-0 p-3 opacity-100">
                         <svg className="w-16 h-16 text-blue-100 dark:text-blue-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -410,7 +413,7 @@ export default function ShootDetailsPage() {
                     </p>
                 </Card>
 
-                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-purple-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800">
+                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-purple-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#2c2c2e] border-gray-200 dark:border-[#3a3a3c]">
                     <div className="absolute right-0 top-0 p-3 opacity-100">
                         <svg className="w-16 h-16 text-purple-100 dark:text-purple-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -422,7 +425,7 @@ export default function ShootDetailsPage() {
                     <p className="text-sm text-muted-foreground dark:text-gray-400">Site / Venue</p>
                 </Card>
 
-                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-green-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800">
+                <Card className="p-5 flex flex-col justify-center min-h-[100px] border-l-4 border-l-green-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#2c2c2e] border-gray-200 dark:border-[#3a3a3c]">
                     <div className="absolute right-0 top-0 p-3 opacity-100">
                         <svg className="w-16 h-16 text-green-100 dark:text-green-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -437,7 +440,7 @@ export default function ShootDetailsPage() {
             {/* Description (if exists) */}
             {
                 shoot.description && (
-                    <div className="rounded-xl p-5 shadow-sm bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
+                    <div className="rounded-xl p-5 shadow-sm bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c]">
                         <h3 className="text-sm font-bold uppercase tracking-widest mb-2 flex items-center gap-2 text-gray-900 dark:text-white">
                             <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -496,7 +499,7 @@ export default function ShootDetailsPage() {
                                 return (
                                     <div
                                         key={assignment.id}
-                                        className="flex items-center justify-between p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800"
+                                        className="flex items-center justify-between p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c]"
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="relative">
@@ -537,7 +540,7 @@ export default function ShootDetailsPage() {
                 {/* Sidebar - Activity Log */}
                 <div className="space-y-4">
                     <h2 className="text-lg font-bold text-gray-900 dark:text-white px-1">Recent Activity</h2>
-                    <Card className="p-0 overflow-hidden border border-border bg-gray-50/50 dark:bg-gray-900/20">
+                    <Card className="p-0 overflow-hidden border border-border bg-white dark:bg-[#2c2c2e] border-gray-200 dark:border-[#3a3a3c]">
                         <div className="max-h-[500px] overflow-y-auto px-4 py-4 space-y-6 custom-scrollbar">
                             {logs.length === 0 ? (
                                 <p className="text-gray-500 italic text-sm text-center py-4">No activity yet</p>

@@ -465,8 +465,8 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                 </Card>
 
                 {/* Crew Assignments Card */}
-                <Card className="md:col-span-2 space-y-3 dark:bg-[#1c1c1e] border-0">
-                    <div className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/40 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-gray-100/30 dark:border-gray-800/30 rounded-t-3xl">
+                <Card className="md:col-span-2 space-y-3 dark:bg-[#2c2c2e] border-0">
+                    <div className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/40 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-gray-100/30 dark:border-[#3a3a3c] rounded-t-3xl">
                         <h3 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white">Crew Assignments</h3>
                     </div>
 

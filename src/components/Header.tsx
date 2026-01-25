@@ -41,7 +41,7 @@ export const Header = () => {
     return (
         // Desktop only - mobile uses MobileHeader component
         <header className={`h-[44px] fixed top-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#f5f5f7] px-4 hidden md:flex items-center justify-between transition-all duration-300 ${isCollapsed ? 'left-[72px]' : 'left-[260px]'
-            } pl-6 dark:bg-[#1c1c1e]/80 dark:border-gray-800`}>
+            } pl-6 dark:bg-[#2c2c2e]/80 dark:border-[#3a3a3c]`}>
             {/* Page title area */}
             <div className="flex-1">
                 <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">VP App</span>
@@ -68,8 +68,8 @@ export const Header = () => {
 
                     {/* Notification Dropdown */}
                     {showNotifications && (
-                        <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50 dark:bg-[#1c1c1e] dark:border-gray-700">
-                            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                        <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50 dark:bg-[#2c2c2e] dark:border-[#3a3a3c]">
+                            <div className="px-4 py-3 border-b border-gray-100 dark:border-[#3a3a3c] flex justify-between items-center">
                                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
                                 {unreadCount > 0 && (
                                     <button onClick={markAllRead} className="text-xs text-blue-600 hover:text-blue-500 font-medium">Mark all read</button>
@@ -83,7 +83,7 @@ export const Header = () => {
                                         {notifications.slice(0, 5).map((n, i) => (
                                             <div
                                                 key={n.id}
-                                                className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer dark:hover:bg-gray-800 ${i !== Math.min(4, notifications.length - 1) ? 'border-b border-gray-100 dark:border-gray-800' : ''} ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
+                                                className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer dark:hover:bg-[#3a3a3c] ${i !== Math.min(4, notifications.length - 1) ? 'border-b border-gray-100 dark:border-[#3a3a3c]' : ''} ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
                                                 onClick={() => handleNotificationClick(n)}
                                             >
                                                 <div className="flex gap-2">
@@ -98,7 +98,7 @@ export const Header = () => {
                                     </div>
                                 )}
                             </div>
-                            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 text-center">
+                            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-[#3a3a3c] text-center">
                                 <Link href="/notifications" onClick={() => setShowNotifications(false)} className="text-sm font-medium text-blue-600 hover:text-blue-500">
                                     View all
                                 </Link>

@@ -32,11 +32,11 @@ export const Sidebar = () => {
     return (
         // Desktop only - hidden on mobile (bottom tabs used instead)
         <aside className={`
-            hidden md:flex fixed top-0 left-0 h-screen bg-card z-40 transition-all duration-300 ease-out flex-col border-r border-border
+            hidden md:flex fixed top-0 left-0 h-screen bg-card dark:bg-[#2c2c2e] z-40 transition-all duration-300 ease-out flex-col border-r border-border dark:border-[#3a3a3c]
             ${isCollapsed ? 'w-[72px]' : 'w-[260px]'}
         `}>
             {/* Logo */}
-            <div className={`h-16 flex items-center border-b border-border ${isCollapsed ? 'justify-center px-0' : 'px-5 gap-3'}`}>
+            <div className={`h-16 flex items-center border-b border-border dark:border-[#3a3a3c] ${isCollapsed ? 'justify-center px-0' : 'px-5 gap-3'}`}>
                 <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
                     <svg className="w-5 h-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -55,7 +55,7 @@ export const Sidebar = () => {
                                 : 'gap-3 px-3 py-2.5'
                                 } ${isActive(item.path)
                                     ? 'bg-primary text-primary-foreground'
-                                    : 'text-foreground hover:bg-muted'
+                                    : 'text-foreground hover:bg-muted dark:hover:bg-[#3a3a3c]'
                                 }`}>
                                 <svg className="w-[20px] h-[20px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
@@ -68,7 +68,7 @@ export const Sidebar = () => {
             </nav>
 
             {/* Collapse Toggle Button */}
-            <div className={`px-3 py-2 border-t border-border ${isCollapsed ? 'flex justify-center' : ''}`}>
+            <div className={`px-3 py-2 border-t border-border dark:border-[#3a3a3c] ${isCollapsed ? 'flex justify-center' : ''}`}>
                 <button
                     onClick={toggleCollapsed}
                     className={`flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 ${isCollapsed ? 'w-11 h-11 mx-auto' : 'w-full gap-2 px-3 py-2.5'
@@ -89,7 +89,7 @@ export const Sidebar = () => {
             </div>
 
             {/* User Profile */}
-            <div className={`p-3 border-t border-border ${isCollapsed ? 'flex justify-center' : ''}`}>
+            <div className={`p-3 border-t border-border dark:border-[#3a3a3c] ${isCollapsed ? 'flex justify-center' : ''}`}>
                 {isCollapsed ? (
                     <Link
                         href="/profile"

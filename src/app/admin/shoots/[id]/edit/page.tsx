@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { ShootForm } from '@/components/ShootForm';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
@@ -17,6 +18,7 @@ export default function EditShootPage() {
     const { user } = useAuth();
     const params = useParams();
     const id = params?.id as string;
+    const queryClient = useQueryClient();
 
     const [shoot, setShoot] = useState<Shoot | null>(null);
     const [users, setUsers] = useState<User[]>([]);
@@ -157,6 +159,10 @@ export default function EditShootPage() {
                     details: details
                 });
             }
+
+            // Invalidate queries to ensure fresh data on returning to details page
+            await queryClient.invalidateQueries({ queryKey: ['shoots'] });
+            await queryClient.invalidateQueries({ queryKey: ['assignments'] });
 
             router.push(`/admin/shoots/${shoot.id}`);
         } catch (error) {
