@@ -228,6 +228,12 @@ body {
     background-color: #3e3e40;
     color: #ffffff;
   }
+
+  /* Mobile navigation dark mode - explicit override */
+  .mobile-nav-blur {
+    background-color: rgba(28, 28, 30, 0.95) !important;
+    border-color: #2c2c2e !important;
+  }
 }
 
 /* Accent Color Overrides */
