@@ -78,18 +78,32 @@ export const PWAUpdateToast = () => {
 
     const handleUpdate = async () => {
         setIsUpdating(true);
-        // 1. Refresh registration to be sure
+        // 1. Refresh registration
         const reg = await navigator.serviceWorker.getRegistration();
 
         if (reg && reg.waiting) {
-            // 2. We have a waiting worker. Tell it to skip waiting.
+            // 2. Set a fallback timeout: if update takes too long (e.g. SW stuck), force it.
+            const timeoutId = setTimeout(() => {
+                console.warn("SW update timed out. Forcing hard release.");
+                reg.unregister().then(() => {
+                    window.location.reload();
+                });
+            }, 4000);
+
+            // 3. Listen for successful activation to clear timeout (optimization)
+            const onControllerChange = () => {
+                clearTimeout(timeoutId);
+                // Reload happens in the main useEffect
+            };
+            navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+
+            // 4. Send signal
             reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-            // The 'controllerchange' event (in useEffect) will handle the reload.
         } else {
-            // 3. No waiting worker? Just dismiss.
-            console.log("No waiting worker found. Dismissing.");
-            setShowUpdate(false);
-            // In dev mode, we just close it. In prod, the next visit will get it.
+            // No waiting worker - just unregister and reload to be safe
+            console.log("No waiting worker found. Performing hard refresh.");
+            if (reg) await reg.unregister();
+            window.location.reload();
         }
     };
 
