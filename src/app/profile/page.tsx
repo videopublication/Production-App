@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
+import { ActiveSessions } from '@/components/ActiveSessions';
 
 import { APP_CONFIG } from '@/lib/config';
 import { useToast } from '@/lib/toast-context';
@@ -157,6 +158,9 @@ User Agent: ${navigator.userAgent}
                     </div>
                 </div>
             </div>
+
+            {/* Active Sessions */}
+            <ActiveSessions />
 
             {/* Logout Button */}
             <div className="px-4 pt-4">

@@ -104,13 +104,20 @@ export default function CalendarPage() {
     }, [isFilterOpen]);
 
 
-    // Filter shoots based on crew selection
+    // Filter shoots based on crew selection and user role
     const filteredShoots = useMemo(() => {
+        // If user is just CREW (not ADMIN/MANAGER), they can ONLY see their own shoots
+        if (user && user.role === 'CREW') {
+            return shoots.filter(shoot => {
+                return assignments.some(a => a.shootId === shoot.id && a.userId === user.id);
+            });
+        }
+
         if (crewFilter === 'ALL') return shoots;
         return shoots.filter(shoot => {
             return assignments.some(a => a.shootId === shoot.id && a.userId === crewFilter);
         });
-    }, [shoots, assignments, crewFilter]);
+    }, [shoots, assignments, crewFilter, user]);
 
     // Get shoots for a specific date (including multi-day shoots that span this date)
     const getShootsForDate = (date: Date) => {
@@ -429,10 +436,10 @@ export default function CalendarPage() {
                                         }
                                     });
 
-                                    const rowCount = Math.max(2, occupied.length); // Min height ensures grid looks consistent
-                                    const rowHeight = 24; // height of each event bar + gap
-                                    const headerHeight = 32; // Approx height for date number area
-                                    const minWeekHeight = Math.max(70, (rowCount * rowHeight) + headerHeight);
+                                    const rowCount = Math.max(1, occupied.length); // Allow single row if empty
+                                    const rowHeight = 30; // Increased for better mobile spacing
+                                    const headerHeight = 36; // Header clearance
+                                    const minWeekHeight = Math.max(70, (rowCount * rowHeight) + headerHeight + 6);
 
                                     return (
                                         <div
@@ -454,7 +461,7 @@ export default function CalendarPage() {
                                                             setSelectedShoot(null);
                                                         }}
                                                         className={`
-                                                        h-full p-2 transition-colors relative z-0
+                                                        h-full p-2 pb-8 transition-colors relative z-0
                                                         ${dayIndex < 6 ? 'border-r border-gray-100 dark:border-gray-800' : ''}
                                                         ${isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}
                                                         ${!isCurrentMonth ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}
@@ -489,7 +496,7 @@ export default function CalendarPage() {
 
                                             {/* Events Layer - Placed on top using Grid positioning */}
                                             <div
-                                                className="absolute inset-x-0 top-9 bottom-1 pointer-events-none px-0.5 grid grid-cols-7"
+                                                className="absolute inset-x-0 top-11 bottom-1 pointer-events-none px-0.5 grid grid-cols-7"
                                                 style={{
                                                     gridTemplateRows: `repeat(${rowCount}, ${rowHeight}px)`
                                                 }}

@@ -123,6 +123,6 @@ export const config = {
          * - firebase-messaging-sw.js (Firebase service worker)
          * - api (API routes can have their own protection, or included)
          */
-        '/((?!_next/static|_next/image|favicon.ico|manifest.json|firebase-messaging-sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+        '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|workbox-.*|swe-worker-.*|firebase-messaging-sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2|ttf|eot)$).*)',
     ],
 }

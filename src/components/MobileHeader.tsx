@@ -46,7 +46,7 @@ export const MobileHeader = () => {
                 return name;
             }
         }
-        return 'Vpub';
+        return 'VP App';
     };
 
     return (

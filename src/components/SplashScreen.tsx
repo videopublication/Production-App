@@ -1,45 +1,48 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { Loader2 } from 'lucide-react';
 
 /**
  * A premium, full-screen splash screen component.
- * It displays the brand logo with a sleek breathing animation.
- * Used to hide the initial auth check and resource loading states.
+ * It displays the brand logo with a sleek pulsing animation and a loading indicator.
  */
 export const SplashScreen = () => {
-    // Optional: Local state to handle "exit" animations if we wanted to get fancy later
-    // For now, simple mounting/unmounting is sufficient for Next.js
-
     return (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background">
-            <div className="flex flex-col items-center animate-in fade-in zoom-in-95 duration-500">
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0a0a0a]">
+            {/* Background Effects */}
+            <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent opacity-50" />
+
+            <div className="relative z-10 flex flex-col items-center animate-in fade-in zoom-in-95 duration-700">
                 {/* Logo Container */}
-                <div className="relative w-28 h-28 mb-8">
-                    {/* Ring Animation */}
-                    <div className="absolute inset-0 rounded-full border-4 border-t-primary border-r-transparent border-b-primary/30 border-l-transparent animate-spin duration-1000" />
+                <div className="relative w-32 h-32 mb-8 flex items-center justify-center">
+                    {/* Glowing effect behind logo */}
+                    <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-2xl animate-pulse" />
 
                     {/* Logo Image */}
-                    <div className="absolute inset-4 rounded-full overflow-hidden flex items-center justify-center shadow-lg shadow-primary/20 animate-pulse bg-white/10 backdrop-blur-sm">
+                    <div className="relative w-28 h-28 bg-white/5 backdrop-blur-sm rounded-3xl border border-white/10 p-4 shadow-2xl flex items-center justify-center">
                         <img
                             src="/logo.png"
                             alt="Brand Logo"
-                            className="w-full h-full object-contain p-2"
+                            className="w-full h-full object-contain drop-shadow-md"
                         />
                     </div>
+
+                    {/* Floating badge/accent if needed, or just keep it clean */}
                 </div>
 
                 {/* Brand Name */}
-                <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-violet-600 bg-clip-text text-transparent animate-pulse">
-                    VP App
+                <h1 className="text-3xl font-bold tracking-tight mb-2 text-white">
+                    <span className="text-blue-500">VP</span> App
                 </h1>
 
-                {/* Subtle Loading Text */}
-                <p className="mt-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-widest animate-pulse">
-                    Loading
-                </p>
+                {/* Loading Indicator */}
+                <div className="flex items-center gap-2 mt-4">
+                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">
+                        Initializing...
+                    </p>
+                </div>
             </div>
-
-            {/* Background Mesh Effect (Matches Landing Page vibe but subtler) */}
-            <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/5 via-background to-background opacity-40" />
         </div>
     );
 };
+

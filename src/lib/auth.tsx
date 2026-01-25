@@ -338,7 +338,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = async () => {
         const currentUser = user;
-        await supabase.auth.signOut();
+        // Use scope: 'local' so we don't invalidate sessions on other devices
+        await supabase.auth.signOut({ scope: 'local' });
 
         // Log logout
         if (currentUser) {

@@ -44,7 +44,7 @@ export const Header = () => {
             } pl-6 dark:bg-[#1c1c1e]/80 dark:border-gray-800`}>
             {/* Page title area */}
             <div className="flex-1">
-                <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">Vpub App</span>
+                <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">VP App</span>
             </div>
 
             <div className="flex items-center gap-2">
