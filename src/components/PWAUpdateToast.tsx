@@ -74,13 +74,23 @@ export const PWAUpdateToast = () => {
         };
     }, []);
 
-    const handleUpdate = () => {
-        if (!registration || !registration.waiting) return;
-        // Send message to skip waiting and activate the new worker
-        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    const [isUpdating, setIsUpdating] = useState(false);
 
-        // Sometimes strictly sending message isn't enough if the logic inside SW doesn't handle it (though workbox usually does).
-        // The controllerchange listener will handle the reload.
+    const handleUpdate = async () => {
+        setIsUpdating(true);
+        // 1. Refresh registration to be sure
+        const reg = await navigator.serviceWorker.getRegistration();
+
+        if (reg && reg.waiting) {
+            // 2. We have a waiting worker. Tell it to skip waiting.
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            // The 'controllerchange' event (in useEffect) will handle the reload.
+        } else {
+            // 3. No waiting worker? Just dismiss.
+            console.log("No waiting worker found. Dismissing.");
+            setShowUpdate(false);
+            // In dev mode, we just close it. In prod, the next visit will get it.
+        }
     };
 
     const handleDismiss = () => {
@@ -90,21 +100,22 @@ export const PWAUpdateToast = () => {
     if (!showUpdate) return null;
 
     return (
-        <div className="fixed bottom-4 left-4 right-4 z-[60] animate-in slide-in-from-bottom-5 duration-500 flex justify-center">
-            <div className="bg-[#1c1c1e] text-white/90 border border-white/10 shadow-2xl rounded-2xl p-5 w-full max-w-sm relative overflow-hidden">
+        <div className="fixed bottom-24 left-4 right-4 z-[100] animate-in slide-in-from-bottom-5 duration-500 flex justify-center pointer-events-none">
+            <div className="bg-[#1c1c1e] text-white border border-white/10 shadow-2xl rounded-2xl p-5 w-full max-w-sm relative overflow-hidden pointer-events-auto">
                 {/* Visual Flair */}
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
 
                 <button
                     onClick={handleDismiss}
-                    className="absolute top-3 right-3 p-1 text-gray-400 hover:text-white transition-colors"
+                    className="absolute top-3 right-3 p-2 text-gray-400 hover:text-white transition-colors cursor-pointer z-10"
+                    aria-label="Close"
                 >
                     <X size={18} />
                 </button>
 
                 <div className="flex gap-4 items-start pt-2">
                     <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-3 rounded-xl shrink-0 flex items-center justify-center shadow-lg shadow-blue-900/20">
-                        <RefreshCw className="w-6 h-6 text-white animate-spin-slow" />
+                        <RefreshCw className={`w-6 h-6 text-white ${isUpdating ? 'animate-spin' : 'animate-spin-slow'}`} />
                     </div>
 
                     <div className="space-y-2 flex-1">
@@ -115,16 +126,22 @@ export const PWAUpdateToast = () => {
                             </span>
                         </h3>
                         <p className="text-sm text-gray-400 leading-snug">
-                            A new version of Vpub is available. Update now for the latest features and speed improvements.
+                            A new version of Vpub is available. Update now for the latest features.
                         </p>
 
-                        <Button
+                        <button
                             onClick={handleUpdate}
-                            className="w-full bg-white text-black hover:bg-gray-200 font-bold py-2.5 rounded-xl mt-2 transition-all flex items-center justify-center gap-2"
+                            disabled={isUpdating}
+                            style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                            className="w-full font-bold py-3 rounded-xl mt-3 transition-opacity flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 text-sm disabled:opacity-70"
                         >
-                            <Zap size={16} className="fill-current" />
-                            Update Now
-                        </Button>
+                            {isUpdating ? 'Updating...' : (
+                                <>
+                                    <Zap size={16} className="fill-current" />
+                                    Update Now
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>
