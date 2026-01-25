@@ -108,6 +108,8 @@
 :root {
   --background: #f5f5f7;
   --foreground: #1d1d1f;
+  --nav-bg: rgba(255, 255, 255, 0.8);
+  --nav-border: #e5e5ea;
   --primary: #0071e3;
   --primary-foreground: #ffffff;
   --secondary: #ffffff;
@@ -155,6 +157,8 @@ body {
   color-scheme: dark;
   --background: #000000;
   --foreground: #f5f5f7;
+  --nav-bg: rgba(28, 28, 30, 0.9);
+  --nav-border: #2c2c2e;
   --secondary: #1c1c1e;
   --secondary-foreground: #ffffff;
   --muted: #1c1c1e;
@@ -440,7 +444,8 @@ textarea:focus {
 .mobile-nav-blur {
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
-  background-color: rgba(255, 255, 255, 0.72);
+  background-color: var(--nav-bg) !important;
+  border-color: var(--nav-border) !important;
 }
 
 /* Native-like list items */

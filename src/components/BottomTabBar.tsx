@@ -131,9 +131,9 @@ export const BottomTabBar = () => {
     const visibleTabs = getOrderedTabs();
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-[100] md:hidden">
             {/* Glassmorphic background */}
-            <div className="absolute inset-0 bg-white/80 dark:bg-background/90 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800" />
+            <div className="absolute inset-0 mobile-nav-blur border-t" />
 
             {/* Tab container */}
             <div className="relative flex items-center justify-around px-2 pb-safe-bottom pt-2">
