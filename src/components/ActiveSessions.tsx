@@ -68,41 +68,41 @@ export const ActiveSessions = () => {
             <p className="section-header-ios">Active Sessions</p>
 
             {/* Main Card */}
-            <div className="mx-4 overflow-hidden rounded-2xl bg-[#1c1c1e] shadow-sm ring-1 ring-white/10">
+            <div className="mx-4 overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] shadow-sm ring-1 ring-gray-200 dark:ring-white/10">
                 {/* Device Row */}
-                <div className="p-4 flex items-start gap-4 border-b border-white/5">
-                    <div className="w-12 h-12 rounded-full bg-green-900/20 flex items-center justify-center shrink-0">
+                <div className="p-4 flex items-start gap-4 border-b border-gray-100 dark:border-white/5">
+                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center shrink-0">
                         {currentDevice.device === 'Mobile' ?
-                            <Smartphone className="w-6 h-6 text-green-500" /> :
-                            <Laptop className="w-6 h-6 text-green-500" />
+                            <Smartphone className="w-6 h-6 text-green-600 dark:text-green-500" /> :
+                            <Laptop className="w-6 h-6 text-green-600 dark:text-green-500" />
                         }
                     </div>
 
                     <div className="flex-1 min-w-0 pt-0.5">
                         <div className="flex items-center gap-3 mb-1">
-                            <h3 className="text-[17px] font-semibold text-white">
+                            <h3 className="text-[17px] font-semibold text-gray-900 dark:text-white">
                                 {currentDevice.os} {currentDevice.browser}
                             </h3>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-500 uppercase tracking-wide">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-500 uppercase tracking-wide">
                                 This Device
                             </span>
                         </div>
-                        <p className="text-[15px] text-gray-400 mb-1">
+                        <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-1">
                             Last active: Just now
                         </p>
-                        <p className="text-[13px] text-gray-500 font-mono truncate opacity-60">
+                        <p className="text-[13px] text-gray-400 dark:text-gray-500 font-mono truncate opacity-60">
                             {navigator.userAgent}
                         </p>
                     </div>
                 </div>
 
                 {/* Info Row & Action */}
-                <div className="p-4 flex gap-4 bg-white/5 transition-colors hover:bg-white/10">
+                <div className="p-4 flex gap-4 bg-gray-50 dark:bg-white/5 transition-colors hover:bg-gray-100 dark:hover:bg-white/10">
                     <div className="w-12 flex justify-center shrink-0 pt-0.5">
-                        <Shield className="w-5 h-5 text-gray-400" />
+                        <Shield className="w-5 h-5 text-gray-400 dark:text-gray-400" />
                     </div>
                     <div className="flex-1">
-                        <p className="text-[13px] leading-relaxed text-gray-400">
+                        <p className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
                             To protect your account, you can <button onClick={() => setShowSignOutModal(true)} className="text-[#ff453a] hover:underline font-medium inline-block">sign out from all devices</button>.
                             This will invalidate all active sessions.
                         </p>
@@ -115,31 +115,31 @@ export const ActiveSessions = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     {/* Backdrop */}
                     <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
+                        className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
                         onClick={() => setShowSignOutModal(false)}
                     />
 
                     {/* Modal Content */}
-                    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-[#1c1c1e] shadow-2xl ring-1 ring-white/10 scale-100 animate-scale-in">
+                    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] shadow-2xl ring-1 ring-gray-200 dark:ring-white/10 scale-100 animate-scale-in">
                         <div className="p-6 text-center">
-                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
-                                <Trash2 className="h-8 w-8 text-red-500" />
+                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/10">
+                                <Trash2 className="h-8 w-8 text-red-600 dark:text-red-500" />
                             </div>
-                            <h3 className="mb-2 text-xl font-bold text-white">Sign Out All Devices?</h3>
-                            <p className="text-[15px] text-gray-400 leading-relaxed">
+                            <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">Sign Out All Devices?</h3>
+                            <p className="text-[15px] text-gray-500 dark:text-gray-400 leading-relaxed">
                                 This will remove your account from all currently signed-in devices. You will need to log in again.
                             </p>
                         </div>
-                        <div className="grid grid-cols-2 gap-px bg-white/10 border-t border-white/10">
+                        <div className="grid grid-cols-2 gap-px bg-gray-100 dark:bg-white/10 border-t border-gray-100 dark:border-white/10">
                             <button
                                 onClick={() => setShowSignOutModal(false)}
-                                className="py-4 text-[17px] font-medium text-gray-300 hover:bg-white/5 active:bg-white/10 transition-colors"
+                                className="py-4 text-[17px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 active:bg-gray-100 dark:active:bg-white/10 transition-colors bg-white dark:bg-transparent"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={confirmSignOutAll}
-                                className="py-4 text-[17px] font-bold text-[#ff453a] hover:bg-white/5 active:bg-white/10 transition-colors"
+                                className="py-4 text-[17px] font-bold text-[#ff453a] hover:bg-gray-50 dark:hover:bg-white/5 active:bg-gray-100 dark:active:bg-white/10 transition-colors bg-white dark:bg-transparent"
                             >
                                 Sign Out
                             </button>
