@@ -52,8 +52,8 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
     // Lock orientation to portrait
     useEffect(() => {
-        if (typeof window !== 'undefined' && window.screen?.orientation?.lock) {
-            window.screen.orientation.lock('portrait').catch(() => {
+        if (typeof window !== 'undefined' && (window.screen as any)?.orientation?.lock) {
+            (window.screen.orientation as any).lock('portrait').catch(() => {
                 // Silently fail if not supported or requires gesture
             });
         }
