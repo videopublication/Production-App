@@ -133,7 +133,7 @@ export const BottomTabBar = () => {
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-[100] md:hidden">
             {/* Glassmorphic background */}
-            <div className="absolute inset-0 mobile-nav-blur border-t" />
+            <div className="absolute inset-0 bg-white/90 dark:bg-[#1c1c1e]/95 backdrop-blur-xl backdrop-saturate-150 border-t border-gray-200/80 dark:border-[#38383a]" />
 
             {/* Tab container */}
             <div className="relative flex items-center justify-around px-2 pb-safe-bottom pt-2">
