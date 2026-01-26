@@ -12,6 +12,7 @@ import { QRScanner, MobileScanner } from '@/components/QRScanner';
 import { Select } from '@/components/Select';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { useConfirm } from '@/lib/dialog-context';
 import { generateTransactionId, generateUUID } from '@/lib/id';
 import { useInventory } from '@/hooks/useInventory';
@@ -85,9 +86,17 @@ export default function CheckoutPage() {
     const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Data Hooks
-    const { equipment: equipmentList, users: allUsers, isLoading: isInventoryLoading } = useInventory();
-    const { data: shoots = [], isLoading: isShootsLoading } = useShoots();
-    const { data: assignments = [] } = useAssignments();
+    const { equipment: equipmentList, users: allUsers, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
+    const { data: shoots = [], isLoading: isShootsLoading, refetch: refetchShoots } = useShoots();
+    const { data: assignments = [], refetch: refetchAssignments } = useAssignments();
+
+    const handleRefresh = async () => {
+        await Promise.all([
+            refreshInventory(),
+            refetchShoots(),
+            refetchAssignments()
+        ]);
+    };
 
     // Filter users based on role for assignment dropdown
     const users = useMemo(() => {
@@ -422,7 +431,7 @@ export default function CheckoutPage() {
     }
 
     return (
-        <>
+        <PullToRefresh onRefresh={handleRefresh}>
             {/* Desktop Layout */}
             <div className="hidden md:block max-w-7xl mx-auto space-y-8 pb-20">
                 <div className="flex flex-col space-y-2">
@@ -958,6 +967,6 @@ export default function CheckoutPage() {
                 </div>
             </div>
 
-        </>
+        </PullToRefresh>
     );
 }

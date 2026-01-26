@@ -43,7 +43,7 @@ export default function InventoryPage() {
 
     const cleanupAssignments = async (itemsToCleanup: Equipment[]) => {
         await Promise.all(itemsToCleanup.map(item =>
-            updateEquipment({ id: item.id, updates: { assignedTo: null } })
+            updateEquipment({ id: item.id, updates: { assignedTo: null as any } })
         ));
     };
 
