@@ -53,6 +53,24 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Handle back button to close dropdown
+    useEffect(() => {
+        if (isOpen) {
+            // Push state when opening
+            window.history.pushState({ multiSelectOpen: true }, '', window.location.href);
+
+            const handlePopState = () => {
+                // When back button is pressed, close dropdown
+                setIsOpen(false);
+            };
+
+            window.addEventListener('popstate', handlePopState);
+            return () => {
+                window.removeEventListener('popstate', handlePopState);
+            };
+        }
+    }, [isOpen]);
+
     useEffect(() => {
         if (!isOpen) {
             setSearch('');
@@ -92,8 +110,14 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                     <input
                         ref={searchInputRef}
                         type="text"
-                        className="flex-1 w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
-                        placeholder={selectedOptions.length > 0 ? `${selectedOptions.length} Selected` : placeholder}
+                        className="flex-1 w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none truncate"
+                        placeholder={
+                            selectedOptions.length === 0
+                                ? placeholder
+                                : selectedOptions.length <= 2
+                                    ? selectedOptions.map(o => o.label.split(' (')[0]).join(', ')
+                                    : `${selectedOptions.slice(0, 2).map(o => o.label.split(' (')[0]).join(', ')} +${selectedOptions.length - 2}`
+                        }
                         value={search}
                         onChange={(e) => {
                             setSearch(e.target.value);
@@ -108,15 +132,27 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                                 {selectedOptions.length}
                             </span>
                         )}
-                        <svg
-                            className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
+                        <div
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (isOpen) {
+                                    window.history.back(); // Using history back ensures state is cleaned up
+                                } else {
+                                    setIsOpen(true);
+                                }
+                            }}
+                            className="cursor-pointer p-1"
                         >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
+                            <svg
+                                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
                     </div>
                 </div>
 

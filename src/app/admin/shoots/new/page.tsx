@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ShootForm } from '@/components/ShootForm';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
@@ -15,9 +15,19 @@ import { generateUUID } from '@/lib/id';
 
 export default function NewShootPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [users, setUsers] = useState<User[]>([]);
+
+    // Get date from query params (if any) - from Calendar
+    const dateParam = searchParams.get('date');
+    const initialData: Partial<Shoot> = {};
+
+    if (dateParam) {
+        // Default to 10:00 AM on the selected date to ensure it lands on the correct day in all timezones
+        initialData.startTime = `${dateParam}T10:00:00`;
+    }
 
     useEffect(() => {
         loadUsers();
@@ -99,6 +109,7 @@ export default function NewShootPage() {
             <div className="w-full">
                 <ShootForm
                     users={users}
+                    initialData={initialData}
                     onSubmit={handleSubmit}
                     isLoading={isLoading}
                     buttonLabel="Create Shoot"

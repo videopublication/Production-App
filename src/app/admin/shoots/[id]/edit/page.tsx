@@ -12,6 +12,7 @@ import { Shoot, User, Assignment } from '@/types';
 import { Button } from '@/components/Button';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { generateUUID } from '@/lib/id';
 
 export default function EditShootPage() {
     const router = useRouter();
@@ -79,7 +80,7 @@ export default function EditShootPage() {
             // 2. Add new assignments
             const toAdd = crewIds.filter(uid => !existingCrewIds.includes(uid));
             const newAssignments: Assignment[] = toAdd.map(userId => ({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 shootId: shoot.id, // Use UUID
                 userId: userId,
                 role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
@@ -151,7 +152,7 @@ export default function EditShootPage() {
 
             if (user) {
                 await storage.addLog({
-                    id: crypto.randomUUID(),
+                    id: generateUUID(),
                     action: 'EDIT',
                     entityId: shoot.id, // Use UUID
                     userId: user.id,
@@ -164,7 +165,7 @@ export default function EditShootPage() {
             await queryClient.invalidateQueries({ queryKey: ['shoots'] });
             await queryClient.invalidateQueries({ queryKey: ['assignments'] });
 
-            router.push(`/admin/shoots/${shoot.id}`);
+            router.back();
         } catch (error) {
             console.error('Failed to update shoot:', error);
         } finally {
@@ -185,11 +186,14 @@ export default function EditShootPage() {
     return (
         <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
-                <Link href={`/admin/shoots/${id}`}>
-                    <Button variant="ghost" size="icon" className="rounded-full">
-                        <ArrowLeft size={20} />
-                    </Button>
-                </Link>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full"
+                    onClick={() => router.back()}
+                >
+                    <ArrowLeft size={20} />
+                </Button>
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
                     Edit Shoot {shoot?.shootNumber ? <span className="text-gray-500 dark:text-gray-400">#{shoot.shootNumber}</span> : ''}
                 </h1>

@@ -43,7 +43,7 @@ export default function InventoryPage() {
 
     const cleanupAssignments = async (itemsToCleanup: Equipment[]) => {
         await Promise.all(itemsToCleanup.map(item =>
-            updateEquipment({ id: item.id, updates: { assignedTo: undefined } })
+            updateEquipment({ id: item.id, updates: { assignedTo: null } })
         ));
     };
 
@@ -392,6 +392,19 @@ export default function InventoryPage() {
                         </div>
                         {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
                             <div className="flex gap-1 sm:gap-2">
+                                {/* database cleanup button - shows only if needed */}
+                                {items.some(i => i.status === 'AVAILABLE' && i.assignedTo) && user.role === 'ADMIN' && (
+                                    <Button
+                                        variant="danger"
+                                        size="sm"
+                                        className="whitespace-nowrap px-2 sm:px-3 animate-pulse"
+                                        onClick={handleCleanupAssignments}
+                                        title="Fix inconsistent data: Items marked Available but still have assignees"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-database-zap"><path d="M7.4 17.65c-.66.86-1.4 1.85-1.4 3.75 0 0 4.1 1.7 8 0 0-1.9-.74-2.89-1.4-3.75l-5.2-7.25c-.66-.86.13-1.65.95-1.65h3.3c.82 0 1.61.79.95 1.65l-5.2 7.25Z" /><path d="M12 2c5.523 0 10 4.477 10 10 0 2.275-.76 4.375-2.031 6.094" /><path d="M2.031 11.906A10 10 0 0 1 12 2" /></svg>
+                                        <span className="hidden sm:inline ml-2">Fix Data</span>
+                                    </Button>
+                                )}
                                 <Link href="/inventory/bulk-add">
                                     <Button variant="secondary" size="sm" className="whitespace-nowrap px-2 sm:px-3">
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -400,6 +413,30 @@ export default function InventoryPage() {
                                         <span className="hidden sm:inline ml-2">Bulk Import</span>
                                     </Button>
                                 </Link>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="whitespace-nowrap px-2 sm:px-3"
+                                    onClick={() => {
+                                        const headers = ['Name', 'Category', 'Barcode', 'Serial Number', 'Status', 'Assigned To'];
+                                        const rows = filteredItems.map(item => [
+                                            `"${item.name.replace(/"/g, '""')}"`,
+                                            `"${item.category.replace(/"/g, '""')}"`,
+                                            item.barcode,
+                                            item.serialNumber || '',
+                                            item.status,
+                                            item.assignedTo ? (users[item.assignedTo] || 'Unknown') : ''
+                                        ].join(','));
+
+                                        const csvContent = [headers.join(','), ...rows].join('\n');
+                                        downloadFile(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), `inventory_export_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
+                                    }}
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span className="hidden sm:inline ml-2">Export CSV</span>
+                                </Button>
                                 <Link href="/inventory/add">
                                     <Button className="whitespace-nowrap px-2 sm:px-4" size="sm">
                                         <span className="hidden sm:inline">Add Equipment</span>

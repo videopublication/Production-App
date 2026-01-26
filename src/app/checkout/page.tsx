@@ -168,15 +168,28 @@ export default function CheckoutPage() {
 
         const savedUsers = sessionStorage.getItem('checkout-users');
         if (savedUsers) {
-            try { setSelectedUserIds(JSON.parse(savedUsers)); } catch { }
-        } else if (user) {
+            try {
+                const parsed = JSON.parse(savedUsers);
+                // If user is Admin/Manager and the saved selection is just themselves, clear it (don't default select)
+                if (user && ['ADMIN', 'MANAGER'].includes(user.role) && parsed.length === 1 && parsed[0] === user.id) {
+                    setSelectedUserIds([]);
+                    sessionStorage.removeItem('checkout-users');
+                } else {
+                    setSelectedUserIds(parsed);
+                }
+            } catch { }
+        } else if (user && !['ADMIN', 'MANAGER'].includes(user.role)) {
+            // Only auto-select for Crew who can't change it
             setSelectedUserIds([user.id]);
         }
     }, [user]);
 
     useEffect(() => {
         if (user && selectedUserIds.length === 0 && !sessionStorage.getItem('checkout-users')) {
-            setSelectedUserIds([user.id]);
+            // Only auto-select for Crew who can't change it
+            if (!['ADMIN', 'MANAGER'].includes(user.role)) {
+                setSelectedUserIds([user.id]);
+            }
         }
     }, [user]);
 

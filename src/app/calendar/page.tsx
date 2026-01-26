@@ -576,14 +576,26 @@ export default function CalendarPage() {
                     <div className="lg:col-span-1">
                         <div className="rounded-2xl shadow-sm overflow-hidden sticky top-6 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
                             {/* Sidebar Header */}
-                            <div className="px-5 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">
-                                <h3 className="font-bold text-lg text-gray-900 dark:text-white">
-                                    {selectedDate ? format(selectedDate, 'EEEE, MMMM d') : 'Select a Date'}
-                                </h3>
-                                {selectedDate && (
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                                        {shootsForSelectedDate.length} shoot{shootsForSelectedDate.length !== 1 ? 's' : ''} scheduled
-                                    </p>
+                            <div className="px-5 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">
+                                        {selectedDate ? format(selectedDate, 'EEEE, MMMM d') : 'Select a Date'}
+                                    </h3>
+                                    {selectedDate && (
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                                            {shootsForSelectedDate.length} shoot{shootsForSelectedDate.length !== 1 ? 's' : ''} scheduled
+                                        </p>
+                                    )}
+                                </div>
+                                {selectedDate && user?.role === 'ADMIN' && (
+                                    <Link href={`/admin/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
+                                        <button
+                                            className="p-2 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                            title="Schedule another shoot"
+                                        >
+                                            <Plus size={20} />
+                                        </button>
+                                    </Link>
                                 )}
                             </div>
 
@@ -601,7 +613,7 @@ export default function CalendarPage() {
                                         </div>
                                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No shoots on this day</p>
                                         {user?.role === 'ADMIN' && (
-                                            <Link href="/admin/shoots/new" className="mt-3 inline-block">
+                                            <Link href={`/admin/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`} className="mt-3 inline-block">
                                                 <Button size="sm" variant="secondary">Schedule Shoot</Button>
                                             </Link>
                                         )}

@@ -9,15 +9,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage'; // Still used for type referencing if valid, or remove if unused, but kept for safety. Ideally hooks replace it but types might be needed. Alternatively just imports.
-import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react';
-import { format, parseISO, isAfter, isBefore, isToday } from 'date-fns';
+import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X } from 'lucide-react';
+import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 import { PullToRefresh } from '@/components/PullToRefresh';
 
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'CONFIRMED' | 'CANCELLED';
-type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST';
+type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST' | 'CUSTOM';
 type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber';
 type SortDirection = 'asc' | 'desc';
 
@@ -37,6 +37,8 @@ export default function ShootList() {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
     const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
+    const [customDateRange, setCustomDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+
     const [crewFilter, setCrewFilter] = useState<string>('ALL'); // Crew filter state
     const [showFilters, setShowFilters] = useState(false);
     const [isCrewFilterOpen, setIsCrewFilterOpen] = useState(false);
@@ -55,7 +57,7 @@ export default function ShootList() {
     }, []);
 
     // Sorting state (for list view)
-    const [sortField, setSortField] = useState<SortField>('date');
+    const [sortField, setSortField] = useState<SortField>('shootNumber');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
     const [expandedCrewShootId, setExpandedCrewShootId] = useState<string | null>(null);
@@ -113,6 +115,10 @@ export default function ShootList() {
                     matchesTime = isAfter(shootDate, now);
                 } else if (timeFilter === 'PAST') {
                     matchesTime = isBefore(shootDate, now) && !isToday(shootDate);
+                } else if (timeFilter === 'CUSTOM' && customDateRange.start && customDateRange.end) {
+                    const startDate = startOfDay(parseISO(customDateRange.start));
+                    const endDate = endOfDay(parseISO(customDateRange.end));
+                    matchesTime = isWithinInterval(shootDate, { start: startDate, end: endDate });
                 }
             }
 
@@ -124,7 +130,7 @@ export default function ShootList() {
 
             return matchesSearch && matchesStatus && matchesTime && matchesCrew;
         });
-    }, [shoots, searchQuery, statusFilter, timeFilter, crewFilter, user, assignments]);
+    }, [shoots, searchQuery, statusFilter, timeFilter, crewFilter, user, assignments, customDateRange]);
 
     // Sorted shoots for list view
     const sortedShoots = useMemo(() => {
@@ -222,15 +228,59 @@ export default function ShootList() {
                         <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white">Shoots</h1>
                         <p className="text-xs sm:text-sm mt-0.5 sm:mt-1 text-gray-500 dark:text-gray-400">Manage upcoming productions</p>
                     </div>
-                    {user?.role === 'ADMIN' && (
-                        <Link href="/admin/shoots/new" className="shrink-0">
-                            <Button variant="primary" className="gap-2 shadow-lg rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold">
-                                <Plus size={16} strokeWidth={2.5} />
-                                <span className="hidden xs:inline">New Shoot</span>
-                                <span className="xs:hidden">New</span>
+
+                    <div className="flex gap-2">
+                        {user?.role === 'ADMIN' && (
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    const headers = ['Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 'Crew Count', 'Crew Names', 'Description'];
+                                    const rows = filteredShoots.map(shoot => {
+                                        const crew = getShootCrew(shoot.id);
+                                        const date = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
+                                        const time = shoot.startTime ? format(parseISO(shoot.startTime), 'HH:mm') : '';
+                                        const crewNames = crew.map(c => c.name).join(', ');
+
+                                        return [
+                                            shoot.shootNumber || '',
+                                            `"${shoot.title.replace(/"/g, '""')}"`, // Escape quotes
+                                            date,
+                                            time,
+                                            `"${(shoot.location || '').replace(/"/g, '""')}"`,
+                                            shoot.status,
+                                            crew.length,
+                                            `"${crewNames}"`,
+                                            `"${(shoot.description || '').replace(/"/g, '""')}"`
+                                        ].join(',');
+                                    });
+
+                                    const csvContent = [headers.join(','), ...rows].join('\n');
+                                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                                    const url = URL.createObjectURL(blob);
+                                    const link = document.createElement('a');
+                                    link.setAttribute('href', url);
+                                    link.setAttribute('download', `shoots_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                }}
+                                className="flex gap-2 shadow-sm rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold bg-white dark:bg-[#1c1c1e] text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                                <FileText size={16} strokeWidth={2.5} />
+                                <span className="hidden sm:inline">Export CSV</span>
+                                <span className="sm:hidden">CSV</span>
                             </Button>
-                        </Link>
-                    )}
+                        )}
+                        {user?.role === 'ADMIN' && (
+                            <Link href="/admin/shoots/new" className="shrink-0">
+                                <Button variant="primary" className="gap-2 shadow-lg rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold">
+                                    <Plus size={16} strokeWidth={2.5} />
+                                    <span className="hidden xs:inline">New Shoot</span>
+                                    <span className="xs:hidden">New</span>
+                                </Button>
+                            </Link>
+                        )}
+                    </div>
                 </div>
 
                 {/* Search & Filters Bar */}
@@ -331,22 +381,45 @@ export default function ShootList() {
                             </div>
 
                             {/* Time Filter */}
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">When:</span>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {(['ALL', 'TODAY', 'UPCOMING', 'PAST'] as TimeFilter[]).map(time => (
-                                        <button
-                                            key={time}
-                                            onClick={() => setTimeFilter(time)}
-                                            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${timeFilter === time
-                                                ? 'bg-blue-500 text-white'
-                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                                                }`}
-                                        >
-                                            {time === 'ALL' ? 'All' : time.charAt(0) + time.slice(1).toLowerCase()}
-                                        </button>
-                                    ))}
+                            <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">When:</span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {(['ALL', 'TODAY', 'UPCOMING', 'PAST', 'CUSTOM'] as TimeFilter[]).map(time => (
+                                            <button
+                                                key={time}
+                                                onClick={() => setTimeFilter(time)}
+                                                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${timeFilter === time
+                                                    ? 'bg-blue-500 text-white'
+                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                    }`}
+                                            >
+                                                {time === 'ALL' ? 'All' : time.charAt(0) + time.slice(1).toLowerCase()}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
+
+                                {/* Custom Date Inputs */}
+                                {timeFilter === 'CUSTOM' && (
+                                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                                        <input
+                                            type="date"
+                                            value={customDateRange.start}
+                                            onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                            className="px-2 py-1 text-xs rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700"
+                                            placeholder="Start Date"
+                                        />
+                                        <span className="text-gray-400">-</span>
+                                        <input
+                                            type="date"
+                                            value={customDateRange.end}
+                                            onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                            className="px-2 py-1 text-xs rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700"
+                                            placeholder="End Date"
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Sort Filter (Visible inside filters on Desktop) */}
@@ -445,6 +518,22 @@ export default function ShootList() {
                                         )}
                                     </div>
                                 </div>
+                            )}
+
+                            {/* Clear Filters (Visible if any filter active) */}
+                            {(statusFilter !== 'ALL' || timeFilter !== 'ALL' || crewFilter !== 'ALL') && (
+                                <button
+                                    onClick={() => {
+                                        setStatusFilter('ALL');
+                                        setTimeFilter('ALL');
+                                        setCrewFilter('ALL');
+                                        setCustomDateRange({ start: '', end: '' });
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] sm:text-xs font-semibold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                >
+                                    <X size={12} />
+                                    Clear
+                                </button>
                             )}
                         </div>
                     )}

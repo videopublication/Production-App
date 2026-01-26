@@ -53,6 +53,24 @@ export const Select: React.FC<SelectProps> = ({
         }
     }, [isOpen]);
 
+    // Handle back button to close dropdown
+    useEffect(() => {
+        if (isOpen) {
+            // Push state when opening
+            window.history.pushState({ selectOpen: true }, '', window.location.href);
+
+            const handlePopState = () => {
+                // When back button is pressed, close dropdown
+                setIsOpen(false);
+            };
+
+            window.addEventListener('popstate', handlePopState);
+            return () => {
+                window.removeEventListener('popstate', handlePopState);
+            };
+        }
+    }, [isOpen]);
+
     return (
         <div className={`${className}`} ref={containerRef}>
             {label && (
@@ -90,20 +108,32 @@ export const Select: React.FC<SelectProps> = ({
                     />
 
                     <div className="flex items-center gap-1">
-                        {selectedOption && !search && (
+                        {selectedOption && selectedOption.value && !search && (
                             <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-primary/10 text-primary">
                                 Selected
                             </span>
                         )}
-                        <svg
-                            className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
+                        <div
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (isOpen) {
+                                    window.history.back(); // Using history back ensures state is cleaned up
+                                } else {
+                                    setIsOpen(true);
+                                }
+                            }}
+                            className="cursor-pointer p-1"
                         >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
+                            <svg
+                                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
                     </div>
                 </div>
 

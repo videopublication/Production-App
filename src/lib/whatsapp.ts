@@ -6,7 +6,8 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
     const startTime = shoot.startTime ? format(parseISO(shoot.startTime), 'h:mm a') : 'TBD';
     const endTime = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : 'TBD';
 
-    let message = `🎬 *SHOOT DETAILS* 🎬\n\n`;
+    let message = `Namaskaram,\n\n🎬 *SHOOT DETAILS* 🎬\n\n`;
+
     if (shoot.shootNumber) {
         message += `*Shoot ID:* #${shoot.shootNumber}\n`;
     }
@@ -14,7 +15,13 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
     message += `*Date:* ${date}\n`;
     message += `*Time:* ${startTime} - ${endTime}\n`;
     message += `*Location:* ${shoot.location || 'Not set'}\n`;
-    message += `*Description:* ${shoot.description || 'No description'}\n\n`;
+
+    if (shoot.description && shoot.description !== 'No description') {
+        message += `*Description:* ${shoot.description}\n`;
+    }
+
+    // Add spacing before POC
+    message += `\n`;
 
     if (shoot.pocName) {
         message += `👤 *POC:* ${shoot.pocName} ${shoot.pocContact ? `(${shoot.pocContact})` : ''}\n\n`;
@@ -32,6 +39,8 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
     } else {
         message += `- No crew assigned yet\n`;
     }
+
+    message += `\nPranam 🙏`;
 
     return message;
 };
