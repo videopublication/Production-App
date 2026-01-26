@@ -10,6 +10,8 @@ import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useEquipment, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useAssignments } from '@/hooks/useAssignments';
 
 export default function ReturnsPage() {
     const router = useRouter();
@@ -19,11 +21,41 @@ export default function ReturnsPage() {
     const { showToast } = useToast();
     const isOnline = useOnlineStatus();
 
-    // Derive checked out items from cached inventory
+    const { data: allTransactions = [] } = useTransactions();
+    const { data: allAssignments = [] } = useAssignments();
+
+    // Derive checked out items from transactions where the user is involved
     const checkedOutItems = React.useMemo(() => {
-        if (!user || !allItems) return [];
-        return allItems.filter(i => i.status === 'CHECKED_OUT' && i.assignedTo === user.id);
-    }, [user, allItems]);
+        if (!user || !allItems || !allTransactions) return [];
+
+        // 1. Find shoots where the user is assigned
+        const myShootIds = allAssignments
+            .filter(a => a.userId === user.id && a.status === 'ACCEPTED')
+            .map(a => a.shootId);
+
+        // 2. Find relevant OPEN transactions
+        const relevantTxns = allTransactions.filter(txn => {
+            if (txn.status !== 'OPEN') return false;
+
+            const isPrimary = txn.userId === user.id;
+            const isAdditional = txn.additionalUsers?.includes(user.id);
+            const isShootCrew = txn.shootId && myShootIds.includes(txn.shootId);
+
+            return isPrimary || isAdditional || isShootCrew;
+        });
+
+        // 3. Collect all item IDs from these transactions
+        const relevantItemIds = new Set<string>();
+        relevantTxns.forEach(txn => {
+            txn.items.forEach(id => relevantItemIds.add(id));
+        });
+
+        // 4. Return equipment details
+        return allItems.filter(i =>
+            relevantItemIds.has(i.id) &&
+            i.status === 'CHECKED_OUT'
+        );
+    }, [user, allItems, allTransactions, allAssignments]);
 
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
     const [conditions, setConditions] = useState<Record<string, Condition>>({});

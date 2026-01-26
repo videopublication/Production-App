@@ -2,18 +2,31 @@ import { format, parseISO } from 'date-fns';
 import { Shoot, Assignment, User } from '@/types';
 
 export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], users: User[]) => {
-    const date = shoot.startTime ? format(parseISO(shoot.startTime), 'EEEE, MMMM d, yyyy') : 'TBD';
-    const startTime = shoot.startTime ? format(parseISO(shoot.startTime), 'h:mm a') : 'TBD';
-    const endTime = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : 'TBD';
+    const startDate = shoot.startTime ? parseISO(shoot.startTime) : null;
+    const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
 
-    let message = `Namaskaram,\n\n🎬 *SHOOT DETAILS* 🎬\n\n`;
+    let dateString = 'TBD';
+    if (startDate) {
+        if (endDate && startDate.toDateString() !== endDate.toDateString()) {
+            // Different Dates
+            dateString = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
+        } else {
+            // Single Day
+            dateString = format(startDate, 'EEEE, MMMM d, yyyy');
+        }
+    }
+
+    const start = startDate ? format(startDate, 'h:mm a') : 'TBD';
+    const end = endDate ? format(endDate, 'h:mm a') : 'TBD';
+
+    let message = `Namaskaram,\n\n🎬 *${shoot.title.toUpperCase()}* 🎬\n\n`;
 
     if (shoot.shootNumber) {
         message += `*Shoot ID:* #${shoot.shootNumber}\n`;
     }
-    message += `*Shoot Name:* ${shoot.title}\n`;
-    message += `*Date:* ${date}\n`;
-    message += `*Time:* ${startTime} - ${endTime}\n`;
+    // message += `*Shoot Name:* ${shoot.title}\n`; // Removed
+    message += `*Date:* ${dateString}\n`;
+    message += `*Time:* ${start} - ${end}\n`;
     message += `*Location:* ${shoot.location || 'Not set'}\n`;
 
     if (shoot.description && shoot.description !== 'No description') {

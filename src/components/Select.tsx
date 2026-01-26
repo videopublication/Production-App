@@ -12,6 +12,7 @@ interface SelectProps {
     options: Option[];
     placeholder?: string;
     className?: string;
+    onOpenChange?: (isOpen: boolean) => void;
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -20,9 +21,16 @@ export const Select: React.FC<SelectProps> = ({
     onChange,
     options,
     placeholder = 'Select an option',
-    className = ''
+    className = '',
+    onOpenChange
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+
+    // Notify parent of state change
+    useEffect(() => {
+        onOpenChange?.(isOpen);
+    }, [isOpen, onOpenChange]);
+
     const [search, setSearch] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);

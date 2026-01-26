@@ -25,6 +25,7 @@ export function useCheckOut() {
             items,
             shootId,
             userId,
+            additionalUsers = [],
             notes,
             location,
             project
@@ -32,6 +33,7 @@ export function useCheckOut() {
             items: Equipment[],
             shootId?: string,
             userId: string,
+            additionalUsers?: string[],
             notes?: string,
             location?: string,
             project: string
@@ -43,6 +45,7 @@ export function useCheckOut() {
             const transaction: Transaction = {
                 id: transactionId,
                 userId,
+                additionalUsers,
                 items: items.map(i => i.id),
                 timestampOut: new Date().toISOString(),
                 project,
@@ -55,6 +58,8 @@ export function useCheckOut() {
             await storage.saveTransaction(transaction);
 
             // 2. Update Equipment Status
+            // We still assign to the primary userId for simple tracking, or we could change this logic.
+            // For now, let's keep assignedTo as the primary user, but the Transaction holds the full team.
             await Promise.all(items.map(item =>
                 storage.updateEquipment(item.id, {
                     status: 'CHECKED_OUT',

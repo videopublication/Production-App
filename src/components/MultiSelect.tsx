@@ -12,6 +12,7 @@ interface MultiSelectProps {
     options: Option[];
     placeholder?: string;
     className?: string;
+    onOpenChange?: (isOpen: boolean) => void;
 }
 
 export const MultiSelect: React.FC<MultiSelectProps> = ({
@@ -20,9 +21,16 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
     onChange,
     options,
     placeholder = 'Select options',
-    className = ''
+    className = '',
+    onOpenChange
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+
+    // Notify parent of state change
+    useEffect(() => {
+        onOpenChange?.(isOpen);
+    }, [isOpen, onOpenChange]);
+
     const [search, setSearch] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);

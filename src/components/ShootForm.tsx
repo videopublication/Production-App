@@ -182,8 +182,9 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
         const submissionData = {
             ...formData,
-            endTime: effectiveEndTime,
-            status: effectiveStatus
+            status: effectiveStatus,
+            startTime: formData.startTime ? new Date(formData.startTime).toISOString() : formData.startTime,
+            endTime: effectiveEndTime ? new Date(effectiveEndTime).toISOString() : effectiveEndTime
         };
 
         // Handle Google Calendar Logic

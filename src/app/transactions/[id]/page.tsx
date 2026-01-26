@@ -39,6 +39,8 @@ export default function TransactionDetailPage() {
     // Multi-select states
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+    const [notes, setNotes] = useState('');
+    const [isEditingNotes, setIsEditingNotes] = useState(false);
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
@@ -76,6 +78,7 @@ export default function TransactionDetailPage() {
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
             setTransaction(txn);
+            setNotes(txn.notes || ''); // Initialize notes
             setEquipment(equip);
             setAvailableEquipment(available);
             setTransactionUser(txnUser || null);
@@ -449,6 +452,34 @@ export default function TransactionDetailPage() {
         const item = equipment.find(e => e.id === itemId);
         return item && item.status !== 'CHECKED_OUT' && item.status !== 'PENDING_VERIFICATION';
     });
+
+    const handleSaveNotes = async () => {
+        if (!transaction) return;
+        setSaving(true);
+        try {
+            await storage.updateTransaction(transaction.id, {
+                notes: notes.trim()
+            });
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: transaction.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Updated notes: "${notes.trim()}" (Previous: "${transaction.notes || ''}")`
+            });
+
+            await loadData(true);
+            setIsEditingNotes(false);
+            showToast('Notes updated successfully', 'success');
+        } catch (error) {
+            console.error('Error saving notes:', error);
+            showToast('Failed to save notes', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const handleManualClose = async () => {
         const isConfirmed = await confirm({
@@ -905,6 +936,65 @@ export default function TransactionDetailPage() {
                 </div>
             </Card>
 
+
+
+            {/* Notes Section - Editable */}
+            <Card>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Notes / Other Items</h3>
+                    {transaction.status === 'OPEN' && !isEditingNotes && (
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setIsEditingNotes(true)}
+                            className="h-7 text-xs hover:bg-muted"
+                        >
+                            Edit
+                        </Button>
+                    )}
+                </div>
+
+                {isEditingNotes ? (
+                    <div className="space-y-3">
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            className="w-full min-h-[100px] p-3 rounded-xl bg-muted border-transparent focus:bg-background focus:border-primary transition-all resize-y text-sm"
+                            placeholder="Add notes about this transaction..."
+                            autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                    setNotes(transaction.notes || '');
+                                    setIsEditingNotes(false);
+                                }}
+                                disabled={saving}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handleSaveNotes}
+                                isLoading={saving}
+                            >
+                                Save Notes
+                            </Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-muted/30 rounded-xl p-4 border border-border/50">
+                        {transaction.notes ? (
+                            <p className="text-sm whitespace-pre-wrap leading-relaxed">{transaction.notes}</p>
+                        ) : (
+                            <p className="text-sm text-muted-foreground italic">No notes added</p>
+                        )}
+                    </div>
+                )}
+            </Card>
+
             {/* Activity History Log - Compact */}
             <Card>
                 <div className="flex items-center justify-between mb-3">
@@ -936,21 +1026,23 @@ export default function TransactionDetailPage() {
                 </div>
             </Card>
 
-            {transaction.status === 'CLOSED' && (
-                <Card className="p-4 bg-gray-50 dark:bg-gray-900/50 border-gray-300 dark:border-gray-700">
-                    <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-gray-600 dark:text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div>
-                            <p className="font-medium text-gray-900 dark:text-gray-100">Transaction Closed</p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                This transaction has been closed and cannot be modified. All items have been returned.
-                            </p>
+            {
+                transaction.status === 'CLOSED' && (
+                    <Card className="p-4 bg-gray-50 dark:bg-gray-900/50 border-gray-300 dark:border-gray-700">
+                        <div className="flex items-start gap-3">
+                            <svg className="w-5 h-5 text-gray-600 dark:text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div>
+                                <p className="font-medium text-gray-900 dark:text-gray-100">Transaction Closed</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                    This transaction has been closed and cannot be modified. All items have been returned.
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                </Card>
-            )}
-        </div>
+                    </Card>
+                )
+            }
+        </div >
     );
 }

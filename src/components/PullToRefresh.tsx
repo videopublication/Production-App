@@ -6,9 +6,10 @@ interface PullToRefreshProps {
     onRefresh: () => Promise<void>;
     children: React.ReactNode;
     className?: string;
+    disabled?: boolean;
 }
 
-export const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, className = '' }) => {
+export const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, className = '', disabled = false }) => {
     const [pullDistance, setPullDistance] = useState(0);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isPulling, setIsPulling] = useState(false);
@@ -17,7 +18,7 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, childre
     const pullThreshold = 80;
 
     const handleTouchStart = (e: React.TouchEvent) => {
-        if (isRefreshing) return;
+        if (isRefreshing || disabled) return;
 
         // Only trigger if we are at the top of the container
         const container = containerRef.current;
