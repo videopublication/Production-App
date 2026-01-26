@@ -31,7 +31,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return (
         <ToastContext.Provider value={{ showToast }}>
             {children}
-            <div className="fixed top-[calc(60px+env(safe-area-inset-top))] right-4 z-[100] flex flex-col gap-3 pointer-events-none sm:top-24 sm:right-8">
+            <div className="fixed left-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none bottom-24 sm:bottom-auto sm:top-24 sm:left-auto sm:right-8 sm:w-auto">
                 {toasts.map((toast) => (
                     <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
                 ))}
@@ -80,7 +80,7 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
 
     return (
         <div
-            className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl backdrop-blur-xl animate-in slide-in-from-right-10 fade-in duration-300 pointer-events-auto ${variants[toast.type]}`}
+            className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl animate-in slide-in-from-right-10 fade-in duration-300 pointer-events-auto ${variants[toast.type]}`}
             role="alert"
         >
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">

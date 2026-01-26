@@ -106,8 +106,9 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, childre
             {/* Content Wrapper */}
             <div
                 style={{
-                    transform: `translateY(${pullDistance}px)`,
-                    transition: isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)'
+                    transform: `translate3d(0, ${pullDistance}px, 0)`,
+                    transition: isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)',
+                    willChange: 'transform'
                 }}
             >
                 {children}
