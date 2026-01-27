@@ -8,6 +8,7 @@ import { storage } from '@/lib/storage';
 import { Notification as AppNotification } from '@/types';
 import useFcmToken from '@/hooks/useFcmToken';
 import { useNotifications } from '@/hooks/useNotifications';
+import { ChevronLeft } from 'lucide-react';
 
 import { SettingsDrawer } from './SettingsDrawer';
 
@@ -43,6 +44,8 @@ export const MobileHeader = () => {
         for (const [path, name] of Object.entries(pageNames)) {
             if (pathname.startsWith(path + '/')) {
                 if (pathname.includes('/inventory/')) return 'Item Details';
+                if (pathname.startsWith('/admin/shoots/')) return 'Shoot Details';
+                if (pathname.startsWith('/transactions/')) return 'Transaction Details';
                 return name;
             }
         }
@@ -59,21 +62,22 @@ export const MobileHeader = () => {
                 <div className="relative flex items-center justify-between h-11 px-4 pt-safe-top">
                     {/* Left Action / Spacer */}
                     <div className="w-[72px] flex items-center">
-                        {pathname === '/profile' && (
-                            <button
-                                onClick={() => router.back()}
-                                className="flex items-center text-primary active:opacity-50 transition-opacity -ml-2"
-                            >
-                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                                </svg>
-                                <span className="text-[17px] font-normal leading-none pb-[1px]">Back</span>
-                            </button>
-                        )}
+                        {(pathname === '/profile' ||
+                            (pathname.startsWith('/admin/shoots/') && pathname !== '/admin/shoots') ||
+                            (pathname.startsWith('/transactions/') && pathname !== '/transactions')
+                        ) && (
+                                <button
+                                    onClick={() => router.back()}
+                                    className="flex items-center text-primary active:opacity-50 transition-opacity -ml-2"
+                                >
+                                    <ChevronLeft className="w-8 h-8 -mr-1" strokeWidth={2.5} />
+                                    <span className="text-[17px] font-normal leading-none pb-[1px]">Back</span>
+                                </button>
+                            )}
                     </div>
 
                     {/* Centered title */}
-                    <h1 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white tracking-[-0.4px] absolute left-1/2 transform -translate-x-1/2">
+                    <h1 className="text-[15px] font-semibold text-[#1d1d1f] dark:text-white tracking-[-0.3px] absolute left-[45%] transform -translate-x-1/2 max-w-[40%] truncate text-center">
                         {getPageName()}
                     </h1>
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
 import { storage } from '@/lib/storage';
@@ -10,12 +10,14 @@ import { Notification as AppNotification } from '@/types';
 import { useNotifications } from '@/hooks/useNotifications';
 import useFcmToken from '@/hooks/useFcmToken';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
+import { ArrowLeft } from 'lucide-react';
 
 export const Header = () => {
     const { user } = useAuth();
     const { isCollapsed } = useSidebar();
     const { notificationPermission } = useFcmToken();
     const router = useRouter();
+    const pathname = usePathname();
 
     // Notification Hook
     const { notifications, unreadCount, markAsRead } = useNotifications();
@@ -43,8 +45,34 @@ export const Header = () => {
         <header className={`h-[44px] fixed top-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#f5f5f7] px-4 hidden md:flex items-center justify-between transition-all duration-300 ${isCollapsed ? 'left-[72px]' : 'left-[260px]'
             } pl-6 dark:bg-[#2c2c2e]/80 dark:border-[#3a3a3c]`}>
             {/* Page title area */}
-            <div className="flex-1">
-                <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">VP App</span>
+            <div className="flex-1 flex items-center">
+                {pathname?.startsWith('/admin/shoots/') && pathname !== '/admin/shoots' ? (
+                    (() => {
+                        const isEditPage = pathname.endsWith('/edit');
+                        const backLink = isEditPage ? pathname.replace('/edit', '') : '/admin/shoots';
+                        const backText = isEditPage ? 'Back to Shoot' : 'Back to Shoots';
+
+                        return (
+                            <Link
+                                href={backLink}
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:opacity-80 transition-opacity"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                                <span>{backText}</span>
+                            </Link>
+                        );
+                    })()
+                ) : (pathname?.startsWith('/transactions/') && pathname !== '/transactions') ? (
+                    <Link
+                        href="/transactions"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:opacity-80 transition-opacity"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Back to Transactions</span>
+                    </Link>
+                ) : (
+                    <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">VP App</span>
+                )}
             </div>
 
             <div className="flex items-center gap-2">

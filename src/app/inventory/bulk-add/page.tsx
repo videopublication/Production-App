@@ -237,6 +237,7 @@ export default function BulkAddPage() {
     };
 
     const handleSave = async () => {
+        if (saving) return;
         setSaving(true);
         try {
             const newEquipment: Equipment[] = [];

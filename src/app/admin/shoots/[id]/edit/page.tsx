@@ -57,9 +57,12 @@ export default function EditShootPage() {
         }
     };
 
-    const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string) => {
-        if (!shoot) return;
+    const isSubmittingRef = React.useRef(false);
 
+    const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string) => {
+        if (!shoot || isSubmittingRef.current || isLoading) return;
+
+        isSubmittingRef.current = true;
         setIsLoading(true);
         try {
             // Update Shoot
@@ -108,66 +111,77 @@ export default function EditShootPage() {
                 }
             });
 
+            // ... (Save logic remains the same up to here)
+
+            // 3. Update existing roles
             if (assignmentsToUpdate.length > 0) {
                 await storage.saveAssignments(assignmentsToUpdate);
             }
 
-            // Log activity
-            // Log activity: Calculate detailed changes
-            const changes: string[] = [];
+            // --- CRITICAL SAVE COMPLETE --- 
+            // Now we try to log and invalidate, but we won't let errors here stop the redirect.
 
-            // Check for field changes (checking explicit fields we care about)
-            if (updatedShoot.title !== shoot.title) changes.push(`title to "${updatedShoot.title}"`);
-            if (updatedShoot.location !== shoot.location) changes.push(`location to "${updatedShoot.location}"`);
+            try {
+                // Log activity
+                const changes: string[] = [];
+                // ... (existing change detection logic) ...
+                if (updatedShoot.title !== shoot.title) changes.push(`title to "${updatedShoot.title}"`);
+                if (updatedShoot.location !== shoot.location) changes.push(`location to "${updatedShoot.location}"`);
 
-            // Dates - Check with formatting to handle timezone differences cleanly and log readable values
-            if (updatedShoot.startTime) {
-                const newStart = format(parseISO(updatedShoot.startTime), 'MMM d, h:mm a');
-                const oldStart = shoot.startTime ? format(parseISO(shoot.startTime), 'MMM d, h:mm a') : '';
-                if (newStart !== oldStart) changes.push(`start time to "${newStart}"`);
+                if (updatedShoot.startTime) {
+                    const newStart = format(parseISO(updatedShoot.startTime), 'MMM d, h:mm a');
+                    const oldStart = shoot.startTime ? format(parseISO(shoot.startTime), 'MMM d, h:mm a') : '';
+                    if (newStart !== oldStart) changes.push(`start time to "${newStart}"`);
+                }
+                if (updatedShoot.endTime) {
+                    const newEnd = format(parseISO(updatedShoot.endTime), 'MMM d, h:mm a');
+                    const oldEnd = shoot.endTime ? format(parseISO(shoot.endTime), 'MMM d, h:mm a') : '';
+                    if (newEnd !== oldEnd) changes.push(`end time to "${newEnd}"`);
+                }
+
+                const addedCrewNames = toAdd.map(id => users.find(u => u.id === id)?.name).filter(Boolean);
+                const removedCrewNames = toRemove.map(a => users.find(u => u.id === a.userId)?.name).filter(Boolean);
+
+                if (addedCrewNames.length > 0) changes.push(`added crew: ${addedCrewNames.join(', ')}`);
+                if (removedCrewNames.length > 0) changes.push(`removed crew: ${removedCrewNames.join(', ')}`);
+
+                if (inchargeId !== (assignments.find(a => a.role === 'Incharge')?.userId)) {
+                    const newInchargeName = users.find(u => u.id === inchargeId)?.name;
+                    if (newInchargeName) changes.push(`set incharge to ${newInchargeName}`);
+                    else if (!inchargeId) changes.push('removed incharge');
+                }
+
+                const details = changes.length > 0
+                    ? `Updated shoot${updatedShoot.shootNumber ? ` #${updatedShoot.shootNumber}` : ''}: ${changes.join(', ')}`
+                    : 'Updated shoot details';
+
+                if (user) {
+                    await storage.addLog({
+                        id: generateUUID(),
+                        action: 'EDIT',
+                        entityId: shoot.id,
+                        userId: user.id,
+                        timestamp: new Date().toISOString(),
+                        details: details
+                    });
+                }
+
+                // Invalidate queries
+                await queryClient.invalidateQueries({ queryKey: ['shoots'] });
+                await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+            } catch (nonCriticalError) {
+                console.warn('Non-critical error during post-save operations:', nonCriticalError);
             }
-            if (updatedShoot.endTime) {
-                const newEnd = format(parseISO(updatedShoot.endTime), 'MMM d, h:mm a');
-                const oldEnd = shoot.endTime ? format(parseISO(shoot.endTime), 'MMM d, h:mm a') : '';
-                if (newEnd !== oldEnd) changes.push(`end time to "${newEnd}"`);
-            }
 
-            // Crew changes
-            const addedCrewNames = toAdd.map(id => users.find(u => u.id === id)?.name).filter(Boolean);
-            const removedCrewNames = toRemove.map(a => users.find(u => u.id === a.userId)?.name).filter(Boolean);
+            // Force redirect to the details page (safer than back())
+            router.push(`/admin/shoots/${shoot.id}`);
 
-            if (addedCrewNames.length > 0) changes.push(`added crew: ${addedCrewNames.join(', ')}`);
-            if (removedCrewNames.length > 0) changes.push(`removed crew: ${removedCrewNames.join(', ')}`);
-
-            // Incharge change
-            if (inchargeId !== (assignments.find(a => a.role === 'Incharge')?.userId)) {
-                const newInchargeName = users.find(u => u.id === inchargeId)?.name;
-                if (newInchargeName) changes.push(`set incharge to ${newInchargeName}`);
-                else if (!inchargeId) changes.push('removed incharge');
-            }
-
-            const details = changes.length > 0
-                ? `Updated shoot${updatedShoot.shootNumber ? ` #${updatedShoot.shootNumber}` : ''}: ${changes.join(', ')}`
-                : 'Updated shoot details';
-
-            if (user) {
-                await storage.addLog({
-                    id: generateUUID(),
-                    action: 'EDIT',
-                    entityId: shoot.id, // Use UUID
-                    userId: user.id,
-                    timestamp: new Date().toISOString(),
-                    details: details
-                });
-            }
-
-            // Invalidate queries to ensure fresh data on returning to details page
-            await queryClient.invalidateQueries({ queryKey: ['shoots'] });
-            await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-
-            router.back();
         } catch (error) {
             console.error('Failed to update shoot:', error);
+            // Only reset the lock if we genuinely failed to save the core data
+            isSubmittingRef.current = false;
+            // Optionally show an error toast here if you have a toast system available in this component context
+            // showToast("Failed to save changes", "error"); 
         } finally {
             setIsLoading(false);
         }
@@ -184,16 +198,9 @@ export default function EditShootPage() {
     const currentInchargeId = assignments.find(a => a.role === 'Incharge')?.userId;
 
     return (
-        <div className="px-3 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
+        <div className="px-2 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    onClick={() => router.back()}
-                >
-                    <ArrowLeft size={20} />
-                </Button>
+
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
                     Edit Shoot {shoot?.shootNumber ? <span className="text-gray-500 dark:text-gray-400">#{shoot.shootNumber}</span> : ''}
                 </h1>

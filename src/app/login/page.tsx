@@ -32,8 +32,14 @@ export default function LoginPage() {
         role: 'CREW' // Default role
     });
 
+    const isSubmittingRef = React.useRef(false);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (isSubmittingRef.current || isLoading) return;
+
+        isSubmittingRef.current = true;
         setError('');
         setIsLoading(true);
 
@@ -54,8 +60,12 @@ export default function LoginPage() {
             }
         } catch (err: any) {
             setError(err.message || 'Authentication failed');
-        } finally {
             setIsLoading(false);
+            isSubmittingRef.current = false;
+        } finally {
+            // We only reset if error happened (handled above) or if we are not redirecting (which shouldn't happen on success usually, but for safety)
+            // Actually, if clear success, we redirect. If we redirect, component unmounts.
+            // If we don't redirect (failure), we already reset.
         }
     };
 

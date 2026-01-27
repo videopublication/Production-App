@@ -171,8 +171,33 @@ class StorageService {
             preCheckoutConditions: t.pre_checkout_conditions,
             postReturnConditions: t.post_return_conditions,
             additionalUsers: t.additional_users,
-            notes: t.notes
+            notes: t.notes,
+            shootId: t.shoot_id
         })) as Transaction[];
+    }
+
+    async getTransaction(id: string): Promise<Transaction | null> {
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            return null;
+        }
+
+        const t = data;
+        return {
+            ...t,
+            userId: t.user_id,
+            timestampOut: t.timestamp_out,
+            preCheckoutConditions: t.pre_checkout_conditions,
+            postReturnConditions: t.post_return_conditions,
+            additionalUsers: t.additional_users,
+            notes: t.notes,
+            shootId: t.shoot_id
+        } as Transaction;
     }
 
     async saveTransaction(transaction: Transaction): Promise<void> {
@@ -182,6 +207,7 @@ class StorageService {
             items: transaction.items,
             timestamp_out: transaction.timestampOut,
             project: transaction.project,
+            shoot_id: transaction.shootId || null,
             pre_checkout_conditions: transaction.preCheckoutConditions,
             status: transaction.status,
             additional_users: transaction.additionalUsers,
@@ -216,6 +242,9 @@ class StorageService {
 
         if (updates.additionalUsers !== undefined) { dbUpdates.additional_users = updates.additionalUsers; }
         delete dbUpdates.additionalUsers;
+
+        if (updates.shootId !== undefined) { dbUpdates.shoot_id = updates.shootId; }
+        delete dbUpdates.shootId;
 
         const { error } = await supabase
             .from('transactions')

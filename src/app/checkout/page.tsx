@@ -63,6 +63,9 @@ export default function CheckoutPage() {
 
             const handlePopState = () => {
                 setIsSearchFocused(false);
+                setScanInput('');
+                setSuggestions([]);
+                setShowSuggestions(false);
                 // Blur the input if it's still focused
                 (document.activeElement as HTMLElement)?.blur();
             };
@@ -280,7 +283,7 @@ export default function CheckoutPage() {
         } catch (e) { }
     };
 
-    const processBarcode = (barcode: string) => {
+    const processBarcode = (barcode: string, keepSearchOpen = false) => {
         const normalizedBarcode = barcode.trim();
         const now = Date.now();
         if (lastProcessedRef.current &&
@@ -327,24 +330,26 @@ export default function CheckoutPage() {
         showToast(`Added "${item.name}"`, 'success');
         playSuccessSound();
 
-        setScanInput('');
-        setSuggestions([]);
-        setShowSuggestions(false);
+        if (!keepSearchOpen) {
+            setScanInput('');
+            setSuggestions([]);
+            setShowSuggestions(false);
+        }
+
         lastProcessedRef.current = { code: normalizedBarcode, time: now };
     };
 
-    const handleInputChange = (value: string) => {
-        setScanInput(value);
-        if (value.trim().length > 0) {
+    const updateSuggestions = (query: string, currentCart: Equipment[]) => {
+        if (query.trim().length > 0) {
             const filtered = equipmentList.filter(item =>
                 item.status === 'AVAILABLE' &&
-                !cart.find(c => c.id === item.id) &&
+                !currentCart.find(c => c.id === item.id) &&
                 (
-                    item.name.toLowerCase().includes(value.toLowerCase()) ||
-                    item.barcode.toLowerCase().includes(value.toLowerCase()) ||
-                    item.category.toLowerCase().includes(value.toLowerCase())
+                    item.name.toLowerCase().includes(query.toLowerCase()) ||
+                    item.barcode.toLowerCase().includes(query.toLowerCase()) ||
+                    item.category.toLowerCase().includes(query.toLowerCase())
                 )
-            ).slice(0, 5);
+            ).slice(0, 50);
             setSuggestions(filtered);
             setShowSuggestions(filtered.length > 0);
         } else {
@@ -352,6 +357,18 @@ export default function CheckoutPage() {
             setShowSuggestions(false);
         }
     };
+
+    const handleInputChange = (value: string) => {
+        setScanInput(value);
+        updateSuggestions(value, cart);
+    };
+
+    // Update suggestions when cart changes if search is active
+    useEffect(() => {
+        if (scanInput.trim()) {
+            updateSuggestions(scanInput, cart);
+        }
+    }, [cart, equipmentList]);
 
     const handleQRScan = (decodedText: string) => {
         try {
@@ -383,8 +400,27 @@ export default function CheckoutPage() {
 
     const { mutateAsync: checkout, isPending: isCheckoutLoading } = useCheckOut();
 
+    const isSubmittingRef = React.useRef(false);
+    const transactionIdRef = React.useRef<string | null>(null);
+
+    const handleSuccess = () => {
+        setCart([]);
+        setSelectedShootId('');
+        sessionStorage.removeItem('checkout-cart');
+        sessionStorage.removeItem('checkout-project');
+        sessionStorage.removeItem('checkout-notes');
+        sessionStorage.removeItem('checkout-users');
+        sessionStorage.removeItem('checkout-shoot');
+        transactionIdRef.current = null; // Clear ID so next checkout gets a new one
+
+        showToast('Checkout successful!', 'success');
+        router.push('/transactions');
+    };
+
     const handleCheckout = async () => {
-        if (!user || cart.length === 0) return;
+        // Prevent double submission using Ref (immediate) and State (render-cycle)
+        if (isSubmittingRef.current || !user || cart.length === 0 || isLoading || isCheckoutLoading) return;
+
         if (!project.trim()) {
             showToast('Project Name is required', 'error');
             playErrorSound();
@@ -396,8 +432,17 @@ export default function CheckoutPage() {
             return;
         }
 
+        // Generate ID optimistically if not already attempting one
+        if (!transactionIdRef.current) {
+            transactionIdRef.current = generateTransactionId();
+        }
+
+        isSubmittingRef.current = true;
+        setIsLoading(true);
+
         try {
             await checkout({
+                id: transactionIdRef.current, // Pass the idempotent ID
                 items: cart,
                 shootId: selectedShootId || undefined,
                 userId: selectedUserIds[0], // Primary user
@@ -406,19 +451,42 @@ export default function CheckoutPage() {
                 project: project.trim()
             });
 
-            setCart([]);
-            setSelectedShootId('');
-            sessionStorage.removeItem('checkout-cart');
-            sessionStorage.removeItem('checkout-project');
-            sessionStorage.removeItem('checkout-notes');
-            sessionStorage.removeItem('checkout-users');
-            sessionStorage.removeItem('checkout-shoot');
+            handleSuccess();
 
-            showToast('Checkout successful!', 'success');
-            router.push('/transactions');
-        } catch (err) {
-            console.error(err);
-            showToast('Checkout failed', 'error');
+        } catch (err: any) {
+            console.error('Checkout error:', err);
+
+            // ERROR RECOVERY STRATEGY
+
+            // 1. Check for Duplicate Key (Retry Scenario)
+            // If error is "duplicate key value", it means the previous attempt actually succeeded.
+            if (err?.code === '23505' || err?.message?.includes('duplicate key') || err?.details?.includes('already exists')) {
+                console.log('Transaction key collision detected (Idempotent Success)');
+                handleSuccess();
+                return;
+            }
+
+            // 2. Zombie Transaction Check (Network/Timeout Scenario)
+            // If the request timed out but server processed it, the transaction might exist.
+            if (transactionIdRef.current) {
+                try {
+                    // Assuming 'storage' is an imported or globally available object with getTransaction method
+                    // You might need to import it or define it based on your project structure.
+                    // For example: import * as storage from '@/lib/storage';
+                    const existingTx = await storage.getTransaction(transactionIdRef.current);
+                    if (existingTx) {
+                        console.log('Transaction found on server despite client error (Zombie Success)');
+                        handleSuccess();
+                        return;
+                    }
+                } catch (checkErr) {
+                    console.error('Failed to verify transaction existence:', checkErr);
+                }
+            }
+
+            showToast('Checkout failed. Please try again.', 'error');
+            setIsLoading(false);
+            isSubmittingRef.current = false; // Reset lock on failure to allow retry
         }
     };
 
@@ -433,7 +501,66 @@ export default function CheckoutPage() {
 
     return (
         <>
-            <PullToRefresh onRefresh={handleRefresh} disabled={showScanner || isSearchFocused || isDropdownOpen}>
+            {/* Search Bar - FIXED Position Outside Scroll View */}
+            <div className="md:hidden fixed z-30 left-0 right-0 px-2 pb-2 bg-background pt-4 border-b border-border/50 shadow-sm transition-all duration-300 top-[calc(44px+env(safe-area-inset-top))]">
+                <div className="flex gap-2">
+                    <div className="flex-1 bg-card h-10 rounded-xl shadow-sm border border-border flex items-center overflow-hidden transition-all dark:bg-[#1c1c1e] relative">
+                        {!scanInput && !isSearchFocused && (
+                            <div className="absolute inset-x-0 bottom-0 h-[1px]" />
+                        )}
+                        <div className="pl-3 text-muted-foreground">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <input
+                            placeholder="Search items..."
+                            value={scanInput}
+                            onChange={(e) => handleInputChange(e.target.value)}
+                            onFocus={() => setIsSearchFocused(true)}
+                            className="flex-1 min-w-0 h-full bg-transparent border-0 px-2 text-[15px] text-foreground placeholder:text-muted-foreground focus:ring-0 transition-all focus:border-0"
+                            style={{ boxShadow: 'none' }}
+                        />
+                        {scanInput && (
+                            <button
+                                onClick={() => handleInputChange('')}
+                                className="pr-3 text-muted-foreground hover:text-foreground"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+
+                    {isSearchFocused ? (
+                        <button
+                            onClick={() => {
+                                window.history.back();
+                            }}
+                            className="h-10 px-4 shrink-0 rounded-xl flex items-center justify-center font-semibold text-sm text-primary bg-background shadow-sm border border-border active:scale-95 transition-all"
+                        >
+                            Done
+                        </button>
+                    ) : (
+                        <button
+                            onClick={toggleScanner}
+                            className={`h-10 px-3 shrink-0 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-white text-[#1d1d1f] border border-[#e5e5ea]' : 'bg-[#0071e3] text-white shadow-[#0071e3]/30'}`}
+                        >
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M4 6h2v2H4V6zm3 0h2v2H7V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-18 3h2v2H4V9zm3 0h2v2H7V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zM4 18h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z" />
+                            </svg>
+                            {!showScanner && <span className="text-[14px] font-medium">Scan</span>}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <PullToRefresh
+                onRefresh={handleRefresh}
+                disabled={showScanner || isSearchFocused || isDropdownOpen}
+                className="h-[calc(100dvh-110px)]"
+            >
                 {/* Desktop Layout */}
                 <div className="hidden md:block max-w-7xl mx-auto space-y-8 pb-20">
                     <div className="flex flex-col space-y-2">
@@ -484,7 +611,7 @@ export default function CheckoutPage() {
                                                 <button
                                                     key={item.id}
                                                     type="button"
-                                                    onClick={() => processBarcode(item.barcode)}
+                                                    onClick={() => processBarcode(item.barcode, true)}
                                                     className="w-full px-4 py-3 text-left hover:bg-muted transition-colors border-b border-border last:border-0 flex items-center justify-between group"
                                                 >
                                                     <div className="flex-1 min-w-0 pr-4">
@@ -675,7 +802,7 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Mobile Layout */}
-                <div className="md:hidden flex flex-col min-h-[calc(100vh-140px)]">
+                <div className="md:hidden flex flex-col min-h-[calc(100vh-140px)] pt-[60px]">
                     {/* Project Brief */}
                     {/* Project Details Section - Premium Mobile Card */}
                     {/* Project Brief */}
@@ -804,66 +931,12 @@ export default function CheckoutPage() {
                             </div>
                         </div>
 
-                        <div className={`px-2 pb-2 bg-background z-30 transition-all duration-300 sticky top-0 pt-4`}>
-                            <div className="flex gap-2">
-                                <div className="flex-1 bg-card h-10 rounded-xl shadow-sm border border-border flex items-center overflow-hidden transition-all dark:bg-[#1c1c1e] relative">
-                                    {!scanInput && !isSearchFocused && (
-                                        <div className="absolute inset-x-0 bottom-0 h-[1px]" />
-                                    )}
-                                    <div className="pl-3 text-muted-foreground">
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
-                                    </div>
-                                    <input
-                                        placeholder="Search items..."
-                                        value={scanInput}
-                                        onChange={(e) => handleInputChange(e.target.value)}
-                                        onFocus={() => setIsSearchFocused(true)}
-                                        className="flex-1 min-w-0 h-full bg-transparent border-0 px-2 text-[15px] text-foreground placeholder:text-muted-foreground focus:ring-0 transition-all focus:border-0"
-                                        style={{ boxShadow: 'none' }}
-                                    />
-                                    {scanInput && (
-                                        <button
-                                            onClick={() => handleInputChange('')}
-                                            className="pr-3 text-muted-foreground hover:text-foreground"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    )}
-                                </div>
-
-                                {isSearchFocused ? (
-                                    <button
-                                        onClick={() => {
-                                            window.history.back();
-                                        }}
-                                        className="h-10 px-4 shrink-0 rounded-xl flex items-center justify-center font-semibold text-sm text-primary bg-background shadow-sm border border-border active:scale-95 transition-all"
-                                    >
-                                        Done
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={toggleScanner}
-                                        className={`h-10 px-3 shrink-0 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-white text-[#1d1d1f] border border-[#e5e5ea]' : 'bg-[#0071e3] text-white shadow-[#0071e3]/30'}`}
-                                    >
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M4 6h2v2H4V6zm3 0h2v2H7V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-18 3h2v2H4V9zm3 0h2v2H7V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zM4 18h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z" />
-                                        </svg>
-                                        {!showScanner && <span className="text-[14px] font-medium">Scan</span>}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
                         {showSuggestions && suggestions.length > 0 && (
                             <div className="mb-6 bg-card rounded-3xl overflow-hidden shadow-xl border border-border">
                                 {suggestions.map((item) => (
                                     <button
                                         key={item.id}
-                                        onClick={() => processBarcode(item.barcode)}
+                                        onClick={() => processBarcode(item.barcode, true)}
                                         className="w-full p-4 flex items-center gap-4 text-left active:bg-muted border-b border-border"
                                     >
                                         <div className="w-11 h-11 bg-muted rounded-xl flex items-center justify-center shrink-0">
@@ -932,23 +1005,25 @@ export default function CheckoutPage() {
             </PullToRefresh>
 
             {/* Mobile Bottom Bar */}
-            <div className="md:hidden fixed bottom-[70px] left-0 right-0 p-4 bg-background border-t border-border shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30">
-                <div className="flex items-center gap-4">
-                    <div>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase">Total</p>
-                        <p className="text-[24px] font-bold text-foreground leading-none">{cart.length}</p>
+            {!isSearchFocused && (
+                <div className="md:hidden fixed bottom-[70px] left-0 right-0 p-4 bg-background border-t border-border shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30">
+                    <div className="flex items-center gap-4">
+                        <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase">Total</p>
+                            <p className="text-[24px] font-bold text-foreground leading-none">{cart.length}</p>
+                        </div>
+                        <button
+                            onClick={handleCheckout}
+                            disabled={cart.length === 0 || isLoading}
+                            className="flex-1 h-[48px] bg-[#0071e3] text-white rounded-xl text-[16px] font-bold shadow-xl shadow-[#0071e3]/20 disabled:opacity-40 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+                        >
+                            {isLoading ? (
+                                <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            ) : 'Confirm Checkout'}
+                        </button>
                     </div>
-                    <button
-                        onClick={handleCheckout}
-                        disabled={cart.length === 0 || isLoading}
-                        className="flex-1 h-[48px] bg-[#0071e3] text-white rounded-xl text-[16px] font-bold shadow-xl shadow-[#0071e3]/20 disabled:opacity-40 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
-                    >
-                        {isLoading ? (
-                            <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        ) : 'Confirm Checkout'}
-                    </button>
                 </div>
-            </div>
+            )}
         </>
     );
 }

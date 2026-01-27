@@ -12,6 +12,7 @@ import { Badge } from '@/components/Badge';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useInventory } from '@/hooks/useInventory';
+import { useShoots } from '@/hooks/useShoots';
 
 export default function TransactionsPage() {
     const router = useRouter();
@@ -20,6 +21,7 @@ export default function TransactionsPage() {
     // Data Hooks (Offline Ready)
     const { data: allTransactions = [], isLoading: isTxLoading, refetch: refreshTransactions } = useTransactions();
     const { equipment, users, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
+    const { data: shoots = [] } = useShoots();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'OPEN' | 'CLOSED'>('OPEN');
@@ -102,7 +104,7 @@ export default function TransactionsPage() {
 
         return `🎥 *Equipment Checkout Details*
 
-*Project:* ${txn.project || 'Unspecified'}
+*Project:* ${txn.project || 'Unspecified'}${txn.shootId && shoots.find(s => s.id === txn.shootId) ? `\n*Linked Shoot:* ${shoots.find(s => s.id === txn.shootId)?.title} ${shoots.find(s => s.id === txn.shootId)?.shootNumber ? `(#${shoots.find(s => s.id === txn.shootId)?.shootNumber})` : ''}` : ''}
 *ID:* ${txn.id}
 *Taken By:* ${allNames}
 *Date:* ${date}
@@ -222,13 +224,13 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                             {filteredTransactions.map((txn) => (
                                 <div
                                     key={txn.id}
-                                    className="p-5 rounded-2xl border border-border bg-white dark:bg-[#1c1c1e] shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+                                    className="p-4 rounded-xl border border-border bg-white dark:bg-[#1c1c1e] shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
                                     onClick={() => router.push(`/transactions/${txn.id}`)}
                                 >
                                     {/* Top Row: ID Badge & Status */}
                                     {/* Top Row: ID Badge & Status */}
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="shrink-0 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md tracking-wider font-mono">
+                                        <span className="shrink-0 text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-md tracking-wider font-mono">
                                             {txn.id}
                                         </span>
                                         <Badge variant={txn.status === 'OPEN' ? 'success' : 'default'} className="shrink-0">
@@ -237,16 +239,16 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                                     </div>
 
                                     {/* Project Title */}
-                                    <div className="mb-4">
-                                        <h3 className="font-bold text-[17px] text-gray-900 dark:text-white leading-snug break-words">
+                                    <div className="mb-3">
+                                        <h3 className="font-bold text-[15px] sm:text-[17px] text-gray-900 dark:text-white leading-snug break-words">
                                             {txn.project || 'Unspecified Project'}
                                         </h3>
                                     </div>
 
                                     {/* Middle Rows: Metadata */}
-                                    <div className="space-y-2 mb-5">
+                                    <div className="space-y-1.5 mb-4">
                                         {/* User */}
-                                        <div className="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-400">
+                                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                                             <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                             </svg>
@@ -259,7 +261,7 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                                         </div>
 
                                         {/* Date */}
-                                        <div className="flex items-center gap-2.5 text-sm text-gray-500 dark:text-gray-400">
+                                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                                             <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                             </svg>
@@ -276,7 +278,7 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                                         </div>
 
                                         {/* Item Count */}
-                                        <div className="flex items-center gap-2.5 text-sm text-gray-500 dark:text-gray-400">
+                                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                                             <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                             </svg>
@@ -291,7 +293,7 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                                         <div className="flex gap-2.5 flex-1">
                                             <Button
                                                 size="sm"
-                                                className="bg-[#0071e3] hover:bg-[#0077ED] text-white border-0 rounded-full px-5 h-9 text-xs font-semibold shadow-sm shadow-blue-200"
+                                                className="bg-[#0071e3] hover:bg-[#0077ED] text-white border-0 rounded-full px-3 sm:px-4 h-8 text-[11px] sm:text-xs font-semibold shadow-sm shadow-blue-200"
                                                 onClick={(e) => handleShareWhatsApp(e, txn)}
                                             >
                                                 <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 24 24">
@@ -304,7 +306,7 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                                                 size="sm"
                                                 variant="secondary"
                                                 onClick={(e) => handleCopyMessage(e, txn)}
-                                                className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border-0 rounded-full px-5 h-9 text-xs font-medium"
+                                                className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border-0 rounded-full px-3 sm:px-4 h-8 text-[11px] sm:text-xs font-medium"
                                             >
                                                 {copiedId === txn.id ? (
                                                     <>
@@ -329,7 +331,7 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                                                 e.stopPropagation();
                                                 router.push(`/transactions/${txn.id}`);
                                             }}
-                                            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xs sm:text-sm font-medium px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
                                         >
                                             {txn.status === 'OPEN' ? 'Manage' : 'View'}
                                         </button>

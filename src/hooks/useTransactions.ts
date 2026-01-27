@@ -28,7 +28,8 @@ export function useCheckOut() {
             additionalUsers = [],
             notes,
             location,
-            project
+            project,
+            id
         }: {
             items: Equipment[],
             shootId?: string,
@@ -36,10 +37,11 @@ export function useCheckOut() {
             additionalUsers?: string[],
             notes?: string,
             location?: string,
-            project: string
+            project: string,
+            id?: string
         }) => {
 
-            const transactionId = generateTransactionId();
+            const transactionId = id || generateTransactionId();
 
             // 1. Create the Transaction Record
             const transaction: Transaction = {

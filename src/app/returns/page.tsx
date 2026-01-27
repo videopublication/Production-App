@@ -28,29 +28,35 @@ export default function ReturnsPage() {
     const checkedOutItems = React.useMemo(() => {
         if (!user || !allItems || !allTransactions) return [];
 
-        // 1. Find shoots where the user is assigned
-        const myShootIds = allAssignments
-            .filter(a => a.userId === user.id && a.status === 'ACCEPTED')
-            .map(a => a.shootId);
-
-        // 2. Find relevant OPEN transactions
+        // Determine relevant OPEN transactions
         const relevantTxns = allTransactions.filter(txn => {
             if (txn.status !== 'OPEN') return false;
 
             const isPrimary = txn.userId === user.id;
-            const isAdditional = txn.additionalUsers?.includes(user.id);
-            const isShootCrew = txn.shootId && myShootIds.includes(txn.shootId);
 
-            return isPrimary || isAdditional || isShootCrew;
+            // If transaction is linked to a shoot, strictly follow shoot assignments (Source of Truth)
+            if (txn.shootId) {
+                const assignment = allAssignments.find(a =>
+                    a.shootId === txn.shootId &&
+                    a.userId === user.id &&
+                    ['ACCEPTED', 'PENDING'].includes(a.status)
+                );
+                // Only Primary Creator OR Active Crew can see/return
+                return isPrimary || !!assignment;
+            }
+
+            // For non-shoot transactions, use static snapshot
+            const isAdditional = txn.additionalUsers?.includes(user.id);
+            return isPrimary || isAdditional;
         });
 
-        // 3. Collect all item IDs from these transactions
+        // Collect all item IDs from these transactions
         const relevantItemIds = new Set<string>();
         relevantTxns.forEach(txn => {
             txn.items.forEach(id => relevantItemIds.add(id));
         });
 
-        // 4. Return equipment details
+        // Return equipment details
         return allItems.filter(i =>
             relevantItemIds.has(i.id) &&
             i.status === 'CHECKED_OUT'

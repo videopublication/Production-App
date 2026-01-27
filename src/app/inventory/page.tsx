@@ -206,6 +206,8 @@ export default function InventoryPage() {
     };
 
     const handleCleanupAssignments = async () => {
+        if (isActionLoading) return;
+
         const itemsToCleanup = items.filter(i => i.status === 'AVAILABLE' && i.assignedTo);
         if (itemsToCleanup.length === 0) {
             showToast('No stale assignments found', 'info');
@@ -234,7 +236,7 @@ export default function InventoryPage() {
     };
 
     const handleBulkDelete = async () => {
-        if (selectedItems.size === 0) return;
+        if (selectedItems.size === 0 || isActionLoading) return;
 
         const isConfirmed = await confirm({
             title: 'Delete Selected Items?',
@@ -259,6 +261,8 @@ export default function InventoryPage() {
     };
 
     const handleBulkDownloadQR = async (size: 'standard' | 'small') => {
+        if (isGeneratingQR) return;
+
         if (selectedItems.size === 0) {
             alert('Please select at least one item');
             return;

@@ -32,6 +32,9 @@ export default function UserManagementPage() {
     const [importFile, setImportFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
 
+    // Lock for row actions
+    const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+
     useEffect(() => {
         if (user && user.role !== 'ADMIN') {
             router.push('/dashboard');
@@ -59,6 +62,7 @@ export default function UserManagementPage() {
 
     const handleAddUser = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSubmitting) return;
         setIsSubmitting(true);
         try {
             const res = await fetch('/api/admin/users', {
@@ -100,6 +104,9 @@ export default function UserManagementPage() {
             showToast("You cannot change your own status", "error");
             return;
         }
+        if (processingIds.has(userId)) return;
+
+        setProcessingIds(prev => new Set(prev).add(userId));
         try {
             // Determine new status: 
             // If currently ACTIVE, suspend them.
@@ -134,6 +141,12 @@ export default function UserManagementPage() {
         } catch (error) {
             console.error('Error updating user:', error);
             showToast('Failed to update user status', 'error');
+        } finally {
+            setProcessingIds(prev => {
+                const next = new Set(prev);
+                next.delete(userId);
+                return next;
+            });
         }
     };
 
@@ -142,6 +155,9 @@ export default function UserManagementPage() {
             showToast("You cannot change your own role", "error");
             return;
         }
+        if (processingIds.has(userId)) return;
+
+        setProcessingIds(prev => new Set(prev).add(userId));
         try {
             const res = await fetch('/api/admin/users', {
                 method: 'PUT',
@@ -170,12 +186,18 @@ export default function UserManagementPage() {
         } catch (error) {
             console.error('Error updating role:', error);
             showToast('Failed to update role', 'error');
+        } finally {
+            setProcessingIds(prev => {
+                const next = new Set(prev);
+                next.delete(userId);
+                return next;
+            });
         }
     };
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedUser || !newPassword) return;
+        if (!selectedUser || !newPassword || isSubmitting) return;
 
         setIsSubmitting(true);
         try {
@@ -222,7 +244,7 @@ export default function UserManagementPage() {
     };
 
     const handleBulkImport = async () => {
-        if (!importFile) return;
+        if (!importFile || isUploading) return;
 
         setIsUploading(true);
         try {

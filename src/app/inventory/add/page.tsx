@@ -31,6 +31,9 @@ export default function AddItemPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (isLoading) return;
+
         setIsLoading(true);
 
         try {

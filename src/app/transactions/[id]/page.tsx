@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Transaction, Equipment, User, Log } from '@/types';
+import { Transaction, Equipment, User, Log, Shoot, Assignment } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -12,6 +12,7 @@ import { Badge } from '@/components/Badge';
 import { QRScanner, MobileScanner } from '@/components/QRScanner';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
+import Link from 'next/link';
 
 export default function TransactionDetailPage() {
     const router = useRouter();
@@ -26,7 +27,10 @@ export default function TransactionDetailPage() {
     const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>([]);
     const [transactionUser, setTransactionUser] = useState<User | null>(null);
     const [allUsers, setAllUsers] = useState<User[]>([]);
+    const [allShoots, setAllShoots] = useState<Shoot[]>([]);
     const [logs, setLogs] = useState<Log[]>([]);
+    const [linkedShoot, setLinkedShoot] = useState<Shoot | null>(null);
+    const [shootAssignments, setShootAssignments] = useState<Assignment[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -55,11 +59,13 @@ export default function TransactionDetailPage() {
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const [txns, equip, users, allLogs] = await Promise.all([
+            const [txns, equip, users, allLogs, shoots, assignments] = await Promise.all([
                 storage.getTransactions(),
                 storage.getEquipment(),
                 storage.getUsers(),
                 storage.getLogs(),
+                storage.getShoots(),
+                storage.getAssignments()
             ]);
 
             const txn = txns.find(t => t.id === transactionId);
@@ -72,17 +78,29 @@ export default function TransactionDetailPage() {
             const txnUser = users.find(u => u.id === txn.userId);
             const available = equip.filter(e => e.status === 'AVAILABLE');
 
+            // Find linked shoot and assignments
+            let linkedShootData = null;
+            let linkedAssignments: Assignment[] = [];
+
+            if (txn.shootId) {
+                linkedShootData = shoots.find(s => s.id === txn.shootId) || null;
+                linkedAssignments = assignments.filter(a => a.shootId === txn.shootId);
+            }
+
             // Filter logs for this transaction
             const transactionLogs = allLogs
                 .filter(l => l.entityId === transactionId)
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
             setTransaction(txn);
-            setNotes(txn.notes || ''); // Initialize notes
+            setLinkedShoot(linkedShootData);
+            setShootAssignments(linkedAssignments);
+            setNotes(txn.notes || '');
             setEquipment(equip);
             setAvailableEquipment(available);
             setTransactionUser(txnUser || null);
             setAllUsers(users);
+            setAllShoots(shoots);
             setLogs(transactionLogs);
         } catch (error) {
             console.error('Error loading data:', error);
@@ -443,9 +461,27 @@ export default function TransactionDetailPage() {
 
     // Prepare list of all involved users
     const primaryUserName = transactionUser?.name || 'Unknown User';
-    const additionalUserNames = (transaction.additionalUsers || [])
+
+    // Dynamic Crew List Logic
+    let displayUserIds: string[] = [];
+    if (linkedShoot) {
+        // If linked to a shoot, use the LIVE assignments as the source of truth
+        // This ensures if an admin removes a crew member from the shoot, they disappear here.
+        const activeCrewIds = shootAssignments
+            .filter(a => ['ACCEPTED', 'PENDING'].includes(a.status))
+            .map(a => a.userId);
+
+        // Remove primary user from this list to avoid duplication
+        displayUserIds = activeCrewIds.filter(id => id !== transaction.userId);
+    } else {
+        // Fallback to static snapshot for non-shoot transactions
+        displayUserIds = transaction.additionalUsers || [];
+    }
+
+    const additionalUserNames = displayUserIds
         .map(id => getUserName(id))
         .filter(name => name !== 'Unknown User');
+
     const allMemberNames = [primaryUserName, ...additionalUserNames];
 
     const canManualClose = transaction?.status === 'OPEN' && transaction.items.every(itemId => {
@@ -533,23 +569,76 @@ export default function TransactionDetailPage() {
             {/* Header */}
             <div className="flex items-start sm:items-center justify-between gap-3">
                 <div className="flex items-start sm:items-center gap-3">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push('/transactions')}
-                        className="shrink-0 mt-1 sm:mt-0"
-                    >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                    </Button>
                     <div className="min-w-0">
                         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">
                             {transaction.project || 'Unspecified Project'}
                         </h1>
-                        <p className="text-xs sm:text-sm font-medium text-primary mt-0.5">
-                            {transaction.id}
-                        </p>
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            <p className="text-xs sm:text-sm font-medium text-primary">
+                                {transaction.id}
+                            </p>
+                            {linkedShoot ? (
+                                <Link href={`/admin/shoots/${linkedShoot.id}`} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium">
+                                    <span className="flex items-center gap-1">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                        Linked Shoot: {linkedShoot.title} {linkedShoot.shootNumber ? `(#${linkedShoot.shootNumber})` : ''}
+                                    </span>
+                                </Link>
+                            ) : (
+                                transaction.status === 'OPEN' && ['MANAGER', 'ADMIN'].includes(user?.role || '') && (
+                                    <div className="relative group">
+                                        <select
+                                            className="appearance-none text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2 pl-6 py-0.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer border-none focus:ring-0 w-32 truncate"
+                                            onChange={async (e) => {
+                                                if (!e.target.value) return;
+                                                const shootId = e.target.value;
+                                                const shoot = (await storage.getShoots()).find(s => s.id === shootId);
+                                                if (!shoot) return;
+
+                                                const isConfirmed = await confirm({
+                                                    title: 'Link Shoot?',
+                                                    message: `Link this transaction to "${shoot.title}"? This allows assigned crew to return items.`,
+                                                    confirmLabel: 'Link',
+                                                });
+
+                                                if (isConfirmed) {
+                                                    setSaving(true);
+                                                    try {
+                                                        await storage.updateTransaction(transaction.id, { shootId: shoot.id });
+                                                        await storage.addLog({
+                                                            id: crypto.randomUUID(),
+                                                            action: 'EDIT',
+                                                            entityId: transaction.id,
+                                                            userId: user!.id,
+                                                            timestamp: new Date().toISOString(),
+                                                            details: `Linked transaction to shoot: ${shoot.title} (#${shoot.shootNumber || 'N/A'})`
+                                                        });
+                                                        await loadData(true);
+                                                        showToast('Shoot linked successfully', 'success');
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        showToast('Failed to link shoot', 'error');
+                                                    } finally {
+                                                        setSaving(false);
+                                                    }
+                                                } else {
+                                                    e.target.value = ""; // Reset
+                                                }
+                                            }}
+                                            defaultValue=""
+                                        >
+                                            <option value="" disabled>Link Shoot...</option>
+                                            {(allShoots || []).filter(s => s.status !== 'CANCELLED').map(s => (
+                                                <option key={s.id} value={s.id}>{s.title} {s.shootNumber ? `(#${s.shootNumber})` : ''}</option>
+                                            ))}
+                                        </select>
+                                        <svg className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                        </svg>
+                                    </div>
+                                )
+                            )}
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 mt-1 sm:mt-0">
@@ -576,13 +665,21 @@ export default function TransactionDetailPage() {
                 <Card className="p-4">
                     <p className="text-sm text-muted-foreground mb-1">Checked Out By</p>
                     <div className="space-y-1">
-                        {allMemberNames.map((name, index) => (
+                        <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground">
+                                {primaryUserName} (Primary)
+                            </span>
+                        </div>
+                        {additionalUserNames.map((name, index) => (
                             <div key={index} className="flex items-center gap-2">
-                                <span className={`font-semibold ${index === 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
-                                    {name} {index === 0 && '(Primary)'}
+                                <span className="text-sm text-muted-foreground">
+                                    {name} {linkedShoot ? '(Crew)' : ''}
                                 </span>
                             </div>
                         ))}
+                        {additionalUserNames.length === 0 && linkedShoot && (
+                            <span className="text-xs text-muted-foreground italic">No other crew assigned</span>
+                        )}
                     </div>
                 </Card>
                 <Card className="p-4">
