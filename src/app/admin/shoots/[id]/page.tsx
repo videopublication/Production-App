@@ -24,8 +24,6 @@ import { supabase } from '@/lib/supabase';
 import { getGoogleProviderToken, deleteGoogleCalendarEvent, createGoogleCalendarEvent } from '@/lib/google-calendar';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
-// ... (previous imports)
-
 export default function ShootDetailsPage() {
     const router = useRouter();
     const { user } = useAuth();
@@ -39,17 +37,6 @@ export default function ShootDetailsPage() {
     const { data: allAssignments = [], isLoading: assignmentsLoading } = useAssignments();
     const { data: users = [], isLoading: usersLoading } = useUsers();
     const { data: allTransactions = [], isLoading: transactionsLoading } = useTransactions();
-
-    // We still fetch logs manually for now or via a new hook if we created one. 
-    // For now let's keep logs separate or just fetch them inside effect to avoid too much change at once, 
-    // OR ideally we Create useLogs hook.
-    // Let's assume for this step we might lose real-time logs unless we hook-ify them, 
-    // but the request was about "Shoot Details" fetching. 
-    // To keep it simple, I'll keep the logs state but fetch them inside a smaller effect 
-    // OR better, let's make a quick useLogs hook in next step? 
-    // Actually, I can just use `storage.getLogsByEntity(id)` in a simple useQuery here inline or standard effect.
-    // Let's stick to standard Effect for LOGS only to minimize friction, 
-    // but use Hooks for the big data (Shoot, Assignments, Users).
 
     const [logs, setLogs] = useState<Log[]>([]);
     const { mutateAsync: saveShoot } = useSaveShoot();
@@ -252,16 +239,16 @@ export default function ShootDetailsPage() {
             {/* Navigation & Header */}
             <div className="flex flex-col gap-4">
                 {/* Title Section */}
-                <div className="space-y-3">
+                <div className="space-y-3 min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-3">
                         {shoot.shootNumber && (
-                            <span className="font-mono text-sm font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                            <span className="font-mono text-[11px] sm:text-sm font-bold text-muted-foreground bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded shrink-0">
                                 #{shoot.shootNumber}
                             </span>
                         )}
                         <Badge
                             variant={shoot.status === 'CONFIRMED' ? 'success' : shoot.status === 'CANCELLED' ? 'destructive' : 'warning'}
-                            className="px-2.5 py-0.5 text-xs font-bold tracking-wide"
+                            className="px-2.5 py-0.5 text-[10px] sm:text-xs font-bold tracking-wide shrink-0"
                         >
                             {shoot.status}
                         </Badge>
@@ -270,7 +257,7 @@ export default function ShootDetailsPage() {
                                 href={`https://calendar.google.com/calendar/event?eid=${shoot.googleEventId}&ctz=Asia/Kolkata`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full transition-colors border border-blue-100"
+                                className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full transition-colors border border-blue-100 shrink-0"
                             >
                                 <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
                                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -278,34 +265,34 @@ export default function ShootDetailsPage() {
                                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z" />
                                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                                 </svg>
-                                Synced
+                                <span className="hidden xs:inline">Synced</span>
                             </a>
                         )}
                     </div>
 
-                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight break-words">
+                    <h1 className="text-xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight break-words">
                         {shoot.title}
                     </h1>
 
-                    <p className="text-sm text-muted-foreground flex items-center gap-2">
-                        Added by <span className="font-medium text-foreground">{shoot.createdBy || 'Admin'}</span>
+                    <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                        Added by <span className="font-semibold text-foreground">{shoot.createdBy || 'Admin'}</span>
                     </p>
                 </div>
 
                 {/* Actions Toolbar */}
-                <div className="flex items-center gap-2 pt-2 overflow-x-auto no-scrollbar mask-fade-right pb-1">
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-2">
                     <button
                         onClick={() => {
                             const message = formatWhatsAppMessage(shoot, assignments, users);
                             openWhatsApp(message);
                         }}
-                        className="flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-95 bg-[#25D366] hover:bg-[#128C7E] text-white border border-transparent text-xs sm:text-sm whitespace-nowrap"
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm active:scale-95 bg-[#25D366] text-white text-xs sm:text-sm whitespace-nowrap"
                         title="Share via WhatsApp"
                     >
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" className="shrink-0 sm:w-[18px] sm:h-[18px]">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" className="shrink-0">
                             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                         </svg>
-                        <span className="inline">WhatsApp</span>
+                        WhatsApp
                     </button>
 
                     <button
@@ -315,7 +302,7 @@ export default function ShootDetailsPage() {
                             const message = formatWhatsAppMessage(shoot, assignments, users);
                             try {
                                 await navigator.clipboard.writeText(message);
-                                btn.innerHTML = `<svg class="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> Copied`;
+                                btn.innerHTML = `<svg class="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> Copied`;
                                 btn.classList.add('bg-green-50', 'border-green-200', 'text-green-700');
                                 setTimeout(() => {
                                     btn.innerHTML = originalContent;
@@ -325,30 +312,31 @@ export default function ShootDetailsPage() {
                                 console.error('Failed to copy', err);
                             }
                         }}
-                        className="flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3 sm:py-2 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md active:scale-95 bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3a3a3c] text-xs sm:text-sm whitespace-nowrap"
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm active:scale-95 bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] text-gray-700 dark:text-gray-300 text-xs sm:text-sm whitespace-nowrap"
                     >
-                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 00-2 2z" />
                         </svg>
                         Copy
                     </button>
 
-                    <Link href={`/admin/shoots/${shoot.id}/edit`} className="flex-none">
-                        {user?.role === 'ADMIN' && (
-                            <Button variant="outline" className="w-full gap-1.5 bg-white dark:bg-[#2c2c2e] hover:bg-gray-50 dark:hover:bg-[#3a3a3c] h-[30px] sm:h-[38px] px-3 py-1.5 sm:py-2 rounded-lg font-semibold border-gray-200 dark:border-[#3a3a3c] text-xs sm:text-sm text-gray-700 dark:text-gray-300">
-                                <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Edit
-                            </Button>
-                        )}
-                    </Link>
+                    {user?.role === 'ADMIN' && (
+                        <>
+                            <Link href={`/admin/shoots/${shoot.id}/edit`} className="w-full sm:w-auto">
+                                <Button variant="outline" className="w-full gap-2 bg-white dark:bg-[#2c2c2e] h-10 px-4 rounded-xl font-bold border-gray-200 dark:border-[#3a3a3c] text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+                                    <Edit className="w-4 h-4" /> Edit
+                                </Button>
+                            </Link>
 
-
-                    {shoot.status !== 'CANCELLED' && user?.role === 'ADMIN' && (
-                        <button
-                            onClick={handleCancelShoot}
-                            className="flex-none flex items-center justify-center gap-1.5 h-[30px] sm:h-[38px] px-3 py-1.5 sm:py-2 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap bg-red-600 hover:bg-red-700 text-white transition-all shadow-sm active:scale-95 border-none"
-                        >
-                            <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Cancel
-                        </button>
+                            {shoot.status !== 'CANCELLED' && (
+                                <button
+                                    onClick={handleCancelShoot}
+                                    className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap bg-red-600 hover:bg-red-700 text-white transition-all shadow-sm active:scale-95 border-none"
+                                >
+                                    <XCircle className="w-4 h-4" /> Cancel
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
@@ -385,64 +373,70 @@ export default function ShootDetailsPage() {
             )}
 
             {/* Quick Info Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Date & Time */}
-                <Card className="p-3 sm:p-5 flex flex-row sm:flex-col items-center sm:items-start justify-between sm:justify-center min-h-0 sm:min-h-[100px] border-l-4 border-l-blue-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#2c2c2e] border-gray-200 dark:border-[#3a3a3c]">
-                    <div className="sm:absolute right-0 top-0 p-3 opacity-100 order-2 sm:order-none">
-                        <svg className="w-8 h-8 sm:w-16 sm:h-16 text-blue-100 dark:text-blue-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                    <div className="order-1 sm:order-none z-10">
-                        <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-0.5 sm:mb-1">Date & Time</p>
-                        <p className="font-semibold text-sm sm:text-lg text-foreground dark:text-white">
-                            {(() => {
-                                if (!shoot.startTime) return 'Not Set';
-                                const startDate = parseISO(shoot.startTime);
-                                const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
-                                if (endDate && !isSameDay(startDate, endDate)) {
-                                    return `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
-                                }
-                                return format(startDate, 'MMM d, yyyy');
-                            })()}
-                        </p>
-                        <p className="text-xs sm:text-sm text-muted-foreground dark:text-gray-400">
-                            {(() => {
-                                if (!shoot.startTime) return 'Time not set';
-                                const start = format(parseISO(shoot.startTime), 'h:mm a');
-                                const end = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : '';
-                                return end ? `${start} - ${end}` : start;
-                            })()}
-                        </p>
+                <Card className="border-none rounded-[24px] shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-[#1c1c1e]">
+                    <div className="flex items-center justify-between p-5">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold text-[#86868b] dark:text-gray-500 uppercase tracking-widest mb-1.5">Date & Time</p>
+                            <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white leading-tight">
+                                {(() => {
+                                    if (!shoot.startTime) return 'Not Set';
+                                    const startDate = parseISO(shoot.startTime);
+                                    const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
+                                    if (endDate && !isSameDay(startDate, endDate)) {
+                                        return `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
+                                    }
+                                    return format(startDate, 'MMM d, yyyy');
+                                })()}
+                            </p>
+                            <p className="text-[13px] text-[#86868b] dark:text-gray-400 mt-1">
+                                {(() => {
+                                    if (!shoot.startTime) return 'Time not set';
+                                    const start = format(parseISO(shoot.startTime), 'h:mm a');
+                                    const end = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : '';
+                                    return end ? `${start} - ${end}` : start;
+                                })()}
+                            </p>
+                        </div>
+                        <div className="shrink-0 ml-4">
+                            <svg className="w-12 h-12 sm:w-16 sm:h-16 text-blue-100 dark:text-blue-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
                     </div>
                 </Card>
 
                 {/* Location */}
-                <Card className="p-3 sm:p-5 flex flex-row sm:flex-col items-center sm:items-start justify-between sm:justify-center min-h-0 sm:min-h-[100px] border-l-4 border-l-purple-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#2c2c2e] border-gray-200 dark:border-[#3a3a3c]">
-                    <div className="sm:absolute right-0 top-0 p-3 opacity-100 order-2 sm:order-none">
-                        <svg className="w-8 h-8 sm:w-16 sm:h-16 text-purple-100 dark:text-purple-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                    </div>
-                    <div className="order-1 sm:order-none z-10 min-w-0 pr-2">
-                        <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-0.5 sm:mb-1">Location</p>
-                        <p className="font-semibold text-sm sm:text-lg text-foreground dark:text-white truncate" title={shoot.location}>{shoot.location || 'No Location'}</p>
-                        <p className="text-xs sm:text-sm text-muted-foreground dark:text-gray-400">Site / Venue</p>
+                <Card className="border-none rounded-[24px] shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-[#1c1c1e]">
+                    <div className="flex items-center justify-between p-5">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold text-[#86868b] dark:text-gray-500 uppercase tracking-widest mb-1.5">Location</p>
+                            <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white truncate leading-tight" title={shoot.location}>{shoot.location || 'No Location'}</p>
+                            <p className="text-[13px] text-[#86868b] dark:text-gray-400 mt-1">Site / Venue</p>
+                        </div>
+                        <div className="shrink-0 ml-4">
+                            <svg className="w-12 h-12 sm:w-16 sm:h-16 text-purple-100 dark:text-purple-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </div>
                     </div>
                 </Card>
 
                 {/* Point of Contact */}
-                <Card className="p-3 sm:p-5 flex flex-row sm:flex-col items-center sm:items-start justify-between sm:justify-center min-h-0 sm:min-h-[100px] border-l-4 border-l-green-500 shadow-sm relative overflow-hidden group bg-white dark:bg-[#2c2c2e] border-gray-200 dark:border-[#3a3a3c]">
-                    <div className="sm:absolute right-0 top-0 p-3 opacity-100 order-2 sm:order-none">
-                        <svg className="w-8 h-8 sm:w-16 sm:h-16 text-green-100 dark:text-green-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                        </svg>
-                    </div>
-                    <div className="order-1 sm:order-none z-10 min-w-0 pr-2">
-                        <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-0.5 sm:mb-1">Point of Contact</p>
-                        <p className="font-semibold text-sm sm:text-lg text-foreground dark:text-white truncate">{shoot.pocName || 'No POC'}</p>
-                        <p className="text-xs sm:text-sm text-muted-foreground dark:text-gray-400 truncate">{shoot.pocContact || 'No contact info'}</p>
+                <Card className="border-none rounded-[24px] shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-[#1c1c1e]">
+                    <div className="flex items-center justify-between p-5">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold text-[#86868b] dark:text-gray-500 uppercase tracking-widest mb-1.5">Point of Contact</p>
+                            <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white truncate leading-tight">{shoot.pocName || 'No POC'}</p>
+                            <p className="text-[13px] text-[#86868b] dark:text-gray-400 truncate mt-1">{shoot.pocContact || 'No contact info'}</p>
+                        </div>
+                        <div className="shrink-0 ml-4">
+                            <svg className="w-12 h-12 sm:w-16 sm:h-16 text-emerald-100 dark:text-emerald-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        </div>
                     </div>
                 </Card>
             </div>
