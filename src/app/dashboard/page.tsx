@@ -138,6 +138,7 @@ const getDefaultActionsForRole = (role: UserRole): string[] => {
 const STORAGE_KEY = 'dashboard_quick_actions';
 
 import { useInventory } from '@/hooks/useInventory';
+import { useTransactions } from '@/hooks/useTransactions';
 
 // ... (other imports remain)
 
@@ -147,14 +148,22 @@ export default function DashboardPage() {
 
     // Use the hook instead of manual fetching
     const { equipment, isLoading: inventoryLoading, refresh } = useInventory();
+    const { data: allTransactions = [], isLoading: transactionsLoading } = useTransactions();
 
     // Derive stats from the cached/live data
-    const stats = useMemo(() => ({
-        available: equipment.filter(i => i.status === 'AVAILABLE').length,
-        checkedOut: equipment.filter(i => i.status === 'CHECKED_OUT').length,
-        pendingVerification: equipment.filter(i => i.status === 'PENDING_VERIFICATION').length,
-        attention: equipment.filter(i => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(i.status)).length,
-    }), [equipment]);
+    const stats = useMemo(() => {
+        // Calculate checked out items from OPEN transactions to match Transactions page
+        const checkedOutCount = allTransactions
+            .filter(t => t.status === 'OPEN')
+            .reduce((sum, t) => sum + t.items.length, 0);
+
+        return {
+            available: equipment.filter(i => i.status === 'AVAILABLE').length,
+            checkedOut: checkedOutCount,
+            pendingVerification: equipment.filter(i => i.status === 'PENDING_VERIFICATION').length,
+            attention: equipment.filter(i => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(i.status)).length,
+        };
+    }, [equipment, allTransactions]);
 
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedActionIds, setSelectedActionIds] = useState<string[]>([]);
@@ -217,9 +226,10 @@ export default function DashboardPage() {
     }, [user, router, authLoading]);
 
     // Loading state handling
-    // We show skeleton if auth is loading OR if inventory is loading AND we have no data yet (initial load)
-    // If we have data (stale), we show it (standard stale-while-revalidate pattern)
-    if (authLoading || (inventoryLoading && equipment.length === 0)) {
+    // We show skeleton if auth is loading OR if data is loading AND we have no data yet (initial load)
+    const isDataLoading = (inventoryLoading && equipment.length === 0) || (transactionsLoading && allTransactions.length === 0);
+
+    if (authLoading || isDataLoading) {
         return (
             <div className="max-w-6xl mx-auto animate-pulse p-4">
                 <div className="h-10 w-48 bg-gray-200 dark:bg-gray-800 rounded-lg mb-2"></div>

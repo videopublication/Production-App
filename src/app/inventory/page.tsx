@@ -17,6 +17,7 @@ import { useConfirm } from '@/lib/dialog-context';
 import { Skeleton } from '@/components/Skeleton';
 import { useEquipment, useUpdateEquipment, useDeleteEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
+import { useTransactions } from '@/hooks/useTransactions';
 
 export default function InventoryPage() {
     const router = useRouter();
@@ -27,6 +28,8 @@ export default function InventoryPage() {
     // TanStack Query Hooks
     const { data: items = [], isLoading: equipmentLoading, refetch: refresh } = useEquipment();
     const { data: usersList = [], isLoading: usersLoading } = useUsers();
+    // Import transactions to cross-reference status
+    const { data: transactions = [] } = useTransactions();
     const { mutateAsync: updateEquipment } = useUpdateEquipment();
     const { mutateAsync: deleteEquipment } = useDeleteEquipment();
 
@@ -41,12 +44,82 @@ export default function InventoryPage() {
         return map;
     }, [usersList]);
 
+    // Calculate items that need cleanup
+    // 1. Available but have assignee
+    // 2. Checked out but not in any OPEN transaction
+    const cleanupData = useMemo(() => {
+        const activeTransactionItemIds = new Set(
+            transactions
+                .filter(t => t.status === 'OPEN')
+                .flatMap(t => t.items)
+        );
+
+        const staleAssignments = items.filter(i => i.status === 'AVAILABLE' && i.assignedTo);
+        const ghostCheckouts = items.filter(i =>
+            i.status === 'CHECKED_OUT' && !activeTransactionItemIds.has(i.id)
+        );
+
+        return { staleAssignments, ghostCheckouts };
+    }, [items, transactions]);
+
     const cleanupAssignments = async (itemsToCleanup: Equipment[]) => {
         await Promise.all(itemsToCleanup.map(item =>
             updateEquipment({ id: item.id, updates: { assignedTo: null as any } })
         ));
     };
 
+    // Fix items that are falsely marked as checked out
+    const cleanupGhostCheckouts = async (itemsToFix: Equipment[]) => {
+        await Promise.all(itemsToFix.map(item =>
+            updateEquipment({
+                id: item.id,
+                updates: {
+                    status: 'AVAILABLE',
+                    assignedTo: null as any,
+                    location: 'Storage' // Default back to storage or keep existing if known? Safest is usually Storage or previous.
+                }
+            })
+        ));
+    };
+
+    const handleCleanupAssignments = async () => {
+        if (isActionLoading) return;
+
+        const { staleAssignments, ghostCheckouts } = cleanupData;
+        const totalIssues = staleAssignments.length + ghostCheckouts.length;
+
+        if (totalIssues === 0) {
+            showToast('No data inconsistencies found', 'info');
+            return;
+        }
+
+        const isConfirmed = await confirm({
+            title: 'Fix Data Inconsistencies?',
+            message: `Found ${totalIssues} issues:\n` +
+                (staleAssignments.length ? `• ${staleAssignments.length} available items with stale assignees\n` : '') +
+                (ghostCheckouts.length ? `• ${ghostCheckouts.length} items marked 'Checked Out' but not in any active transaction` : ''),
+            confirmLabel: 'Fix All',
+            variant: 'danger'
+        });
+
+        if (!isConfirmed) return;
+
+        setIsActionLoading(true);
+        try {
+            if (staleAssignments.length > 0) await cleanupAssignments(staleAssignments);
+            if (ghostCheckouts.length > 0) await cleanupGhostCheckouts(ghostCheckouts);
+
+            showToast(`Fixed ${totalIssues} data inconsistencies`, 'success');
+            refresh(); // Refresh data
+        } catch (error) {
+            console.error('Cleanup failed:', error);
+            showToast('Cleanup failed', 'error');
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    // ... (rest of component state) ...
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL'>('ALL');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
@@ -79,6 +152,8 @@ export default function InventoryPage() {
             </div>
         );
     }
+
+    // ... (rest of imports and functions) ...
 
     const getUserName = (id: string | undefined) => {
         if (!id) return null;
@@ -205,35 +280,7 @@ export default function InventoryPage() {
         }
     };
 
-    const handleCleanupAssignments = async () => {
-        if (isActionLoading) return;
 
-        const itemsToCleanup = items.filter(i => i.status === 'AVAILABLE' && i.assignedTo);
-        if (itemsToCleanup.length === 0) {
-            showToast('No stale assignments found', 'info');
-            return;
-        }
-
-        const isConfirmed = await confirm({
-            title: 'Cleanup Database?',
-            message: `Found ${itemsToCleanup.length} available items with stale assignments. Clear them now?`,
-            confirmLabel: 'Clear All',
-            variant: 'danger'
-        });
-
-        if (!isConfirmed) return;
-
-        setIsActionLoading(true);
-        try {
-            await cleanupAssignments(itemsToCleanup);
-            showToast('Database cleanup complete!', 'success');
-        } catch (error) {
-            console.error('Cleanup failed:', error);
-            showToast('Cleanup failed', 'error');
-        } finally {
-            setIsActionLoading(false);
-        }
-    };
 
     const handleBulkDelete = async () => {
         if (selectedItems.size === 0 || isActionLoading) return;
@@ -397,16 +444,16 @@ export default function InventoryPage() {
                         {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
                             <div className="flex gap-1 sm:gap-2">
                                 {/* database cleanup button - shows only if needed */}
-                                {items.some(i => i.status === 'AVAILABLE' && i.assignedTo) && user.role === 'ADMIN' && (
+                                {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && user.role === 'ADMIN' && (
                                     <Button
                                         variant="danger"
                                         size="sm"
                                         className="whitespace-nowrap px-2 sm:px-3 animate-pulse"
                                         onClick={handleCleanupAssignments}
-                                        title="Fix inconsistent data: Items marked Available but still have assignees"
+                                        title="Fix inconsistent data in database"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-database-zap"><path d="M7.4 17.65c-.66.86-1.4 1.85-1.4 3.75 0 0 4.1 1.7 8 0 0-1.9-.74-2.89-1.4-3.75l-5.2-7.25c-.66-.86.13-1.65.95-1.65h3.3c.82 0 1.61.79.95 1.65l-5.2 7.25Z" /><path d="M12 2c5.523 0 10 4.477 10 10 0 2.275-.76 4.375-2.031 6.094" /><path d="M2.031 11.906A10 10 0 0 1 12 2" /></svg>
-                                        <span className="hidden sm:inline ml-2">Fix Data</span>
+                                        <span className="hidden sm:inline ml-2">Fix Data ({cleanupData.staleAssignments.length + cleanupData.ghostCheckouts.length})</span>
                                     </Button>
                                 )}
                                 <Link href="/inventory/bulk-add">

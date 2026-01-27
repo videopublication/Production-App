@@ -12,7 +12,7 @@ const withPWA = withPWAInit({
     runtimeCaching: [
       {
         urlPattern: ({ request }) => request.destination === 'style' || request.destination === 'script' || request.destination === 'font',
-        handler: 'CacheFirst',
+        handler: 'StaleWhileRevalidate',
         options: {
           cacheName: 'static-resources',
           expiration: {
