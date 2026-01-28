@@ -8,9 +8,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { useAuth } from '@/lib/auth';
-import QRCode from 'qrcode';
 import Image from 'next/image';
-import jsPDF from 'jspdf';
 
 import { useEquipmentItem, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
@@ -138,29 +136,34 @@ export default function ItemDetailsPage() {
         setIsEditing(false);
     };
 
-    const downloadLabel = () => {
+    const downloadLabel = async () => {
         if (!item || !qrCode) return;
 
-        const doc = new jsPDF({
-            orientation: 'landscape',
-            unit: 'mm',
-            format: [50, 30] // 50mm x 30mm label
-        });
+        try {
+            const { jsPDF } = await import('jspdf');
+            const doc = new jsPDF({
+                orientation: 'landscape',
+                unit: 'mm',
+                format: [50, 30] // 50mm x 30mm label
+            });
 
-        doc.addImage(qrCode, 'PNG', 2, 2, 26, 26);
+            doc.addImage(qrCode, 'PNG', 2, 2, 26, 26);
 
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.text(item.barcode, 30, 8);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.text(item.barcode, 30, 8);
 
-        doc.setFontSize(6);
-        doc.setFont('helvetica', 'normal');
-        const nameLines = doc.splitTextToSize(item.name, 18);
-        doc.text(nameLines, 30, 12);
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'normal');
+            const nameLines = doc.splitTextToSize(item.name, 18);
+            doc.text(nameLines, 30, 12);
 
-        doc.text(item.category, 30, 20);
+            doc.text(item.category, 30, 20);
 
-        doc.save(`${item.barcode}-label.pdf`);
+            doc.save(`${item.barcode}-label.pdf`);
+        } catch (err) {
+            console.error('Failed to generate label:', err);
+        }
     };
 
     const getStatusVariant = (status: string) => {

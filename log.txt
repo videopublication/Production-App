@@ -1,0 +1,20 @@
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+Unchecked runtime.lastError: The message port closed before a response was received.
+login:1 Refused to execute script from 'https://production-app-three.vercel.app/login' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled.
+layout-e8811fb777c512d8.js:7 Cache restored from persistence (IndexedDB)
+login:1 [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) <input class=​"flex h-12 w-full rounded-2xl border border-input bg-secondary px-4 py-2 text-[15px]​ text-foreground placeholder:​text-muted-foreground focus:​outline-none focus:​ring-2 focus:​ring-primary focus:​border-transparent disabled:​cursor-not-allowed disabled:​opacity-50 transition-all duration-200  " required type=​"password" value>​flex
+login:1 Uncaught (in promise) SecurityError: Failed to register a ServiceWorker for scope ('https://production-app-three.vercel.app/') with script ('https://production-app-three.vercel.app/sw.js'): The script resource is behind a redirect, which is disallowed.

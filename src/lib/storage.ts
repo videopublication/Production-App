@@ -154,10 +154,50 @@ class StorageService {
     }
 
     // Transactions
-    async getTransactions(): Promise<Transaction[]> {
-        const { data, error } = await supabase
+    async getTransactions(
+        page?: number,
+        limit?: number,
+        search?: string,
+        status?: 'OPEN' | 'CLOSED' | 'ALL',
+        filterUserIds?: string[], // Strict AND filter
+        searchUserIds?: string[]  // OR match (e.g. results for "John" where John is the user)
+    ): Promise<Transaction[]> {
+        let query = supabase
             .from('transactions')
-            .select('*');
+            .select('*')
+            .order('timestamp_out', { ascending: false });
+
+        if (status && status !== 'ALL') {
+            query = query.eq('status', status);
+        }
+
+        if (filterUserIds && filterUserIds.length > 0) {
+            query = query.in('user_id', filterUserIds);
+        }
+
+        if (search || (searchUserIds && searchUserIds.length > 0)) {
+            const conditions = [];
+            if (search) {
+                conditions.push(`project.ilike.%${search}%`);
+                conditions.push(`id.ilike.%${search}%`);
+                conditions.push(`notes.ilike.%${search}%`);
+            }
+            if (searchUserIds && searchUserIds.length > 0) {
+                // Formatting for .in() within .or() is specific: col.in.(val1,val2)
+                conditions.push(`user_id.in.(${searchUserIds.join(',')})`);
+            }
+            if (conditions.length > 0) {
+                query = query.or(conditions.join(','));
+            }
+        }
+
+        if (page && limit) {
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            query = query.range(from, to);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching transactions:', error);
@@ -174,6 +214,37 @@ class StorageService {
             notes: t.notes,
             shootId: t.shoot_id
         })) as Transaction[];
+    }
+
+    async getTransactionStats(): Promise<{ total: number, active: number, closed: number, outItems: number }> {
+        // We can run these in parallel
+        // 1. Total count
+        const totalPromise = supabase.from('transactions').select('*', { count: 'exact', head: true });
+        // 2. Active count
+        const activePromise = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'OPEN');
+        // 3. Closed count
+        const closedPromise = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'CLOSED');
+
+        // 4. Out Items (Sum of items length for OPEN transactions). 
+        // Supabase/PostgREST doesn't support sum() directly on client easily without RPC.
+        // We will fetch minimal data for OPEN transactions to sum items. 
+        // Since OPEN transactions are usually < 100, this is cheap.
+        const outItemsPromise = supabase.from('transactions').select('items').eq('status', 'OPEN');
+
+        const [totalRes, activeRes, closedRes, outItemsRes] = await Promise.all([
+            totalPromise, activePromise, closedPromise, outItemsPromise
+        ]);
+
+        const outItems = outItemsRes.data
+            ? outItemsRes.data.reduce((sum: number, t: any) => sum + (Array.isArray(t.items) ? t.items.length : 0), 0)
+            : 0;
+
+        return {
+            total: totalRes.count || 0,
+            active: activeRes.count || 0,
+            closed: closedRes.count || 0,
+            outItems
+        };
     }
 
     async getTransaction(id: string): Promise<Transaction | null> {
@@ -258,11 +329,30 @@ class StorageService {
     }
 
     // Logs
-    async getLogs(): Promise<Log[]> {
-        const { data, error } = await supabase
+    async getLogs(page?: number, limit?: number, search?: string): Promise<Log[]> {
+        let query = supabase
             .from('logs')
-            .select('*')
+            .select('*', { count: 'exact' }) // Get count for UI logic if needed later
             .order('timestamp', { ascending: false });
+
+        if (search) {
+            query = query.or(`details.ilike.%${search}%,action.ilike.%${search}%`);
+        }
+
+        if (page && limit) {
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            query = query.range(from, to);
+        } else if (limit) {
+            // Support just limit without page
+            query = query.limit(limit);
+        }
+        // If no page/limit, we fetch all? Current app expects all.
+        // Let's default to fetching all if NOT specified, to allow backward compatibility 
+        // with other components (like getLogsByEntity calls if they existed).
+        // But getLogs() is mainly used in Admin Logs page.
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching logs:', error);

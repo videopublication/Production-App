@@ -7,7 +7,6 @@ import { Equipment } from '@/types';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card } from '@/components/Card';
-import QRCode from 'qrcode';
 import { useAuth } from '@/lib/auth';
 
 export default function AddItemPage() {
@@ -70,6 +69,7 @@ export default function AddItemPage() {
             }
 
             // Generate QR Code (just to verify it works, in real app we might save it or print it)
+            const QRCode = (await import('qrcode')).default;
             const qrDataUrl = await QRCode.toDataURL(JSON.stringify({ id, barcode }));
             console.log('Generated QR:', qrDataUrl);
 

@@ -92,7 +92,7 @@ export interface Notification {
     createdAt: string;
 }
 
-export type ShootStatus = 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED';
+export type ShootStatus = 'CONFIRMED' | 'CANCELLED';
 
 export interface HumanResourceRequirement {
     roleName: string;

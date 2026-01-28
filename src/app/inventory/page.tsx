@@ -286,8 +286,8 @@ export default function InventoryPage() {
         if (selectedItems.size === 0 || isActionLoading) return;
 
         const isConfirmed = await confirm({
-            title: 'Delete Selected Items?',
-            message: `Are you sure you want to delete ${selectedItems.size} items? This action cannot be undone.`,
+            title: `Delete Selected Item${selectedItems.size !== 1 ? 's' : ''}?`,
+            message: `Are you sure you want to delete ${selectedItems.size} item${selectedItems.size !== 1 ? 's' : ''}? This action cannot be undone.`,
             confirmLabel: 'Delete Forever',
             variant: 'danger'
         });

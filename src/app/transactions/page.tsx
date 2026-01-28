@@ -18,35 +18,122 @@ export default function TransactionsPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
 
-    // Data Hooks (Offline Ready)
-    const { data: allTransactions = [], isLoading: isTxLoading, refetch: refreshTransactions } = useTransactions();
+    // Data State
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [stats, setStats] = useState({ total: 0, active: 0, closed: 0, outItems: 0 });
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [loading, setLoading] = useState(true);
+
+    // Filters & Search
+    const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [filterStatus, setFilterStatus] = useState<'ALL' | 'OPEN' | 'CLOSED'>('OPEN');
+
+    // Auxiliary Data
     const { equipment, users, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
     const { data: shoots = [] } = useShoots();
-
-    const [searchQuery, setSearchQuery] = useState('');
-    const [filterStatus, setFilterStatus] = useState<'ALL' | 'OPEN' | 'CLOSED'>('OPEN');
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
-    // Derived State
-    const transactions = React.useMemo(() => {
-        if (!allTransactions) return [];
-        return [...allTransactions].sort((a, b) =>
-            new Date(b.timestampOut).getTime() - new Date(a.timestampOut).getTime()
-        );
-    }, [allTransactions]);
+    // Debounce Search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
 
-    const loading = isTxLoading || isInventoryLoading;
+    // Reset and Load on Filter Change
+    useEffect(() => {
+        setPage(1);
+        setTransactions([]);
+        setHasMore(true);
+        loadData(1, true);
+    }, [debouncedSearch, filterStatus]);
 
-    // Refresh function for PullToRefresh
-    const handleRefresh = async () => {
-        await Promise.all([refreshTransactions(), refreshInventory()]);
-    };
-
+    // Initial Load
     useEffect(() => {
         if (authLoading) return;
-        if (!user) router.push('/login');
-        else if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) router.push('/');
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
+            router.push('/');
+            return;
+        }
+
+        loadStats();
+        // loadData is triggered by the dependency change above on mount too
     }, [user, router, authLoading]);
+
+    const loadStats = async () => {
+        try {
+            const newStats = await storage.getTransactionStats();
+            setStats(newStats);
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    };
+
+    const loadData = async (pageNum: number, isReset: boolean = false) => {
+        setLoading(true);
+        try {
+            const limit = 20;
+
+            // Resolve User IDs from Search Query (Hybrid Search)
+            let searchUserIds: string[] = [];
+            if (debouncedSearch && users.length > 0) {
+                const searchLower = debouncedSearch.toLowerCase();
+                searchUserIds = users
+                    .filter(u => u.name.toLowerCase().includes(searchLower))
+                    .map(u => u.id);
+            }
+
+            const newTxns = await storage.getTransactions(
+                pageNum,
+                limit,
+                debouncedSearch,
+                filterStatus,
+                undefined, // filterUserIds (strict)
+                searchUserIds // searchUserIds (OR match)
+            );
+
+            if (newTxns.length < limit) {
+                setHasMore(false);
+            } else {
+                setHasMore(true);
+            }
+
+            if (isReset) {
+                setTransactions(newTxns);
+            } else {
+                setTransactions(prev => [...prev, ...newTxns]);
+            }
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLoadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        loadData(nextPage, false);
+    };
+
+    const handleRefresh = async () => {
+        await Promise.all([
+            loadStats(),
+            refreshInventory(),
+            (async () => {
+                setPage(1);
+                setHasMore(true);
+                return loadData(1, true);
+            })()
+        ]);
+    };
 
     if (authLoading) {
         return (
@@ -67,30 +154,6 @@ export default function TransactionsPage() {
             return item?.name || 'Unknown Item';
         });
     };
-
-    const filteredTransactions = transactions.filter(txn => {
-        // Filter by status
-        if (filterStatus !== 'ALL' && txn.status !== filterStatus) {
-            return false;
-        }
-
-        // Filter by search query
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            const userName = getUserName(txn.userId).toLowerCase();
-            const project = (txn.project || '').toLowerCase();
-            const itemNames = getItemNames(txn.items).join(' ').toLowerCase();
-
-            return userName.includes(query) ||
-                project.includes(query) ||
-                itemNames.includes(query) ||
-                txn.id.toLowerCase().includes(query);
-        }
-
-        return true;
-    });
-
-
 
     const generateMessage = (txn: Transaction) => {
         const userName = getUserName(txn.userId);
@@ -132,35 +195,32 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
         }
     };
 
-    if (!user) {
-        return null;
-    }
-
+    // Render Logic
     return (
         <PullToRefresh onRefresh={handleRefresh}>
-            <div className="space-y-3 sm:space-y-5 animate-fade-in">
+            <div className="space-y-3 sm:space-y-5 animate-fade-in pb-12">
                 {/* Stats at top - Compact on mobile */}
                 <div className="grid grid-cols-4 gap-2 sm:gap-4">
                     <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20">
                         <p className="text-[10px] sm:text-sm font-medium text-blue-600">Total</p>
-                        <p className="text-lg sm:text-2xl font-bold">{transactions.length}</p>
+                        <p className="text-lg sm:text-2xl font-bold">{stats.total}</p>
                     </div>
                     <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20">
                         <p className="text-[10px] sm:text-sm font-medium text-green-600">Active</p>
                         <p className="text-lg sm:text-2xl font-bold">
-                            {transactions.filter(t => t.status === 'OPEN').length}
+                            {stats.active}
                         </p>
                     </div>
                     <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-gray-500/10 to-gray-600/5 border border-gray-500/20">
                         <p className="text-[10px] sm:text-sm font-medium text-gray-600">Closed</p>
                         <p className="text-lg sm:text-2xl font-bold">
-                            {transactions.filter(t => t.status === 'CLOSED').length}
+                            {stats.closed}
                         </p>
                     </div>
                     <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-orange-500/10 to-orange-600/5 border border-orange-500/20">
                         <p className="text-[10px] sm:text-sm font-medium text-orange-600">Out</p>
                         <p className="text-lg sm:text-2xl font-bold">
-                            {transactions.filter(t => t.status === 'OPEN').reduce((sum, t) => sum + t.items.length, 0)}
+                            {stats.outItems}
                         </p>
                     </div>
                 </div>
@@ -205,13 +265,13 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                 </div>
 
                 {/* Transactions List */}
-                <Card title={`${filteredTransactions.length} Transaction${filteredTransactions.length !== 1 ? 's' : ''}`}>
-                    {loading ? (
+                <Card title={`${transactions.length}${hasMore ? '+' : ''} Transaction${transactions.length !== 1 ? 's' : ''}`}>
+                    {loading && transactions.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground">
                             <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
                             Loading transactions...
                         </div>
-                    ) : filteredTransactions.length === 0 ? (
+                    ) : transactions.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground">
                             <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -221,13 +281,12 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {filteredTransactions.map((txn) => (
+                            {transactions.map((txn) => (
                                 <div
                                     key={txn.id}
                                     className="p-4 rounded-xl border border-border bg-white dark:bg-[#1c1c1e] shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
                                     onClick={() => router.push(`/transactions/${txn.id}`)}
                                 >
-                                    {/* Top Row: ID Badge & Status */}
                                     {/* Top Row: ID Badge & Status */}
                                     <div className="flex items-center justify-between mb-2">
                                         <span className="shrink-0 text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-md tracking-wider font-mono">
@@ -338,6 +397,26 @@ ${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Ot
                                     </div>
                                 </div>
                             ))}
+
+                            {/* Load More & Loading State */}
+                            <div className="pt-4 flex justify-center">
+                                {loading && transactions.length > 0 ? (
+                                    <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
+                                        <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                                        Loading more...
+                                    </div>
+                                ) : hasMore && transactions.length > 0 ? (
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleLoadMore}
+                                        className="bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                    >
+                                        Load More
+                                    </Button>
+                                ) : transactions.length > 0 ? (
+                                    <p className="text-xs text-gray-400 dark:text-gray-500">No more transactions</p>
+                                ) : null}
+                            </div>
                         </div>
                     )}
                 </Card>

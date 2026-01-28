@@ -17,8 +17,26 @@ export default function AdminLogsPage() {
     const [logs, setLogs] = useState<Log[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [filterAction, setFilterAction] = useState<string>('ALL');
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    // Reset when search changes
+    useEffect(() => {
+        setPage(1);
+        setLogs([]);
+        setHasMore(true);
+        loadData(1, true);
+    }, [debouncedSearch]);
 
     useEffect(() => {
         if (!user) return;
@@ -26,23 +44,44 @@ export default function AdminLogsPage() {
             router.push('/dashboard');
             return;
         }
-        loadData();
+        storage.getUsers().then(setUsers);
+        // Initial load is handled by the search effect above
     }, [user, router]);
 
-    const loadData = async () => {
+    const loadData = async (pageNum: number = 1, isReset: boolean = false) => {
         setLoading(true);
         try {
-            const [logsData, usersData] = await Promise.all([
-                storage.getLogs(),
-                storage.getUsers()
-            ]);
-            setLogs(logsData);
-            setUsers(usersData);
+            const limit = 20;
+            const newLogs = await storage.getLogs(pageNum, limit, debouncedSearch);
+
+            if (newLogs.length < limit) {
+                setHasMore(false);
+            } else {
+                setHasMore(true);
+            }
+
+            if (isReset) {
+                setLogs(newLogs);
+            } else {
+                setLogs(prev => [...prev, ...newLogs]);
+            }
         } catch (error) {
             console.error('Error loading logs:', error);
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleLoadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        loadData(nextPage, false);
+    };
+
+    const handleRefresh = async () => {
+        setPage(1);
+        setHasMore(true);
+        await loadData(1, true);
     };
 
     const getUserName = (userId?: string) => {
@@ -51,19 +90,9 @@ export default function AdminLogsPage() {
         return found ? found.name : 'Unknown User';
     };
 
+    // Filter action on Client Side (on loaded logs)
     const filteredLogs = logs.filter(log => {
         if (filterAction !== 'ALL' && log.action !== filterAction) return false;
-
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            const userName = getUserName(log.userId).toLowerCase();
-            const details = (log.details || '').toLowerCase();
-            const action = log.action.toLowerCase();
-
-            return userName.includes(query) ||
-                details.includes(query) ||
-                action.includes(query);
-        }
         return true;
     });
 
@@ -98,7 +127,7 @@ export default function AdminLogsPage() {
                 <Button
                     variant="outline"
                     size="sm"
-                    onClick={loadData}
+                    onClick={() => handleRefresh()}
                     className="bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                 >
                     <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,7 +161,7 @@ export default function AdminLogsPage() {
                 </div>
             </div>
 
-            <PullToRefresh onRefresh={loadData}>
+            <PullToRefresh onRefresh={handleRefresh}>
                 {/* Desktop View Table */}
                 <div className="hidden md:block bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
@@ -146,11 +175,7 @@ export default function AdminLogsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={4} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">Loading logs...</td>
-                                    </tr>
-                                ) : filteredLogs.length === 0 ? (
+                                {logs.length === 0 && !loading ? (
                                     <tr>
                                         <td colSpan={4} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">No logs found</td>
                                     </tr>
@@ -181,11 +206,7 @@ export default function AdminLogsPage() {
 
                 {/* Mobile View List */}
                 <div className="md:hidden space-y-3">
-                    {loading ? (
-                        <div className="text-center py-10 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 text-gray-500 dark:text-gray-400">
-                            Loading logs...
-                        </div>
-                    ) : filteredLogs.length === 0 ? (
+                    {logs.length === 0 && !loading ? (
                         <div className="text-center py-10 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                             No logs found
                         </div>
@@ -209,6 +230,26 @@ export default function AdminLogsPage() {
                             </div>
                         ))
                     )}
+                </div>
+
+                {/* Load More & Loading State */}
+                <div className="pt-4 flex justify-center">
+                    {loading ? (
+                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
+                            <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                            Loading more logs...
+                        </div>
+                    ) : hasMore ? (
+                        <Button
+                            variant="outline"
+                            onClick={handleLoadMore}
+                            className="bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        >
+                            Load More
+                        </Button>
+                    ) : logs.length > 0 ? (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">No more logs to load</p>
+                    ) : null}
                 </div>
             </PullToRefresh>
         </div>

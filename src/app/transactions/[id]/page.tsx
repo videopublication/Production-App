@@ -280,9 +280,10 @@ export default function TransactionDetailPage() {
 
         setSaving(true);
         try {
-            // 1. Update item status directly to AVAILABLE
+            // 1. Update item status directly to AVAILABLE and CLEAR assignee
             await storage.updateEquipment(itemId, {
                 status: 'AVAILABLE',
+                assignedTo: null as any,
                 lastActivity: new Date().toISOString()
             });
 
@@ -382,10 +383,13 @@ export default function TransactionDetailPage() {
             .filter(Boolean)
             .join(', ');
 
+        const totalTransactionItems = getCheckedOutItems().length;
+        const isAllSelected = selectedItems.size === totalTransactionItems;
+
         const isConfirmed = await confirm({
-            title: `Force Return ${selectedItems.size} Items?`,
+            title: `Force Return ${selectedItems.size} Item${selectedItems.size !== 1 ? 's' : ''}?`,
             message: `This will mark the following items as returned:\n${itemNames}`,
-            confirmLabel: 'Return All',
+            confirmLabel: isAllSelected ? 'Return All' : `Return ${selectedItems.size} Item${selectedItems.size !== 1 ? 's' : ''}`,
             variant: 'danger'
         });
 
@@ -544,6 +548,19 @@ export default function TransactionDetailPage() {
                 timestampIn: new Date().toISOString(),
                 postReturnConditions: updatedConditions
             });
+
+            // IMPORTANT: Also update the equipment items! 
+            // Any item that was still checked out or pending should now be available and unassigned.
+            await Promise.all(transaction!.items.map(async (itemId) => {
+                const item = equipment.find(e => e.id === itemId);
+                if (item && (item.status === 'CHECKED_OUT' || item.status === 'PENDING_VERIFICATION')) {
+                    await storage.updateEquipment(itemId, {
+                        status: 'AVAILABLE',
+                        assignedTo: null as any,
+                        lastActivity: new Date().toISOString()
+                    });
+                }
+            }));
 
             await storage.addLog({
                 id: crypto.randomUUID(),
