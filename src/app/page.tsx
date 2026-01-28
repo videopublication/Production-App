@@ -46,7 +46,7 @@ export default function Home() {
           <div className="mx-auto max-w-4xl flex flex-col items-center">
             <div className="mb-6 sm:mb-8 flex justify-center animate-fade-in opacity-0" style={{ animationDelay: '0.1s' }}>
               <span className="rounded-full bg-white/50 backdrop-blur-md border border-white/20 px-3 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium text-foreground shadow-sm">
-                New Version 2.0
+                New Version 2.1
               </span>
             </div>
 
