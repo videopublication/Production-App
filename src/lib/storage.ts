@@ -271,7 +271,7 @@ class StorageService {
         } as Transaction;
     }
 
-    async saveTransaction(transaction: Transaction): Promise<void> {
+    async saveTransaction(transaction: Transaction, systemId?: string, displayId?: string): Promise<void> {
         const dbTransaction = {
             id: transaction.id,
             user_id: transaction.userId,
@@ -282,7 +282,9 @@ class StorageService {
             pre_checkout_conditions: transaction.preCheckoutConditions,
             status: transaction.status,
             additional_users: transaction.additionalUsers,
-            notes: transaction.notes
+            notes: transaction.notes,
+            system_id: systemId,   // New UUID
+            display_id: displayId  // New Readable ID
         };
 
         const { error } = await supabase

@@ -60,7 +60,7 @@ export default function NewShootPage() {
             const newShoot: Shoot = {
                 ...data as Shoot,
                 id: shootId,
-                createdBy: user?.name || 'Admin',
+                createdBy: user?.id || '', // Use User ID (UUID) for DB Foreign Key
             };
 
             await storage.saveShoot(newShoot);

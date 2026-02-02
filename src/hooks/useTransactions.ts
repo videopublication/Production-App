@@ -38,12 +38,20 @@ export function useCheckOut() {
             notes?: string,
             location?: string,
             project: string,
-            id?: string
+            id?: string,
+            displayId?: string
         }) => {
 
             const transactionId = id || generateTransactionId();
 
             // 1. Create the Transaction Record
+            // HYBRID MIGRATION: 
+            // - id: Still the TXN-XXXX (Legacy PK, to be swapped later)
+            // - display_id: TXN-XXXX (The permanent readable ID)
+            // - system_id: UUID (The future PK)
+
+            const systemUUID = crypto.randomUUID(); // Valid V4 UUID
+
             const transaction: Transaction = {
                 id: transactionId,
                 userId,
@@ -57,7 +65,8 @@ export function useCheckOut() {
                 status: 'OPEN'
             };
 
-            await storage.saveTransaction(transaction);
+            // Enhanced Save with new columns
+            await storage.saveTransaction(transaction, systemUUID, transactionId);
 
             // 2. Update Equipment Status
             // We still assign to the primary userId for simple tracking, or we could change this logic.

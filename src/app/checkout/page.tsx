@@ -292,6 +292,9 @@ export default function CheckoutPage() {
             return;
         }
 
+        // IMMEDIATE UPDATE: Prevent race conditions from rapid scanner callbacks
+        lastProcessedRef.current = { code: normalizedBarcode, time: now };
+
         if (!normalizedBarcode) return;
 
         const item = equipmentList.find(i =>
@@ -302,7 +305,6 @@ export default function CheckoutPage() {
         if (!item) {
             showToast('Item not found', 'error');
             playErrorSound();
-            lastProcessedRef.current = { code: normalizedBarcode, time: now };
             return;
         }
 
@@ -314,7 +316,6 @@ export default function CheckoutPage() {
                     : item.status.toLowerCase().replace('_', ' ');
             showToast(`Item "${item.name}" is currently ${statusMessage}`, 'error');
             playErrorSound();
-            lastProcessedRef.current = { code: normalizedBarcode, time: now };
             return;
         }
 
@@ -322,7 +323,6 @@ export default function CheckoutPage() {
             const serialInfo = item.serialNumber ? ` (S/N: ${item.serialNumber})` : '';
             showToast(`Item "${item.name}"${serialInfo} is already in cart`, 'info');
             playErrorSound();
-            lastProcessedRef.current = { code: normalizedBarcode, time: now };
             return;
         }
 
@@ -335,8 +335,6 @@ export default function CheckoutPage() {
             setSuggestions([]);
             setShowSuggestions(false);
         }
-
-        lastProcessedRef.current = { code: normalizedBarcode, time: now };
     };
 
     const updateSuggestions = (query: string, currentCart: Equipment[]) => {
@@ -448,7 +446,8 @@ export default function CheckoutPage() {
                 userId: selectedUserIds[0], // Primary user
                 additionalUsers: selectedUserIds.slice(1), // All other selected users
                 notes: notes.trim(),
-                project: project.trim()
+                project: project.trim(),
+                displayId: transactionIdRef.current // The readable TXN ID
             });
 
             handleSuccess();

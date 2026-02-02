@@ -742,7 +742,7 @@ export default function ShootList() {
                                                 <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-700 mx-1"></div>
 
                                                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                    by {shoot.createdBy || 'Admin'}
+                                                    by {users.find(u => u.id === shoot.createdBy)?.name || shoot.createdBy || 'Admin'}
                                                 </span>
                                             </div>
                                         </div>

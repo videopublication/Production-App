@@ -275,18 +275,19 @@ export default function ShootDetailsPage() {
                     </h1>
 
                     <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                        Added by <span className="font-semibold text-foreground">{shoot.createdBy || 'Admin'}</span>
+                        Added by <span className="font-semibold text-foreground">{getUserName(shoot.createdBy)}</span>
                     </p>
                 </div>
 
                 {/* Actions Toolbar */}
-                <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-2">
+                {/* Actions Toolbar */}
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-3 pt-4">
                     <button
                         onClick={() => {
                             const message = formatWhatsAppMessage(shoot, assignments, users);
                             openWhatsApp(message);
                         }}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm active:scale-95 bg-[#25D366] text-white text-xs sm:text-sm whitespace-nowrap"
+                        className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm hover:shadow-green-500/20 active:scale-95 bg-[#25D366] hover:bg-[#22bf5b] text-white text-sm whitespace-nowrap lg:min-w-[140px]"
                         title="Share via WhatsApp"
                     >
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" className="shrink-0">
@@ -302,28 +303,28 @@ export default function ShootDetailsPage() {
                             const message = formatWhatsAppMessage(shoot, assignments, users);
                             try {
                                 await navigator.clipboard.writeText(message);
-                                btn.innerHTML = `<svg class="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> Copied`;
-                                btn.classList.add('bg-green-50', 'border-green-200', 'text-green-700');
+                                btn.innerHTML = `<svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> Copied`;
+                                btn.classList.add('bg-green-50', 'dark:bg-green-900/20', 'border-green-200', 'dark:border-green-800', 'text-green-700', 'dark:text-green-300');
                                 setTimeout(() => {
                                     btn.innerHTML = originalContent;
-                                    btn.classList.remove('bg-green-50', 'border-green-200', 'text-green-700');
+                                    btn.classList.remove('bg-green-50', 'dark:bg-green-900/20', 'border-green-200', 'dark:border-green-800', 'text-green-700', 'dark:text-green-300');
                                 }, 2000);
                             } catch (err) {
                                 console.error('Failed to copy', err);
                             }
                         }}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm active:scale-95 bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] text-gray-700 dark:text-gray-300 text-xs sm:text-sm whitespace-nowrap"
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all shadow-sm hover:shadow active:scale-95 bg-white dark:bg-zinc-800/50 dark:hover:bg-zinc-800 dark:backdrop-blur-md border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-200 text-sm whitespace-nowrap"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 00-2 2z" />
                         </svg>
-                        Copy
+                        Copy Info
                     </button>
 
                     {user?.role === 'ADMIN' && (
                         <>
                             <Link href={`/admin/shoots/${shoot.id}/edit`} className="w-full sm:w-auto">
-                                <Button variant="outline" className="w-full gap-2 bg-white dark:bg-[#2c2c2e] h-10 px-4 rounded-xl font-bold border-gray-200 dark:border-[#3a3a3c] text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+                                <Button variant="outline" className="w-full gap-2 bg-white dark:bg-zinc-800/50 dark:hover:bg-zinc-800 dark:backdrop-blur-md h-[42px] px-5 rounded-xl font-medium border-gray-200 dark:border-zinc-700 text-sm text-gray-700 dark:text-gray-200">
                                     <Edit className="w-4 h-4" /> Edit
                                 </Button>
                             </Link>
@@ -331,7 +332,7 @@ export default function ShootDetailsPage() {
                             {shoot.status !== 'CANCELLED' && (
                                 <button
                                     onClick={handleCancelShoot}
-                                    className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap bg-red-600 hover:bg-red-700 text-white transition-all shadow-sm active:scale-95 border-none"
+                                    className="flex items-center justify-center gap-2 h-[42px] px-5 rounded-xl font-medium text-sm whitespace-nowrap bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/30 transition-all shadow-sm active:scale-95"
                                 >
                                     <XCircle className="w-4 h-4" /> Cancel
                                 </button>
@@ -373,10 +374,11 @@ export default function ShootDetailsPage() {
             )}
 
             {/* Quick Info Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Date & Time */}
-                <Card className="border-none rounded-[24px] shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-[#1c1c1e]">
-                    <div className="flex items-center justify-between p-5">
+                <Card className="border-none rounded-[24px] shadow-sm hover:shadow-lg transition-all duration-300 bg-white dark:bg-[#1c1c1e] group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity opacity-0 group-hover:opacity-100"></div>
+                    <div className="flex items-start sm:items-center justify-between p-4 sm:p-5 relative z-10 gap-3">
                         <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold text-[#86868b] dark:text-gray-500 uppercase tracking-widest mb-1.5">Date & Time</p>
                             <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white leading-tight">
@@ -399,43 +401,51 @@ export default function ShootDetailsPage() {
                                 })()}
                             </p>
                         </div>
-                        <div className="shrink-0 ml-4">
-                            <svg className="w-12 h-12 sm:w-16 sm:h-16 text-blue-100 dark:text-blue-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
+                        <div className="shrink-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-500 dark:text-blue-400">
+                                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </Card>
 
                 {/* Location */}
-                <Card className="border-none rounded-[24px] shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-[#1c1c1e]">
-                    <div className="flex items-center justify-between p-5">
+                <Card className="border-none rounded-[24px] shadow-sm hover:shadow-lg transition-all duration-300 bg-white dark:bg-[#1c1c1e] group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity opacity-0 group-hover:opacity-100"></div>
+                    <div className="flex items-start sm:items-center justify-between p-4 sm:p-5 relative z-10 gap-3">
                         <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold text-[#86868b] dark:text-gray-500 uppercase tracking-widest mb-1.5">Location</p>
-                            <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white truncate leading-tight" title={shoot.location}>{shoot.location || 'No Location'}</p>
+                            <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white leading-tight break-words line-clamp-2" title={shoot.location}>{shoot.location || 'No Location'}</p>
                             <p className="text-[13px] text-[#86868b] dark:text-gray-400 mt-1">Site / Venue</p>
                         </div>
-                        <div className="shrink-0 ml-4">
-                            <svg className="w-12 h-12 sm:w-16 sm:h-16 text-purple-100 dark:text-purple-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
+                        <div className="shrink-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center text-purple-500 dark:text-purple-400">
+                                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </Card>
 
                 {/* Point of Contact */}
-                <Card className="border-none rounded-[24px] shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-[#1c1c1e]">
-                    <div className="flex items-center justify-between p-5">
+                <Card className="border-none rounded-[24px] shadow-sm hover:shadow-lg transition-all duration-300 bg-white dark:bg-[#1c1c1e] group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity opacity-0 group-hover:opacity-100"></div>
+                    <div className="flex items-start sm:items-center justify-between p-4 sm:p-5 relative z-10 gap-3">
                         <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold text-[#86868b] dark:text-gray-500 uppercase tracking-widest mb-1.5">Point of Contact</p>
-                            <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white truncate leading-tight">{shoot.pocName || 'No POC'}</p>
-                            <p className="text-[13px] text-[#86868b] dark:text-gray-400 truncate mt-1">{shoot.pocContact || 'No contact info'}</p>
+                            <p className="font-bold text-[15px] sm:text-[17px] text-[#1d1d1f] dark:text-white leading-tight break-words line-clamp-2">{shoot.pocName || 'No POC'}</p>
+                            <p className="text-[13px] text-[#86868b] dark:text-gray-400 mt-1 break-all line-clamp-1">{shoot.pocContact || 'No contact info'}</p>
                         </div>
-                        <div className="shrink-0 ml-4">
-                            <svg className="w-12 h-12 sm:w-16 sm:h-16 text-emerald-100 dark:text-emerald-900/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
+                        <div className="shrink-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-500 dark:text-emerald-400">
+                                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </Card>
