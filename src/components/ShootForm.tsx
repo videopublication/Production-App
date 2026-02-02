@@ -57,6 +57,42 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     const [addToCalendar, setAddToCalendar] = useState(false);
     const [hasCalendarToken, setHasCalendarToken] = useState(false);
 
+    // Jira State
+    const [isFetchingJira, setIsFetchingJira] = useState(false);
+
+    const handleFetchJira = async () => {
+        if (!formData.jiraTicketId) {
+            showToast('Please enter a Jira Ticket ID', 'error');
+            return;
+        }
+
+        setIsFetchingJira(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('fetch-ticket-details', {
+                body: { ticketId: formData.jiraTicketId.trim() }
+            });
+
+            if (error) throw error;
+            if (data.error) throw new Error(data.error);
+
+            // Auto-fill form
+            setFormData(prev => ({
+                ...prev,
+                title: data.title || prev.title,
+                description: data.description || prev.description,
+            }));
+
+            showToast('Shoot details fetched from Jira!', 'success');
+            if (data.description && !showDescription) setShowDescription(true);
+
+        } catch (error: any) {
+            console.error('Jira Fetch Error:', error);
+            showToast(error.message || 'Failed to fetch Jira ticket', 'error');
+        } finally {
+            setIsFetchingJira(false);
+        }
+    };
+
     useEffect(() => {
         // Check if user has connected Google Calendar
         getGoogleProviderToken()
@@ -322,13 +358,28 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 required
                                 className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                             />
-                            <Input
-                                label="Jira Ticket ID"
-                                value={formData.jiraTicketId || ''}
-                                onChange={e => setFormData({ ...formData, jiraTicketId: e.target.value })}
-                                placeholder="e.g. PROJ-123"
-                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
-                            />
+                            <div className="relative">
+                                <Input
+                                    label="Jira Ticket ID"
+                                    value={formData.jiraTicketId || ''}
+                                    onChange={e => setFormData({ ...formData, jiraTicketId: e.target.value })}
+                                    placeholder="e.g. VP-51638"
+                                    className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary pr-20"
+                                />
+                                <div className="absolute top-[29px] right-1">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={handleFetchJira}
+                                        isLoading={isFetchingJira}
+                                        disabled={!formData.jiraTicketId}
+                                        className="h-9 px-3 text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 rounded-xl font-medium"
+                                    >
+                                        Fetch
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
 
                         {showDescription && (

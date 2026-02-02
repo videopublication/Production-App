@@ -3,5 +3,5 @@ export const APP_CONFIG = {
     version: '2.1.1',
     build: process.env.NODE_ENV === 'development' ? 'Development' : 'Production',
     supportEmail: 'support@example.com',
-    jiraDomain: 'yourcompany.atlassian.net' // TODO: Update this to your actual Jira domain
+    jiraDomain: 'servicedesk.isha.in'
 };
