@@ -197,7 +197,7 @@ export default function ShootDetailsPage() {
 
     const getUserName = (userId?: string) => {
         if (!userId) return 'System';
-        return users.find(u => u.id === userId)?.name || 'Unknown';
+        return users.find(u => u.id === userId)?.name || userId;
     };
 
     if (loading) {
