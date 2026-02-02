@@ -68,12 +68,27 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
         setIsFetchingJira(true);
         try {
-            const { data, error } = await supabase.functions.invoke('fetch-ticket-details', {
-                body: { ticketId: formData.jiraTicketId.trim() }
+            // Using raw fetch to prevent Supabase Client from attaching a potentially invalid Auth token
+            // which causes 401s when running locally or if session is stale.
+            // Function is deployed with --no-verify-jwt to allow this.
+            const projectId = 'uysumhukcopbnpmyxabw';
+            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fetch-ticket-details`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticketId: formData.jiraTicketId.trim() })
             });
 
-            if (error) throw error;
-            if (data.error) throw new Error(data.error);
+            if (!response.ok) {
+                const errText = await response.text();
+                let errMsg = `Error ${response.status}`;
+                try {
+                    const json = JSON.parse(errText);
+                    if (json.error) errMsg = json.error;
+                } catch (e) { /* ignore */ }
+                throw new Error(errMsg);
+            }
+
+            const data = await response.json();
 
             // Auto-fill form
             setFormData(prev => ({
