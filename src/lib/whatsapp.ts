@@ -24,24 +24,37 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
     if (shoot.shootNumber) {
         message += `*Shoot ID:* #${shoot.shootNumber}\n`;
     }
-    // message += `*Shoot Name:* ${shoot.title}\n`; // Removed
+    
+    // Add Jira Ticket if available
+    if (shoot.jiraTicketId) {
+         message += `*Jira Ticket:* ${shoot.jiraTicketId}\n`;
+    }
+
     message += `*Date:* ${dateString}\n`;
     message += `*Time:* ${start} - ${end}\n`;
-    message += `*Location:* ${shoot.location || 'Not set'}\n`;
+    
+    // Improved Location formatting
+    if (shoot.location) {
+         message += `*Location:* ${shoot.location}\n`;
+    } else {
+         message += `*Location:* TBD\n`;
+    }
 
     if (shoot.description && shoot.description !== 'No description') {
-        message += `*Description:* ${shoot.description}\n`;
+        const cleanDesc = shoot.description.length > 100 ? shoot.description.substring(0, 100) + '...' : shoot.description;
+        message += `*Description:* ${cleanDesc}\n`;
     }
 
     // Add spacing before POC
     message += `\n`;
 
     if (shoot.pocName) {
-        message += `👤 *POC:* ${shoot.pocName} ${shoot.pocContact ? `(${shoot.pocContact})` : ''}\n\n`;
+        message += `👤 *POC:* ${shoot.pocName} ${shoot.pocContact ? `(${shoot.pocContact})` : ''}\n`;
     }
 
-    message += `📋 *CREW ASSIGNED:*\n`;
+    // Only show crew section if there are assignments
     if (assignments.length > 0) {
+        message += `\n📋 *CREW ASSIGNED:*\n`;
         assignments.forEach(assignment => {
             const user = users.find(u => u.id === assignment.userId);
             if (user) {
@@ -49,8 +62,6 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
                 message += `- ${user.name} ${role}\n`;
             }
         });
-    } else {
-        message += `- No crew assigned yet\n`;
     }
 
     message += `\nPranam 🙏`;

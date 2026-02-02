@@ -42,7 +42,8 @@ Deno.serve(async (req) => {
 
     console.log(`Fetching ticket ${ticketId} from ${domain}...`)
 
-    const response = await fetch(`https://${domain}/rest/api/2/issue/${ticketId}`, {
+    // 1. Fetch Issue Details
+    const issueResponse = await fetch(`https://${domain}/rest/api/2/issue/${ticketId}`, {
       method: 'GET',
       headers: {
         'Authorization': authHeader,
@@ -50,26 +51,78 @@ Deno.serve(async (req) => {
       },
     })
 
-    if (!response.ok) {
-        const errText = await response.text()
-        console.error('Jira API Error:', response.status, errText)
-        return new Response(JSON.stringify({ error: `Jira Error: ${response.statusText}`, details: errText }), {
-            status: response.status,
+    if (!issueResponse.ok) {
+        const errText = await issueResponse.text()
+        console.error('Jira Issue API Error:', issueResponse.status, errText)
+        return new Response(JSON.stringify({ error: `Jira Error: ${issueResponse.statusText}`, details: errText }), {
+            status: issueResponse.status,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
     }
 
-    const data = await response.json()
+    const issueData = await issueResponse.json()
+
+    // 2. Fetch Field Definitions to map "Event Venue" -> "customfield_12345"
+    // We do this dynamically so we don't have to hardcode IDs
+    const fieldsResponse = await fetch(`https://${domain}/rest/api/2/field`, {
+        method: 'GET',
+        headers: {
+            'Authorization': authHeader,
+            'Accept': 'application/json',
+        },
+    })
+
+    let customFieldsMap: Record<string, string> = {};
+    if (fieldsResponse.ok) {
+        const fields = await fieldsResponse.json();
+        // Map names we care about to their IDs
+        const targets = [
+            "Event Venue", 
+            "contact number", 
+            "name", 
+            "Event Start Date & Time",
+            "Event End Date & Time",
+            "Event Location",
+            "VP_Director of Photography"
+        ];
+
+        fields.forEach((f: any) => {
+            const lowerName = f.name.toLowerCase();
+            if (targets.some(t => lowerName === t.toLowerCase())) {
+                customFieldsMap[lowerName] = f.id;
+            }
+        });
+        console.log('Mapped Fields:', customFieldsMap);
+    }
+
+    // Helper to get value from map
+    const getFieldVal = (name: string) => {
+        const id = customFieldsMap[name.toLowerCase()];
+        if (id && issueData.fields[id]) return issueData.fields[id];
+        return null;
+    };
+
     console.log('Jira fetch successful')
 
     // Simplify the response for the frontend
     const result = {
-      id: data.key,
-      title: data.fields.summary,
-      description: extractDescription(data.fields.description),
-      status: data.fields.status?.name,
-      priority: data.fields.priority?.name,
-      assignee: data.fields.assignee?.displayName
+      id: issueData.key,
+      title: issueData.fields.summary,
+      description: extractDescription(issueData.fields.description),
+      status: issueData.fields.status?.name,
+      priority: issueData.fields.priority?.name,
+      assignee: issueData.fields.assignee?.displayName,
+      
+      // Mapped Custom Fields
+      location: getFieldVal("Event Venue") || getFieldVal("Event Location"),
+      pocName: getFieldVal("Name"),
+      pocContact: getFieldVal("Contact Number"),
+      startTime: getFieldVal("Event Start Date & Time"),
+      endTime: getFieldVal("Event End Date & Time"),
+      crewString: getFieldVal("VP_Director of Photography"), // New field
+
+      // DEBUG: Return the map so we can see what was found
+      debug_map: customFieldsMap
     }
 
     return new Response(JSON.stringify(result), {

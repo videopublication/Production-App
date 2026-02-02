@@ -8,7 +8,7 @@ import { Select } from './Select';
 import { Card } from './Card';
 import { Calendar, MapPin, User as UserIcon, X, Plus, FileText } from 'lucide-react';
 import { MultiSelect } from './MultiSelect';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { createGoogleCalendarEvent, getGoogleProviderToken, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from '@/lib/google-calendar';
 import { useToast } from '@/lib/toast-context';
@@ -89,16 +89,46 @@ export const ShootForm: React.FC<ShootFormProps> = ({
             }
 
             const data = await response.json();
+            console.log('Jira Fetch Response:', data); // DEBUG: See what we got back!
+
+            // Match Crew Members
+            const matchedCrewIds: string[] = [];
+            if (typeof data.crewString === 'string') {
+                const crewNames = data.crewString.split(',').map((s: string) => s.trim());
+                crewNames.forEach((namePart: string) => {
+                    // Try to find a user whose name contains this part (case insensitive)
+                    // Remove phone numbers if present (e.g. "Surya - 1234567890" -> "Surya")
+                    const cleanName = namePart.split('-')[0].trim().toLowerCase();
+                    if (!cleanName) return;
+
+                    const match = users.find(u => u.name.toLowerCase().includes(cleanName) || cleanName.includes(u.name.toLowerCase()));
+                    if (match) {
+                        matchedCrewIds.push(match.id);
+                    }
+                });
+            }
 
             // Auto-fill form
             setFormData(prev => ({
                 ...prev,
                 title: data.title || prev.title,
                 description: data.description || prev.description,
+                location: data.location || prev.location,
+                pocName: data.pocName || prev.pocName,
+                pocContact: data.pocContact || prev.pocContact,
+                startTime: parseJiraDate(data.startTime) || prev.startTime,
+                endTime: parseJiraDate(data.endTime) || prev.endTime,
             }));
+
+            // Merge matched crew with existing selection, unique only
+            if (matchedCrewIds.length > 0) {
+                setSelectedCrewIds(prev => Array.from(new Set([...prev, ...matchedCrewIds])));
+            }
 
             showToast('Shoot details fetched from Jira!', 'success');
             if (data.description && !showDescription) setShowDescription(true);
+            if (data.pocName && !showPOC) setShowPOC(true);
+            if (data.endTime && !showEndTime) setShowEndTime(true);
 
         } catch (error: any) {
             console.error('Jira Fetch Error:', error);
@@ -355,45 +385,59 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                         </Button>
                     </div>
 
-                    <div className="space-y-4 pt-1">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Input
-                                label="Shoot Title"
-                                value={formData.title}
-                                onChange={e => setFormData({ ...formData, title: e.target.value })}
-                                placeholder="e.g. Summer Campaign 2024"
-                                required
-                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
-                            />
-                            <Input
-                                label="Location"
-                                value={formData.location}
-                                onChange={e => setFormData({ ...formData, location: e.target.value })}
-                                placeholder="e.g. Studio A, Central Park"
-                                required
-                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
-                            />
+                    <div className="space-y-5 pt-1">
+                        {/* Jira Ticket Section - High Priority */}
+                        <div className="relative bg-blue-50/50 dark:bg-blue-900/10 p-4 rounded-3xl border border-blue-100/50 dark:border-blue-800/20">
+                            <label className="block text-sm font-semibold text-blue-700 dark:text-blue-300 mb-2">
+                                Import from Jira
+                            </label>
                             <div className="relative">
-                                <Input
-                                    label="Jira Ticket ID"
+                                <input
                                     value={formData.jiraTicketId || ''}
                                     onChange={e => setFormData({ ...formData, jiraTicketId: e.target.value })}
-                                    placeholder="e.g. VP-51638"
-                                    className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary pr-20"
+                                    placeholder="Enter Ticket ID (e.g. VP-51638)"
+                                    className="flex h-12 w-full rounded-2xl border-0 bg-white dark:bg-gray-800 px-4 py-2 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 pr-24 shadow-sm"
                                 />
-                                <div className="absolute top-[29px] right-1">
+                                <div className="absolute top-1.5 right-1.5">
                                     <Button
                                         type="button"
                                         size="sm"
-                                        variant="ghost"
                                         onClick={handleFetchJira}
                                         isLoading={isFetchingJira}
                                         disabled={!formData.jiraTicketId}
-                                        className="h-9 px-3 text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 rounded-xl font-medium"
+                                        className="h-9 px-4 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium shadow-sm transition-all"
                                     >
                                         Fetch
                                     </Button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="w-full">
+                                <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">
+                                    Shoot Title <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    value={formData.title}
+                                    onChange={e => setFormData({ ...formData, title: e.target.value })}
+                                    placeholder="e.g. Summer Campaign 2024"
+                                    rows={3}
+                                    className="flex w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y min-h-[80px]"
+                                />
+                            </div>
+
+                            <div className="w-full">
+                                <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">
+                                    Location <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    value={formData.location}
+                                    onChange={e => setFormData({ ...formData, location: e.target.value })}
+                                    placeholder="e.g. Studio A, Central Park"
+                                    rows={3}
+                                    className="flex w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y min-h-[80px]"
+                                />
                             </div>
                         </div>
 
@@ -403,9 +447,8 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 <textarea
                                     value={formData.description}
                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                    className="flex min-h-[100px] w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none transition-all duration-200"
+                                    className="flex min-h-[100px] w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y transition-all duration-200"
                                     placeholder="Brief description of the shoot..."
-                                    autoFocus
                                 />
                             </div>
                         )}
@@ -675,3 +718,27 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         </form>
     );
 };
+
+// Helper: Parse Jira Date (e.g., "31/Jan/26 11:00 AM" or ISO) to HTML input format
+function parseJiraDate(dateStr: any): string {
+    if (!dateStr) return '';
+    if (typeof dateStr !== 'string') return '';
+
+    try {
+        // Try parsing ISO first
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime()) && dateStr.includes('-')) {
+            return format(date, "yyyy-MM-dd'T'HH:mm");
+        }
+
+        // Try parsing custom format "31/Jan/26 11:00 AM" used in Jira
+        // date-fns format string for this: 'd/MMM/yy h:mm a'
+        const parsed = parse(dateStr, 'd/MMM/yy h:mm a', new Date());
+        if (!isNaN(parsed.getTime())) {
+            return format(parsed, "yyyy-MM-dd'T'HH:mm");
+        }
+    } catch (e) {
+        console.warn('Failed to parse Jira date:', dateStr);
+    }
+    return '';
+}
