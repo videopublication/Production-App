@@ -24,19 +24,28 @@ Deno.serve(async (req) => {
     const token = Deno.env.get('JIRA_API_TOKEN')
     const domain = Deno.env.get('JIRA_DOMAIN') || 'servicedesk.isha.in'
 
-    if (!email || !token) {
+    if (!token) {
       console.error('Missing Jira Credentials')
       throw new Error('Server configuration error: Missing credentials')
     }
 
-    const auth = btoa(`${email}:${token}`)
+    let authHeader;
+    if (email) {
+       // Jira Cloud or Server with Basic Auth
+       const auth = btoa(`${email}:${token}`)
+       authHeader = `Basic ${auth}`
+    } else {
+       // Jira Server with PAT (Personal Access Token)
+       // If no email is provided, we assume the token is a PAT
+       authHeader = `Bearer ${token}`
+    }
 
     console.log(`Fetching ticket ${ticketId} from ${domain}...`)
 
-    const response = await fetch(`https://${domain}/rest/api/3/issue/${ticketId}`, {
+    const response = await fetch(`https://${domain}/rest/api/2/issue/${ticketId}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Basic ${auth}`,
+        'Authorization': authHeader,
         'Accept': 'application/json',
       },
     })
