@@ -8,6 +8,7 @@ import { Shoot, User, Assignment, Log } from '@/types';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 import { isSameDay } from 'date-fns';
 import { Button } from '@/components/Button';
+import { APP_CONFIG } from '@/lib/config';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { ArrowLeft, Edit, XCircle } from 'lucide-react';
@@ -320,6 +321,21 @@ export default function ShootDetailsPage() {
                         </svg>
                         Copy Info
                     </button>
+
+                    {shoot.jiraTicketId && (
+                        <a
+                            href={`https://${APP_CONFIG.jiraDomain}/browse/${shoot.jiraTicketId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all shadow-sm hover:shadow active:scale-95 bg-[#0052CC] hover:bg-[#0047b3] text-white text-sm whitespace-nowrap"
+                            title="Open Jira Ticket"
+                        >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.53 16.32v-6.5l-4.75 3.25-4.75-3.25v6.5c0 .35.08.68.21.99.14.31.33.59.57.82.23.24.51.43.82.57.31.13.63.2.98.2h5.84c.35 0 .68-.07.99-.2.31-.14.59-.33.82-.57.24-.23.43-.51.57-.82.13-.31.2-.64.2-.99 0-.35-.07-.68-.2-.99a2.58 2.58 0 0 0-.8-1.5zm6.5 2.5a2.6 2.6 0 0 0 .5-2.5v-6.5l-4.75 3.25-2.27-1.56v7.38c0 .35.07.68.2.99.14.31.33.59.57.82.23.24.51.43.82.57.31.13.64.2.99.2h2.24c.35 0 .68-.07.99-.2.31-.14.59-.33.82-.57.24-.23.43-.51.57-.82.13-.31.2-.64.2-.99 0 0 0 0 0 0zM12 2l-4.75 3.25 4.75 3.25L16.75 5.25 12 2zm6.27 4.15l-3.32 2.22 3.32 2.25 3.32-2.25-3.32-2.22z" />
+                            </svg>
+                            Jira
+                        </a>
+                    )}
 
                     {user?.role === 'ADMIN' && (
                         <>

@@ -512,7 +512,8 @@ class StorageService {
             requiredRoles: s.required_roles,
             createdBy: s.created_by,
             googleEventId: s.google_event_id, // Map DB column to type
-            shootNumber: s.shoot_number
+            shootNumber: s.shoot_number,
+            jiraTicketId: s.jira_ticket_id
         })) as Shoot[];
     }
 
@@ -529,7 +530,8 @@ class StorageService {
             poc_contact: shoot.pocContact,
             required_roles: shoot.requiredRoles,
             created_by: shoot.createdBy,
-            google_event_id: shoot.googleEventId || null // Save to DB, ensure null if undefined
+            google_event_id: shoot.googleEventId || null, // Save to DB, ensure null if undefined
+            jira_ticket_id: shoot.jiraTicketId || null
         };
 
         const { error } = await supabase
@@ -573,6 +575,10 @@ class StorageService {
         if (updates.googleEventId !== undefined) {
             dbUpdates.google_event_id = updates.googleEventId;
             delete dbUpdates.googleEventId;
+        }
+        if (updates.jiraTicketId !== undefined) {
+            dbUpdates.jira_ticket_id = updates.jiraTicketId;
+            delete dbUpdates.jiraTicketId;
         }
 
         const { error } = await supabase

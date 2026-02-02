@@ -322,6 +322,13 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 required
                                 className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
                             />
+                            <Input
+                                label="Jira Ticket ID"
+                                value={formData.jiraTicketId || ''}
+                                onChange={e => setFormData({ ...formData, jiraTicketId: e.target.value })}
+                                placeholder="e.g. PROJ-123"
+                                className="bg-[#f5f5f7] dark:bg-gray-800 border-0 rounded-2xl h-12 text-[#1d1d1f] dark:text-white focus:ring-2 focus:ring-primary"
+                            />
                         </div>
 
                         {showDescription && (

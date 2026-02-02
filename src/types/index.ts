@@ -113,6 +113,7 @@ export interface Shoot {
     createdBy: string;
     googleEventId?: string;
     shootNumber?: number;
+    jiraTicketId?: string;
 }
 
 export interface Assignment {
