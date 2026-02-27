@@ -104,7 +104,7 @@ const createUserSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6),
     name: z.string().min(1),
-    role: z.enum(['ADMIN', 'MANAGER', 'CREW']),
+    role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'CREW']),
     departmentId: z.string().uuid().optional()
 });
 
@@ -163,11 +163,11 @@ export async function POST(request: Request) {
 }
 
 const updateUserSchema = z.object({
-    id: z.string().uuid(),
+    id: z.string(),
     password: z.string().min(6).optional(),
-    status: z.enum(['ACTIVE', 'PENDING', 'SUSPENDED']).optional(),
-    role: z.enum(['ADMIN', 'MANAGER', 'CREW']).optional(),
-    departmentId: z.string().uuid().optional().nullable()
+    status: z.string().optional(),
+    role: z.string().optional(),
+    departmentId: z.string().optional().nullable()
 });
 
 export async function PUT(request: Request) {
@@ -180,10 +180,12 @@ export async function PUT(request: Request) {
     try {
         const supabaseAdmin = getSupabaseAdmin();
         const body = await request.json();
+        console.log('Update user body:', JSON.stringify(body, null, 2));
 
         // Validate Input
         const result = updateUserSchema.safeParse(body);
         if (!result.success) {
+            console.error('Validation failed for update user:', result.error.format());
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
