@@ -1,12 +1,58 @@
 import { supabase } from './supabase';
-import { User, Equipment, Transaction, Log, Shoot, Assignment } from '@/types';
+import { User, Equipment, Transaction, Log, Shoot, Assignment, Department } from '@/types';
 
 class StorageService {
-    // Users
-    async getUsers(): Promise<User[]> {
+    // Departments
+    async getDepartments(): Promise<Department[]> {
         const { data, error } = await supabase
-            .from('users')
+            .from('departments')
             .select('*');
+
+        if (error) {
+            console.error('Error fetching departments:', error);
+            return [];
+        }
+        return data.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            slug: d.slug,
+            enabledFeatures: d.enabled_features,
+            settings: d.settings
+        })) as Department[];
+    }
+
+    async addDepartment(dept: Partial<Department>): Promise<void> {
+        const dbDept = {
+            id: dept.id,
+            name: dept.name,
+            slug: dept.slug,
+            enabled_features: dept.enabledFeatures || [],
+            settings: dept.settings || {}
+        };
+        const { error } = await supabase.from('departments').insert(dbDept);
+        if (error) throw error;
+    }
+
+    async updateDepartment(id: string, updates: Partial<Department>): Promise<void> {
+        const dbUpdates: any = {};
+        if (updates.name) dbUpdates.name = updates.name;
+        if (updates.slug) dbUpdates.slug = updates.slug;
+        if (updates.enabledFeatures) dbUpdates.enabled_features = updates.enabledFeatures;
+        if (updates.settings) dbUpdates.settings = updates.settings;
+
+        const { error } = await supabase.from('departments').update(dbUpdates).eq('id', id);
+        if (error) throw error;
+    }
+
+    // Users
+    async getUsers(departmentId?: string | null): Promise<User[]> {
+        let query = supabase.from('users').select('*');
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching users:', error);
@@ -14,7 +60,8 @@ class StorageService {
         }
         return data.map((u: any) => ({
             ...u,
-            fcmToken: u.fcm_token
+            fcmToken: u.fcm_token,
+            departmentId: u.department_id
         })) as User[];
     }
 
@@ -38,21 +85,28 @@ class StorageService {
     }
 
     // Equipment
-    async getEquipment(): Promise<Equipment[]> {
-        const { data, error } = await supabase
-            .from('equipment')
-            .select('*');
+    async getEquipment(departmentId?: string | null): Promise<Equipment[]> {
+        let query = supabase.from('equipment').select('*');
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching equipment:', error);
             return [];
         }
 
+
+
         return data.map((item: any) => ({
             ...item,
             serialNumber: item.serial_number,
             assignedTo: item.assigned_to,
-            lastActivity: item.last_activity
+            lastActivity: item.last_activity,
+            departmentId: item.department_id
         })) as Equipment[];
     }
 
@@ -67,14 +121,22 @@ class StorageService {
             condition: item.condition,
             serial_number: item.serialNumber,
             assigned_to: item.assignedTo,
-            last_activity: item.lastActivity
+            last_activity: item.lastActivity,
+            department_id: item.departmentId
         }));
 
-        const { error } = await supabase
-            .from('equipment')
-            .upsert(dbItems);
+        // Use the admin API route to bypass RLS for bulk upsert
+        const res = await fetch('/api/admin/equipment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: dbItems })
+        });
 
-        if (error) console.error('Error saving equipment:', error);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            console.error('Error saving equipment:', err);
+            throw new Error(err.error || 'Failed to save equipment');
+        }
     }
 
     async addEquipment(item: Equipment): Promise<void> {
@@ -88,7 +150,8 @@ class StorageService {
             condition: item.condition,
             serial_number: item.serialNumber,
             assigned_to: item.assignedTo,
-            last_activity: item.lastActivity
+            last_activity: item.lastActivity,
+            department_id: item.departmentId
         };
 
         const { error } = await supabase
@@ -116,6 +179,11 @@ class StorageService {
         if (updates.lastActivity !== undefined) {
             dbUpdates.last_activity = updates.lastActivity;
             delete dbUpdates.lastActivity;
+        }
+
+        if (updates.departmentId !== undefined) {
+            dbUpdates.department_id = updates.departmentId;
+            delete dbUpdates.departmentId;
         }
 
         const { error } = await supabase
@@ -160,7 +228,8 @@ class StorageService {
         search?: string,
         status?: 'OPEN' | 'CLOSED' | 'ALL',
         filterUserIds?: string[], // Strict AND filter
-        searchUserIds?: string[]  // OR match (e.g. results for "John" where John is the user)
+        searchUserIds?: string[],  // OR match (e.g. results for "John" where John is the user)
+        departmentId?: string | null // Optional department filter
     ): Promise<Transaction[]> {
         let query = supabase
             .from('transactions')
@@ -197,6 +266,10 @@ class StorageService {
             query = query.range(from, to);
         }
 
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
         const { data, error } = await query;
 
         if (error) {
@@ -216,23 +289,26 @@ class StorageService {
         })) as Transaction[];
     }
 
-    async getTransactionStats(): Promise<{ total: number, active: number, closed: number, outItems: number }> {
+    async getTransactionStats(departmentId?: string | null): Promise<{ total: number, active: number, closed: number, outItems: number }> {
         // We can run these in parallel
         // 1. Total count
-        const totalPromise = supabase.from('transactions').select('*', { count: 'exact', head: true });
+        let totalQuery = supabase.from('transactions').select('*', { count: 'exact', head: true });
         // 2. Active count
-        const activePromise = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'OPEN');
+        let activeQuery = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'OPEN');
         // 3. Closed count
-        const closedPromise = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'CLOSED');
+        let closedQuery = supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'CLOSED');
+        // 4. Out Items
+        let outItemsQuery = supabase.from('transactions').select('items').eq('status', 'OPEN');
 
-        // 4. Out Items (Sum of items length for OPEN transactions). 
-        // Supabase/PostgREST doesn't support sum() directly on client easily without RPC.
-        // We will fetch minimal data for OPEN transactions to sum items. 
-        // Since OPEN transactions are usually < 100, this is cheap.
-        const outItemsPromise = supabase.from('transactions').select('items').eq('status', 'OPEN');
+        if (departmentId) {
+            totalQuery = totalQuery.eq('department_id', departmentId);
+            activeQuery = activeQuery.eq('department_id', departmentId);
+            closedQuery = closedQuery.eq('department_id', departmentId);
+            outItemsQuery = outItemsQuery.eq('department_id', departmentId);
+        }
 
         const [totalRes, activeRes, closedRes, outItemsRes] = await Promise.all([
-            totalPromise, activePromise, closedPromise, outItemsPromise
+            totalQuery, activeQuery, closedQuery, outItemsQuery
         ]);
 
         const outItems = outItemsRes.data
@@ -284,7 +360,8 @@ class StorageService {
             additional_users: transaction.additionalUsers,
             notes: transaction.notes,
             system_id: systemId,   // New UUID
-            display_id: displayId  // New Readable ID
+            display_id: displayId, // New Readable ID
+            department_id: transaction.departmentId
         };
 
         const { error } = await supabase
@@ -319,6 +396,9 @@ class StorageService {
         if (updates.shootId !== undefined) { dbUpdates.shoot_id = updates.shootId; }
         delete dbUpdates.shootId;
 
+        if (updates.departmentId !== undefined) { dbUpdates.department_id = updates.departmentId; }
+        delete dbUpdates.departmentId;
+
         const { error } = await supabase
             .from('transactions')
             .update(dbUpdates)
@@ -331,11 +411,15 @@ class StorageService {
     }
 
     // Logs
-    async getLogs(page?: number, limit?: number, search?: string): Promise<Log[]> {
+    async getLogs(page?: number, limit?: number, search?: string, departmentId?: string | null): Promise<Log[]> {
         let query = supabase
             .from('logs')
             .select('*', { count: 'exact' }) // Get count for UI logic if needed later
             .order('timestamp', { ascending: false });
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
 
         if (search) {
             query = query.or(`details.ilike.%${search}%,action.ilike.%${search}%`);
@@ -400,14 +484,15 @@ class StorageService {
             timestamp: log.timestamp,
             details: log.details,
             old_value: log.oldValue,
-            new_value: log.newValue
+            new_value: log.newValue,
+            department_id: log.departmentId
         };
 
         const { error } = await supabase
             .from('logs')
             .insert(dbLog);
 
-        if (error) console.error('Error adding log:', error);
+        if (error) console.error('Error adding log:', error.message || error);
     }
 
     async resetData(): Promise<void> {
@@ -418,18 +503,22 @@ class StorageService {
     }
 
     // Notifications
-    async getNotifications(userId: string): Promise<any[]> {
-        const { data, error } = await supabase
+    async getNotifications(userId: string, departmentId?: string | null): Promise<any[]> {
+        let query = supabase
             .from('notifications')
             .select('*')
-            .eq('user_id', userId)
+            .eq('user_id', userId);
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query
             .order('created_at', { ascending: false })
             .limit(20);
 
         if (error) {
             console.error('Error fetching notifications:', error);
-            // Log full error details for debugging
-            console.dir(error);
             return [];
         }
 
@@ -440,17 +529,19 @@ class StorageService {
             message: n.message,
             link: n.link,
             read: n.read,
-            createdAt: n.created_at
+            createdAt: n.created_at,
+            departmentId: n.department_id
         }));
     }
 
-    async addNotification(notification: { userId: string, title: string, message: string, link?: string }): Promise<void> {
+    async addNotification(notification: { userId: string, title: string, message: string, link?: string, departmentId?: string | null }): Promise<void> {
         const dbNotification = {
             user_id: notification.userId,
             title: notification.title,
             message: notification.message,
             link: notification.link,
-            read: false
+            read: false,
+            department_id: notification.departmentId
         };
 
         const { error } = await supabase
@@ -488,11 +579,17 @@ class StorageService {
     }
 
     // Shoots
-    async getShoots(): Promise<Shoot[]> {
-        const { data, error } = await supabase
+    async getShoots(departmentId?: string | null): Promise<Shoot[]> {
+        let query = supabase
             .from('shoots')
             .select('*')
             .order('start_time', { ascending: true });
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching shoots:', error);
@@ -531,7 +628,8 @@ class StorageService {
             required_roles: shoot.requiredRoles,
             created_by: shoot.createdBy,
             google_event_id: shoot.googleEventId || null, // Save to DB, ensure null if undefined
-            jira_ticket_id: shoot.jiraTicketId || null
+            jira_ticket_id: shoot.jiraTicketId || null,
+            department_id: shoot.departmentId
         };
 
         const { error } = await supabase
@@ -580,6 +678,10 @@ class StorageService {
             dbUpdates.jira_ticket_id = updates.jiraTicketId;
             delete dbUpdates.jiraTicketId;
         }
+        if (updates.departmentId !== undefined) {
+            dbUpdates.department_id = updates.departmentId;
+            delete dbUpdates.departmentId;
+        }
 
         const { error } = await supabase
             .from('shoots')
@@ -602,10 +704,14 @@ class StorageService {
     }
 
     // Assignments
-    async getAssignments(): Promise<Assignment[]> {
-        const { data, error } = await supabase
-            .from('assignments')
-            .select('*');
+    async getAssignments(departmentId?: string | null): Promise<Assignment[]> {
+        let query = supabase.from('assignments').select('*');
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching assignments:', error);
@@ -627,7 +733,8 @@ class StorageService {
             shoot_id: a.shootId,
             user_id: a.userId,
             role: a.role,
-            status: a.status
+            status: a.status,
+            department_id: a.departmentId
         }));
 
         const { error } = await supabase

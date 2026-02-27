@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/Button';
@@ -13,11 +13,12 @@ export default function LoginPage() {
     const [isLogin, setIsLogin] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
 
     // Redirect if already logged in
     React.useEffect(() => {
         if (user) {
-            if (user.role === 'MANAGER' || user.role === 'ADMIN') {
+            if (['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
                 router.replace('/dashboard');
             } else {
                 router.replace('/checkout');
@@ -25,11 +26,24 @@ export default function LoginPage() {
         }
     }, [user, router]);
 
+    // Fetch departments when switching to signup mode (public API - no auth needed)
+    useEffect(() => {
+        if (!isLogin && departments.length === 0) {
+            fetch('/api/departments')
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data)) setDepartments(data);
+                })
+                .catch(console.error);
+        }
+    }, [isLogin]);
+
     const [formData, setFormData] = useState({
         email: '',
         password: '',
         name: '',
-        role: 'CREW' // Default role
+        role: 'CREW', // Default role
+        departmentId: ''
     });
 
     const isSubmittingRef = React.useRef(false);
@@ -49,10 +63,14 @@ export default function LoginPage() {
                 if (error) throw error;
                 router.replace('/');
             } else {
+                if (!formData.departmentId) {
+                    throw new Error('Please select your department');
+                }
                 const { error } = await signUp(
                     formData.email,
                     formData.password,
-                    formData.name
+                    formData.name,
+                    formData.departmentId
                 );
                 if (error) throw error;
                 // Since new accounts are inactive by default, redirect to the approval pending page
@@ -62,10 +80,6 @@ export default function LoginPage() {
             setError(err.message || 'Authentication failed');
             setIsLoading(false);
             isSubmittingRef.current = false;
-        } finally {
-            // We only reset if error happened (handled above) or if we are not redirecting (which shouldn't happen on success usually, but for safety)
-            // Actually, if clear success, we redirect. If we redirect, component unmounts.
-            // If we don't redirect (failure), we already reset.
         }
     };
 
@@ -116,17 +130,36 @@ export default function LoginPage() {
                             <>
                                 <Input
                                     label="Full Name"
+                                    autoComplete="name"
                                     required
                                     value={formData.name}
                                     onChange={e => setFormData({ ...formData, name: e.target.value })}
                                 />
 
+                                {/* Department Selector */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                        Department <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        required
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                        value={formData.departmentId}
+                                        onChange={e => setFormData({ ...formData, departmentId: e.target.value })}
+                                    >
+                                        <option value="">Select your department</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </>
                         )}
 
                         <Input
                             label="Email address"
                             type="email"
+                            autoComplete="email"
                             required
                             value={formData.email}
                             onChange={e => setFormData({ ...formData, email: e.target.value })}
@@ -135,6 +168,7 @@ export default function LoginPage() {
                         <Input
                             label="Password"
                             type="password"
+                            autoComplete={isLogin ? "current-password" : "new-password"}
                             required
                             value={formData.password}
                             onChange={e => setFormData({ ...formData, password: e.target.value })}

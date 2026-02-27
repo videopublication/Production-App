@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8f9fa" />
+  
+  <!-- Header -->
+  <rect x="0" y="0" width="800" height="60" fill="#1e293b" />
+  <text x="400" y="40" fill="white" font-size="24" text-anchor="middle" font-weight="bold">Production App Architecture & Workflow</text>
+
+  <!-- Legend -->
+  <g transform="translate(20, 540)">
+     <rect x="0" y="0" width="15" height="15" fill="#3b82f6" rx="4" />
+     <text x="25" y="12" font-size="12" fill="#475569">Regular User Flow</text>
+     <rect x="150" y="0" width="15" height="15" fill="#f59e0b" rx="4" />
+     <text x="175" y="12" font-size="12" fill="#475569">Super Admin Flow</text>
+     <rect x="300" y="0" width="15" height="15" fill="#10b981" rx="4" />
+     <text x="325" y="12" font-size="12" fill="#475569">Secure Data</text>
+  </g>
+
+  <!-- 1. Authentication Section -->
+  <g transform="translate(300, 80)">
+    <rect x="0" y="0" width="200" height="70" rx="8" fill="white" stroke="#cbd5e1" stroke-width="2" />
+    <text x="100" y="30" text-anchor="middle" font-weight="bold" fill="#334155">Authentication</text>
+    <text x="100" y="50" text-anchor="middle" font-size="12" fill="#64748b">Supabase Auth</text>
+  </g>
+
+  <!-- Arrow Down -->
+  <path d="M 400 150 L 400 190" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)" />
+
+  <!-- 2. Context Logic -->
+  <g transform="translate(100, 200)">
+    <!-- Container -->
+    <rect x="0" y="0" width="600" height="180" rx="12" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2" />
+    <text x="300" y="30" text-anchor="middle" font-weight="bold" fill="#1e40af">Context & Role Management</text>
+
+    <!-- Super Admin Path -->
+    <g transform="translate(350, 50)">
+        <rect x="0" y="0" width="220" height="100" rx="8" fill="#fffbeb" stroke="#fcd34d" stroke-width="2" />
+        <text x="110" y="25" text-anchor="middle" font-weight="bold" fill="#b45309">Super Admin</text>
+        
+        <!-- Switcher UI -->
+        <rect x="30" y="40" width="160" height="40" rx="4" fill="white" stroke="#fca5a5" stroke-dasharray="4" />
+        <text x="110" y="65" text-anchor="middle" font-size="12" fill="#b45309">Context Switcher</text>
+    </g>
+
+    <!-- Regular User Path -->
+    <g transform="translate(30, 50)">
+        <rect x="0" y="0" width="220" height="100" rx="8" fill="#f0f9ff" stroke="#bae6fd" stroke-width="2" />
+        <text x="110" y="25" text-anchor="middle" font-weight="bold" fill="#0369a1">Regular User</text>
+        <text x="110" y="65" text-anchor="middle" font-size="12" fill="#0369a1">Locked to DepartmentID</text>
+    </g>
+  </g>
+
+  <!-- Arrows Split -->
+  <path d="M 240 380 L 240 420" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)" /> <!-- Left -->
+  <path d="M 560 380 L 560 420" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)" /> <!-- Right -->
+
+  <!-- 3. Data & Features -->
+  <g transform="translate(50, 420)">
+    <!-- RLS Protected -->
+    <rect x="0" y="0" width="300" height="100" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="2" />
+    <text x="150" y="30" text-anchor="middle" font-weight="bold" fill="#15803d">Row Level Security (RLS)</text>
+    <text x="150" y="55" text-anchor="middle" font-size="12" fill="#166534">User queries are automatically filtered</text>
+    <text x="150" y="75" text-anchor="middle" font-size="12" fill="#166534">Active Department ID</text>
+  </g>
+
+  <g transform="translate(450, 420)">
+    <!-- Admin API -->
+    <rect x="0" y="0" width="300" height="100" rx="8" fill="#fff1f2" stroke="#fda4af" stroke-width="2" />
+    <text x="150" y="30" text-anchor="middle" font-weight="bold" fill="#be123c">Admin API Layer</text>
+    <text x="150" y="55" text-anchor="middle" font-size="12" fill="#9f1239">Bypasses RLS Filters</text>
+    <text x="150" y="75" text-anchor="middle" font-size="12" fill="#9f1239">Global Data Access</text>
+  </g>
+
+  <!-- Definitions -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+    </marker>
+  </defs>
+</svg>

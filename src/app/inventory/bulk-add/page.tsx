@@ -7,6 +7,7 @@ import { Equipment } from '@/types';
 import { Button } from '@/components/Button';
 import { downloadFile } from '@/lib/download';
 import { useAuth } from '@/lib/auth';
+import { useDepartment } from '@/lib/department-context';
 
 const getSuffix = (index: number): string => {
     let s = '';
@@ -60,6 +61,12 @@ interface BulkRow {
 export default function BulkAddPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { department } = useDepartment();
+
+    // Enforce department isolation
+    const effectiveDeptId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
+        ? user.departmentId
+        : (department?.id || null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [existingItems, setExistingItems] = useState<Equipment[]>([]);
@@ -73,7 +80,7 @@ export default function BulkAddPage() {
     useEffect(() => {
         const loadItems = async () => {
             try {
-                const items = await storage.getEquipment();
+                const items = await storage.getEquipment(effectiveDeptId);
                 setExistingItems(items);
             } catch (error) {
                 console.error('Failed to load inventory', error);
@@ -288,6 +295,7 @@ export default function BulkAddPage() {
                     serialNumber: row.serialNumber || undefined,
                     assignedTo: undefined,
                     lastActivity: new Date().toISOString(),
+                    departmentId: user?.departmentId
                 });
             }
 
@@ -307,7 +315,8 @@ export default function BulkAddPage() {
                     entityId: 'BULK_IMPORT',
                     userId: user.id,
                     timestamp: new Date().toISOString(),
-                    details: `Bulk imported ${newEquipment.length} items to inventory`
+                    details: `Bulk imported ${newEquipment.length} items to inventory`,
+                    departmentId: user.departmentId
                 });
             }
 

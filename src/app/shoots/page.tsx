@@ -230,7 +230,7 @@ export default function ShootList() {
                     </div>
 
                     <div className="flex gap-2">
-                        {user?.role === 'ADMIN' && (
+                        {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                             <Button
                                 variant="outline"
                                 onClick={() => {
@@ -271,8 +271,8 @@ export default function ShootList() {
                                 <span className="sm:hidden">CSV</span>
                             </Button>
                         )}
-                        {user?.role === 'ADMIN' && (
-                            <Link href="/admin/shoots/new" className="shrink-0">
+                        {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                            <Link href="/shoots/new" className="shrink-0">
                                 <Button variant="primary" className="gap-2 shadow-lg rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold">
                                     <Plus size={16} strokeWidth={2.5} />
                                     <span className="hidden xs:inline">New Shoot</span>
@@ -447,7 +447,7 @@ export default function ShootList() {
                             </div>
 
                             {/* Crew Filter (Admin Only) */}
-                            {user?.role === 'ADMIN' && (
+                            {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                                 <div className="flex flex-wrap items-center gap-2" ref={crewFilterRef}>
                                     <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">Assigned To:</span>
                                     <div className="relative">
@@ -561,8 +561,8 @@ export default function ShootList() {
                                 ? 'Try adjusting your search or filters'
                                 : 'Create your first shoot to start tracking productions'}
                         </p>
-                        {!(searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL') && user?.role === 'ADMIN' && (
-                            <Link href="/admin/shoots/new">
+                        {!(searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL') && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                            <Link href="/shoots/new">
                                 <Button size="sm">Create Shoot</Button>
                             </Link>
                         )}
@@ -577,7 +577,7 @@ export default function ShootList() {
                             return (
                                 <div
                                     key={shoot.id}
-                                    onClick={() => router.push(`/admin/shoots/${shoot.id}`)}
+                                    onClick={() => router.push(`/shoots/${shoot.id}`)}
                                     className="group h-full"
                                 >
                                     <div className="rounded-xl p-3 sm:p-5 shadow-sm hover:shadow-lg transition-all duration-200 h-full cursor-pointer relative bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
@@ -798,7 +798,7 @@ export default function ShootList() {
                                 <div
                                     key={shoot.id}
                                     className="cursor-pointer group"
-                                    onClick={() => router.push(`/admin/shoots/${shoot.id}`)}
+                                    onClick={() => router.push(`/shoots/${shoot.id}`)}
                                 >
                                     <div
                                         className={`grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 px-4 py-4 transition-colors ${isExpanded

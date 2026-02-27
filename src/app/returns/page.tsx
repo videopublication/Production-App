@@ -128,14 +128,16 @@ export default function ReturnsPage() {
 
             // Send Push Notification to Managers
             try {
-                const allUsers = await storage.getUsers();
+                const allUsers = await storage.getUsers(user?.departmentId);
                 const managers = allUsers.filter(u =>
-                    (u.role === 'MANAGER' || u.role === 'ADMIN') && u.fcmToken
+                    ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role) && u.fcmToken
                 );
 
                 if (managers.length > 0) {
                     const tokens = managers.map(m => m.fcmToken).filter(Boolean) as string[];
-                    await Promise.all(tokens.map(token =>
+
+                    // 1. Send Push Notifications
+                    const pushPromises = tokens.map(token =>
                         fetch('/api/send-notification', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -146,7 +148,20 @@ export default function ReturnsPage() {
                                 link: '/verification'
                             })
                         })
-                    ));
+                    );
+
+                    // 2. Save to Database for each manager
+                    const dbPromises = managers.map(manager =>
+                        storage.addNotification({
+                            userId: manager.id,
+                            title: 'Items Returned',
+                            message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
+                            link: '/verification',
+                            departmentId: user?.departmentId
+                        })
+                    );
+
+                    await Promise.all([...pushPromises, ...dbPromises]);
                 }
             } catch (e) {
                 console.error("Failed to send notifications", e);

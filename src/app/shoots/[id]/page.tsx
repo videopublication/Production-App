@@ -227,7 +227,7 @@ export default function ShootDetailsPage() {
                     <p className="text-gray-500 max-w-md mb-6">
                         You are not assigned to this shoot. Only assigned crew members can view the details.
                     </p>
-                    <Link href="/admin/shoots">
+                    <Link href="/shoots">
                         <Button>Back to Shoots</Button>
                     </Link>
                 </div>
@@ -338,9 +338,9 @@ export default function ShootDetailsPage() {
                         </a>
                     )}
 
-                    {user?.role === 'ADMIN' && (
+                    {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                         <>
-                            <Link href={`/admin/shoots/${shoot.id}/edit`} className="col-span-3 sm:col-span-auto sm:w-auto">
+                            <Link href={`/shoots/${shoot.id}/edit`} className="col-span-3 sm:col-span-auto sm:w-auto">
                                 <Button variant="outline" className="w-full gap-1.5 sm:gap-2 bg-white dark:bg-zinc-800/50 dark:hover:bg-zinc-800 dark:backdrop-blur-md h-[36px] sm:h-[42px] px-2 sm:px-5 rounded-xl font-medium border-gray-200 dark:border-zinc-700 text-xs sm:text-sm text-gray-700 dark:text-gray-200">
                                     <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Edit
                                 </Button>
@@ -360,7 +360,7 @@ export default function ShootDetailsPage() {
             </div>
 
             {/* Calendar Banner - Moved below header */}
-            {!shoot.googleEventId && user?.role === 'ADMIN' && shoot.status !== 'CANCELLED' && (
+            {!shoot.googleEventId && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && shoot.status !== 'CANCELLED' && (
                 <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
@@ -505,8 +505,8 @@ export default function ShootDetailsPage() {
                                     </div>
                                     <p className="font-medium text-gray-700 dark:text-gray-300">No crew assigned yet</p>
                                     <p className="text-sm mb-4 text-gray-500 dark:text-gray-400">Add members to organize this shoot</p>
-                                    {user?.role === 'ADMIN' && (
-                                        <Link href={`/admin/shoots/${id}/edit`}>
+                                    {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                        <Link href={`/shoots/${id}/edit`}>
                                             <Button size="sm">Add Crew Member</Button>
                                         </Link>
                                     )}
@@ -520,6 +520,7 @@ export default function ShootDetailsPage() {
                                     const getRoleClasses = (role: string) => {
                                         switch (role) {
                                             case 'ADMIN': return 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700';
+                                            case 'SUPER_ADMIN': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 border-red-300 dark:border-red-700';
                                             case 'MANAGER': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-700';
                                             default: return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700';
                                         }

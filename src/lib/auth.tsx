@@ -11,7 +11,7 @@ import { generateUUID } from '@/lib/id';
 interface AuthContextType {
     user: User | null;
     login: (email: string, password: string) => Promise<{ error: any }>;
-    signUp: (email: string, password: string, name: string) => Promise<{ error: any }>;
+    signUp: (email: string, password: string, name: string, departmentId?: string) => Promise<{ error: any }>;
     logout: () => Promise<void>;
     linkGoogleCalendar: () => Promise<{ error: any }>;
     loginWithGoogle: () => Promise<{ error: any }>;
@@ -47,13 +47,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 const { data, error } = await supabase
                     .from('users')
-                    .select('*, avatarUrl:avatar_url')
+                    .select('*, avatarUrl:avatar_url, departmentId:department_id')
                     .eq('id', userId)
                     .single();
 
                 if (data) {
                     // Check if user is active
                     if (data.status === 'PENDING' || data.status === 'SUSPENDED') {
+                        if (data.status === 'PENDING' && !data.departmentId) {
+                            // New user (likely Google signup) without a department selected yet
+                            setUser(data as User);
+                            setIsLoading(false);
+                            if (window.location.pathname !== '/select-department') {
+                                router.replace('/select-department');
+                            }
+                            return;
+                        }
                         const reason = data.status === 'SUSPENDED' ? 'suspended' : 'pending';
                         setUser(null);
                         setIsLoading(false);
@@ -87,8 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             },
                             async (payload) => {
                                 const updatedUser = payload.new as any;
-                                // Map avatar_url to avatarUrl for consistency incase of updates
+                                // Map snake_case to camelCase
                                 if (updatedUser.avatar_url) updatedUser.avatarUrl = updatedUser.avatar_url;
+                                if (updatedUser.department_id) updatedUser.departmentId = updatedUser.department_id;
 
                                 if (updatedUser.status === 'PENDING' || updatedUser.status === 'SUSPENDED') {
                                     const reason = updatedUser.status === 'SUSPENDED' ? 'suspended' : 'pending';
@@ -109,39 +119,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 } else if (error && error.code === 'PGRST116') {
                     // User exists in Auth but not in public.users table yet (e.g., first Google Login)
-                    console.log('User profile not found in public table, creating new PENDING profile...');
+                    // OR: User exists but RLS blocked the SELECT (e.g., PENDING user)
+                    console.log('User profile not found via RLS query, trying server API...');
 
                     try {
-                        const { error: insertError } = await supabase
-                            .from('users')
-                            .insert([
-                                {
-                                    id: userId,
-                                    email: email,
-                                    name: email.split('@')[0], // Default name from email
-                                    role: 'CREW',
-                                    status: 'PENDING',
-                                    // Map JS property avatarUrl to DB column avatar_url
-                                    avatar_url: (await supabase.auth.getSession()).data.session?.user?.user_metadata?.avatar_url || null
-                                }
-                            ]);
+                        // Step 1: Try to create the profile (for genuinely new Google users)
+                        const avatarUrl = (await supabase.auth.getSession()).data.session?.user?.user_metadata?.avatar_url || null;
 
-                        if (insertError) {
-                            console.error('Failed to create public user profile details (JSON):', JSON.stringify(insertError, null, 2));
-                            console.error('Attempted Insert Data:', {
+                        await supabase
+                            .from('users')
+                            .insert({
                                 id: userId,
-                                email,
+                                email: email,
+                                name: email.split('@')[0],
                                 role: 'CREW',
-                                status: 'PENDING'
+                                status: 'PENDING',
+                                avatar_url: avatarUrl,
+                            })
+                            .then(({ error: insertErr }) => {
+                                if (insertErr && insertErr.code !== '23505') {
+                                    // Log non-duplicate errors
+                                    console.warn('Insert attempt result:', insertErr.message);
+                                }
+                                // 23505 = duplicate key = user already exists, that's fine
                             });
-                            setUser(null);
-                        } else {
-                            // Successfully created, now recurse/reload to fetch it and handle routing
-                            fetchProfile(userId, email);
+
+                        // Step 2: Always fetch via admin API (bypasses RLS)
+                        const res = await fetch(`/api/auth/profile?userId=${userId}`);
+                        if (res.ok) {
+                            const profileData = await res.json();
+                            if (profileData) {
+                                if (profileData.status === 'PENDING' && !profileData.departmentId) {
+                                    // New user without department → select department page
+                                    setUser(profileData as User);
+                                    setIsLoading(false);
+                                    if (window.location.pathname !== '/select-department') {
+                                        router.replace('/select-department');
+                                    }
+                                    return;
+                                } else if (profileData.status === 'PENDING' || profileData.status === 'SUSPENDED') {
+                                    // Has department but not approved yet
+                                    const reason = profileData.status === 'SUSPENDED' ? 'suspended' : 'pending';
+                                    setUser(null);
+                                    setIsLoading(false);
+                                    router.replace(`/inactive?reason=${reason}`);
+                                    await supabase.auth.signOut();
+                                    return;
+                                }
+                                // Active user (RLS was just overly restrictive)
+                                setUser(profileData as User);
+                                storage.upsertSession(profileData.id, navigator.userAgent).catch(console.error);
+                                setIsLoading(false);
+                                return;
+                            }
                         }
-                    } catch (err) {
-                        console.error('Error creating profile:', err);
+
+                        console.error('Failed to fetch profile via API, status:', res.status);
                         setUser(null);
+                        setIsLoading(false);
+                    } catch (err) {
+                        console.error('Error in profile creation/fetch:', err);
+                        setUser(null);
+                        setIsLoading(false);
                     }
                 }
             } catch (error) {
@@ -276,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: null };
     };
 
-    const signUp = async (email: string, password: string, name: string) => {
+    const signUp = async (email: string, password: string, name: string, departmentId?: string) => {
         // isLoading is handled locally
         // 1. Sign up in Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -301,7 +340,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         email: email,
                         name: name,
                         role: 'CREW',
-                        status: 'PENDING'
+                        status: 'PENDING',
+                        department_id: departmentId || null
                     }
                 ]);
 
@@ -341,23 +381,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = async () => {
         const currentUser = user;
-        // Use scope: 'local' so we don't invalidate sessions on other devices
-        await supabase.auth.signOut({ scope: 'local' });
 
-        // Log logout
+        // Log logout BEFORE signing out (so we still have RLS permission)
         if (currentUser) {
             // Remove this session from our tracker
             storage.deleteSession(currentUser.id, navigator.userAgent).catch(console.error);
 
-            storage.addLog({
-                id: generateUUID(),
-                action: 'LOGOUT',
-                userId: currentUser.id,
-                entityId: 'AUTH',
-                timestamp: new Date().toISOString(),
-                details: `User logged out: ${currentUser.email}`
-            }).catch(err => console.error('Error logging logout:', err));
+            try {
+                await storage.addLog({
+                    id: generateUUID(),
+                    action: 'LOGOUT',
+                    userId: currentUser.id, // Use the ID from the captured user object
+                    entityId: 'AUTH',
+                    timestamp: new Date().toISOString(),
+                    details: `User logged out: ${currentUser.email}`
+                });
+            } catch (err) {
+                console.error('Error logging logout:', err);
+            }
         }
+
+        // Use scope: 'local' so we don't invalidate sessions on other devices
+        await supabase.auth.signOut({ scope: 'local' });
 
         setUser(null);
         router.replace('/login');

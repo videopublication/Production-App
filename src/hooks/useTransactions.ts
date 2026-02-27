@@ -6,12 +6,26 @@ import { generateTransactionId } from '@/lib/id';
 export const TRANSACTION_KEYS = {
     all: ['transactions'] as const,
     byUser: (userId: string) => [...TRANSACTION_KEYS.all, 'user', userId] as const,
+    byDepartment: (deptId: string | null) => [...TRANSACTION_KEYS.all, 'department', deptId || 'all'] as const,
 };
 
+import { useDepartment } from '@/lib/department-context';
+import { useAuth } from '@/lib/auth';
+
 export function useTransactions() {
+    const { user } = useAuth();
+    const { department } = useDepartment();
+
+    // Regular users: ALWAYS use their own department
+    // Super Admins: use selected department from context (null = all)
+    const departmentId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
+        ? user.departmentId
+        : (department?.id || null);
+
     return useQuery({
-        queryKey: TRANSACTION_KEYS.all,
-        queryFn: () => storage.getTransactions(),
+        queryKey: TRANSACTION_KEYS.byDepartment(departmentId),
+        queryFn: () => storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, departmentId),
+        enabled: !!user,
         staleTime: 0,
     });
 }
@@ -29,7 +43,8 @@ export function useCheckOut() {
             notes,
             location,
             project,
-            id
+            id,
+            departmentId
         }: {
             items: Equipment[],
             shootId?: string,
@@ -39,7 +54,8 @@ export function useCheckOut() {
             location?: string,
             project: string,
             id?: string,
-            displayId?: string
+            displayId?: string,
+            departmentId?: string
         }) => {
 
             const transactionId = id || generateTransactionId();
@@ -62,7 +78,8 @@ export function useCheckOut() {
                 shootId,
                 notes,
                 preCheckoutConditions: items.reduce((acc, item) => ({ ...acc, [item.id]: item.condition }), {} as Record<string, any>),
-                status: 'OPEN'
+                status: 'OPEN',
+                departmentId
             };
 
             // Enhanced Save with new columns
@@ -86,7 +103,8 @@ export function useCheckOut() {
                 entityId: transactionId,
                 userId,
                 timestamp: new Date().toISOString(),
-                details: `Checked out ${items.length} items for ${project}`
+                details: `Checked out ${items.length} items for ${project}`,
+                departmentId
             });
 
             return transaction;
@@ -102,6 +120,7 @@ export function useCheckOut() {
 // Hook to check in items
 export function useCheckIn() {
     const queryClient = useQueryClient();
+    const { user } = useAuth();
 
     return useMutation({
         mutationFn: async ({
@@ -118,7 +137,7 @@ export function useCheckIn() {
             condition?: Equipment['condition']
         }) => {
 
-            const allTransactions = await storage.getTransactions();
+            const allTransactions = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, user?.departmentId);
             const timestamp = new Date().toISOString();
 
             for (const item of items) {

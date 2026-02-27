@@ -58,7 +58,7 @@ export default function TransactionsPage() {
             router.push('/login');
             return;
         }
-        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
+        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
             router.push('/');
             return;
         }
@@ -69,7 +69,7 @@ export default function TransactionsPage() {
 
     const loadStats = async () => {
         try {
-            const newStats = await storage.getTransactionStats();
+            const newStats = await storage.getTransactionStats(user?.departmentId);
             setStats(newStats);
         } catch (error) {
             console.error('Error loading stats:', error);
@@ -96,7 +96,8 @@ export default function TransactionsPage() {
                 debouncedSearch,
                 filterStatus,
                 undefined, // filterUserIds (strict)
-                searchUserIds // searchUserIds (OR match)
+                searchUserIds, // searchUserIds (OR match)
+                user?.departmentId // Isolation
             );
 
             if (newTxns.length < limit) {

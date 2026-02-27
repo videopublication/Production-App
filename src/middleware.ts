@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
     const path = request.nextUrl.pathname
 
     // Public paths we always allow without auth
-    const isPublicPath = path === '/' || path === '/login' || path === '/auth/callback' || path.startsWith('/_next') || path.startsWith('/static') || path === '/favicon.ico'
+    const isPublicPath = path === '/' || path === '/login' || path === '/auth/callback' || path === '/inactive' || path === '/select-department' || path === '/api/departments' || path.startsWith('/_next') || path.startsWith('/static') || path === '/favicon.ico'
 
     // If no user and trying to access protected route
     if (!user && !isPublicPath) {
@@ -97,10 +97,11 @@ export async function middleware(request: NextRequest) {
             }
 
             // Admin protection for /admin and /api/admin routes
-            const isShootsRoute = path.startsWith('/admin/shoots') || path.startsWith('/api/admin/shoots');
+            // Note: Shoots are now at /shoots and accessible to all roles
+            const isAdminRoute = path.startsWith('/admin') || path.startsWith('/api/admin');
+            const hasAdminAccess = role === 'ADMIN' || role === 'SUPER_ADMIN';
 
-            // Allow Managers and Crew to access Shoots, but restrict other Admin routes to Admin only
-            if ((path.startsWith('/admin') || path.startsWith('/api/admin')) && role !== 'ADMIN' && !isShootsRoute) {
+            if (isAdminRoute && !hasAdminAccess) {
                 if (path.startsWith('/api/')) {
                     return NextResponse.json({ error: 'Unauthorized: Admin access required' }, { status: 403 });
                 }

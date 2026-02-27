@@ -11,6 +11,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { ChevronLeft } from 'lucide-react';
 
 import { SettingsDrawer } from './SettingsDrawer';
+import { useDepartment } from '@/lib/department-context';
 
 const pageNames: Record<string, string> = {
     '/dashboard': 'Dashboard',
@@ -27,6 +28,7 @@ const pageNames: Record<string, string> = {
 
 export const MobileHeader = () => {
     const { user } = useAuth();
+    const { department } = useDepartment();
     const pathname = usePathname();
     const router = useRouter();
     const { notificationPermission } = useFcmToken();
@@ -44,12 +46,12 @@ export const MobileHeader = () => {
         for (const [path, name] of Object.entries(pageNames)) {
             if (pathname.startsWith(path + '/')) {
                 if (pathname.includes('/inventory/')) return 'Item Details';
-                if (pathname.startsWith('/admin/shoots/')) return 'Shoot Details';
+                if (pathname.startsWith('/shoots/')) return 'Shoot Details';
                 if (pathname.startsWith('/transactions/')) return 'Transaction Details';
                 return name;
             }
         }
-        return 'VP App';
+        return department?.name || 'VP App';
     };
 
     return (
@@ -63,7 +65,7 @@ export const MobileHeader = () => {
                     {/* Left Action / Spacer */}
                     <div className="w-[72px] flex items-center">
                         {(pathname === '/profile' ||
-                            (pathname.startsWith('/admin/shoots/') && pathname !== '/admin/shoots') ||
+                            (pathname.startsWith('/shoots/') && pathname !== '/shoots') ||
                             (pathname.startsWith('/transactions/') && pathname !== '/transactions')
                         ) && (
                                 <button

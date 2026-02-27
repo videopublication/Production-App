@@ -5,26 +5,37 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
+import { useDepartment } from '@/lib/department-context';
 
 export const Sidebar = () => {
     const pathname = usePathname();
     const { user, logout } = useAuth();
     const { isCollapsed, toggleCollapsed } = useSidebar();
+    const { hasFeature, department } = useDepartment();
+
+    // Dynamically update document title based on department
+    React.useEffect(() => {
+        if (department?.name) {
+            document.title = `${department.name} | VP App`;
+        } else {
+            document.title = 'VP App';
+        }
+    }, [department]);
 
     const isActive = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
 
     const navItems = [
-        { name: 'Dashboard', path: '/dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z', roles: ['MANAGER', 'ADMIN'] },
-        { name: 'Inventory', path: '/inventory', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', roles: ['CREW', 'MANAGER', 'ADMIN'] },
-        { name: 'Checkout', path: '/checkout', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z', roles: ['CREW', 'MANAGER', 'ADMIN'] },
-        { name: 'Returns', path: '/returns', icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', roles: ['CREW', 'MANAGER', 'ADMIN'] },
-        { name: 'Transactions', path: '/transactions', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: ['CREW', 'MANAGER', 'ADMIN'] },
-        { name: 'Verification', path: '/verification', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', roles: ['MANAGER', 'ADMIN'] },
-        { name: 'Shoots', path: '/admin/shoots', icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z', roles: ['ADMIN', 'MANAGER', 'CREW'] },
-        { name: 'Calendar', path: '/calendar', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', roles: ['CREW', 'MANAGER', 'ADMIN'] },
-        { name: 'Users', path: '/admin/users', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', roles: ['ADMIN'] },
-        { name: 'Activity Logs', path: '/admin/logs', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', roles: ['ADMIN'] },
-
+        { name: 'Dashboard', path: '/dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z', roles: ['MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
+        { name: 'Inventory', path: '/inventory', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
+        { name: 'Checkout', path: '/checkout', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
+        { name: 'Returns', path: '/returns', icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
+        { name: 'Transactions', path: '/transactions', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
+        { name: 'Verification', path: '/verification', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', roles: ['MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
+        { name: 'Shoots', path: '/shoots', icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z', roles: ['ADMIN', 'MANAGER', 'CREW', 'SUPER_ADMIN'], feature: 'shoots' },
+        { name: 'Calendar', path: '/calendar', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'calendar' },
+        { name: 'Users', path: '/admin/users', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', roles: ['ADMIN', 'SUPER_ADMIN'], feature: 'crew_management' },
+        { name: 'Departments', path: '/admin/departments', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', roles: ['SUPER_ADMIN'] },
+        { name: 'Activity Logs', path: '/admin/logs', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', roles: ['ADMIN', 'SUPER_ADMIN'] }, // Logs are system-level
     ];
 
     if (!user) return null;
@@ -42,13 +53,18 @@ export const Sidebar = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                 </div>
-                {!isCollapsed && <span className="font-semibold text-[17px] text-foreground">VP App</span>}
+                {!isCollapsed && (
+                    <span className="font-semibold text-[17px] text-foreground truncate max-w-[180px]">
+                        {department?.name || 'VP App'}
+                    </span>
+                )}
             </div>
 
             {/* Navigation */}
             <nav className={`flex-1 py-5 overflow-y-auto ${isCollapsed ? 'px-3' : 'px-4'}`}>
                 {navItems.map((item) => (
-                    item.roles.includes(user.role) && (
+                    item.roles.includes(user.role) &&
+                    (!item.feature || hasFeature(item.feature)) && (
                         <Link key={item.path} href={item.path} className="block mb-2" title={isCollapsed ? item.name : undefined}>
                             <div className={`flex items-center rounded-xl transition-all duration-200 ${isCollapsed
                                 ? 'justify-center w-11 h-11 mx-auto'

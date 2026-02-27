@@ -12,6 +12,7 @@ import { Badge } from '@/components/Badge';
 import { QRScanner, MobileScanner } from '@/components/QRScanner';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
+import { useDepartment } from '@/lib/department-context';
 import Link from 'next/link';
 
 export default function TransactionDetailPage() {
@@ -20,7 +21,13 @@ export default function TransactionDetailPage() {
     const { user } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
+    const { department } = useDepartment();
     const transactionId = params.id as string;
+
+    // Enforce department isolation
+    const effectiveDeptId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
+        ? user.departmentId
+        : (department?.id || null);
 
     const [transaction, setTransaction] = useState<Transaction | null>(null);
     const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -60,12 +67,12 @@ export default function TransactionDetailPage() {
         if (!silent) setLoading(true);
         try {
             const [txns, equip, users, allLogs, shoots, assignments] = await Promise.all([
-                storage.getTransactions(),
-                storage.getEquipment(),
-                storage.getUsers(),
-                storage.getLogs(),
-                storage.getShoots(),
-                storage.getAssignments()
+                storage.getTransactions(undefined, undefined, undefined, 'ALL', undefined, undefined, effectiveDeptId),
+                storage.getEquipment(effectiveDeptId),
+                storage.getUsers(effectiveDeptId),
+                storage.getLogs(undefined, undefined, undefined, effectiveDeptId),
+                storage.getShoots(effectiveDeptId),
+                storage.getAssignments(effectiveDeptId)
             ]);
 
             const txn = txns.find(t => t.id === transactionId);
@@ -595,7 +602,7 @@ export default function TransactionDetailPage() {
                                 {transaction.id}
                             </p>
                             {linkedShoot ? (
-                                <Link href={`/admin/shoots/${linkedShoot.id}`} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium">
+                                <Link href={`/shoots/${linkedShoot.id}`} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium">
                                     <span className="flex items-center gap-1">
                                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                                         Linked Shoot: {linkedShoot.title} {linkedShoot.shootNumber ? `(#${linkedShoot.shootNumber})` : ''}
@@ -609,7 +616,7 @@ export default function TransactionDetailPage() {
                                             onChange={async (e) => {
                                                 if (!e.target.value) return;
                                                 const shootId = e.target.value;
-                                                const shoot = (await storage.getShoots()).find(s => s.id === shootId);
+                                                const shoot = (await storage.getShoots(effectiveDeptId)).find(s => s.id === shootId);
                                                 if (!shoot) return;
 
                                                 const isConfirmed = await confirm({

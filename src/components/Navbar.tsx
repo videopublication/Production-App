@@ -8,11 +8,13 @@ import useFcmToken from '@/hooks/useFcmToken';
 import { Button } from './Button';
 import { storage } from '@/lib/storage';
 import { Notification as AppNotification } from '@/types';
+import { useDepartment } from '@/lib/department-context';
 
 export const Navbar = () => {
     const pathname = usePathname();
     const { user, logout } = useAuth();
     const { notificationPermission } = useFcmToken();
+    const { allDepartments, department, switchDepartment } = useDepartment();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // Notification State
@@ -69,7 +71,7 @@ export const Navbar = () => {
                     </Button>
                 </Link>
             )}
-            {(user?.role === 'CREW' || user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
+            {(user?.role === 'CREW' || user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                 <>
                     <Link href="/checkout" onClick={() => setIsMobileMenuOpen(false)}>
                         <Button variant={isActive('/checkout') ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start md:w-auto">
@@ -83,7 +85,7 @@ export const Navbar = () => {
                     </Link>
                 </>
             )}
-            {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
+            {(user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                 <>
                     <Link href="/verification" onClick={() => setIsMobileMenuOpen(false)}>
                         <Button variant={isActive('/verification') ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start md:w-auto">
@@ -111,7 +113,9 @@ export const Navbar = () => {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
                             </div>
-                            <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">VP App</span>
+                            <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
+                                {department?.name || 'VP App'}
+                            </span>
                         </Link>
 
                         <div className="hidden md:flex ml-10 space-x-2">
@@ -121,6 +125,29 @@ export const Navbar = () => {
 
                     <div className="flex items-center space-x-4">
                         <div className="hidden md:flex items-center space-x-4">
+                            {/* Department Switcher for Super Admin */}
+                            {user?.role === 'SUPER_ADMIN' && switchDepartment && (
+                                <div className="mr-2 flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground hidden lg:inline">View:</span>
+                                    <select
+                                        className="bg-background border border-border text-sm rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer hover:bg-accent transition-colors text-foreground min-w-[150px]"
+                                        value={department?.id || ''}
+                                        onChange={(e) => switchDepartment(e.target.value || null)}
+                                        title="Switch Department Context"
+                                    >
+                                        <option value="">Global Overview</option>
+                                        {allDepartments.map(dept => (
+                                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Debugging for Super Admin (Temporary) */}
+                            {user?.role === 'SUPER_ADMIN' && !switchDepartment && (
+                                <div className="text-xs text-red-500">Error: No Switcher</div>
+                            )}
+
                             {/* Notification Icon & Dropdown */}
                             {user && (
                                 <div className="relative">
@@ -221,6 +248,26 @@ export const Navbar = () => {
                     <div className="px-4 pt-2 pb-4 space-y-1 flex flex-col">
                         <NavLinks />
                         <div className="pt-4 mt-4 border-t border-border/40">
+                            {/* Department Switcher Mobile */}
+                            {user?.role === 'SUPER_ADMIN' && switchDepartment && (
+                                <div className="px-2 mb-4">
+                                    <label className="text-xs text-muted-foreground block mb-1.5">Context View</label>
+                                    <select
+                                        className="w-full bg-background border border-border text-sm rounded-lg px-3 py-2 outline-none text-foreground"
+                                        value={department?.id || ''}
+                                        onChange={(e) => {
+                                            switchDepartment(e.target.value || null);
+                                            setIsMobileMenuOpen(false);
+                                        }}
+                                    >
+                                        <option value="">Global Overview</option>
+                                        {allDepartments.map(dept => (
+                                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             {user ? (
                                 <div className="flex items-center justify-between px-2">
                                     <div>

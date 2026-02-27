@@ -24,6 +24,7 @@ const getSupabaseAdmin = () => {
 };
 
 // Helper to check for admin session
+// Helper to check for admin session
 async function ensureAdmin() {
     const cookieStore = await cookies()
 
@@ -41,9 +42,6 @@ async function ensureAdmin() {
                             cookieStore.set(name, value, options)
                         })
                     } catch {
-                        // The `setAll` method was called from a Server Component.
-                        // This can be ignored if you have middleware refreshing
-                        // user sessions.
                     }
                 },
             },
@@ -56,11 +54,15 @@ async function ensureAdmin() {
         return { error: 'Unauthorized', status: 401 }
     }
 
-    // Check role strictly from JWT/metadata again to be safe, 
-    // or rely on the trusted service role check if you prefer, 
-    // but checking metadata on the user object is good practice.
-    const role = user.app_metadata?.role
-    if (role !== 'ADMIN') {
+    // Verify role against database source of truth
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: profile } = await supabaseAdmin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+    
+    if (!profile || !['ADMIN', 'SUPER_ADMIN'].includes(profile.role)) {
         return { error: 'Forbidden: Admin access required', status: 403 }
     }
 
@@ -80,7 +82,7 @@ export async function GET(request: Request) {
         const supabaseAdmin = getSupabaseAdmin();
         const { data: users, error } = await supabaseAdmin
             .from('users')
-            .select('id, name, email, role, status')
+            .select('id, name, email, role, status, department_id, department:departments(name)')
             .order('name', { ascending: true });
 
         if (error) {
@@ -102,7 +104,8 @@ const createUserSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6),
     name: z.string().min(1),
-    role: z.enum(['ADMIN', 'MANAGER', 'CREW'])
+    role: z.enum(['ADMIN', 'MANAGER', 'CREW']),
+    departmentId: z.string().uuid().optional()
 });
 
 export async function POST(request: Request) {
@@ -122,7 +125,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { email, password, name, role } = result.data;
+        const { email, password, name, role, departmentId } = result.data;
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
@@ -141,7 +144,8 @@ export async function POST(request: Request) {
                         email,
                         name,
                         role,
-                        status: 'ACTIVE' // Admin created users are active by default
+                        status: 'ACTIVE', // Admin created users are active by default
+                        department_id: departmentId
                     }
                 ]);
 
@@ -162,7 +166,8 @@ const updateUserSchema = z.object({
     id: z.string().uuid(),
     password: z.string().min(6).optional(),
     status: z.enum(['ACTIVE', 'PENDING', 'SUSPENDED']).optional(),
-    role: z.enum(['ADMIN', 'MANAGER', 'CREW']).optional()
+    role: z.enum(['ADMIN', 'MANAGER', 'CREW']).optional(),
+    departmentId: z.string().uuid().optional().nullable()
 });
 
 export async function PUT(request: Request) {
@@ -182,7 +187,7 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { id, password, status, role } = result.data;
+        const { id, password, status, role, departmentId } = result.data;
 
         if (password) {
             const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(id, {
@@ -194,6 +199,7 @@ export async function PUT(request: Request) {
         const updates: any = {};
         if (status) updates.status = status;
         if (role) updates.role = role;
+        if (departmentId !== undefined) updates.department_id = departmentId;
 
         if (Object.keys(updates).length > 0) {
             const { error: updateError } = await supabaseAdmin

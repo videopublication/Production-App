@@ -115,6 +115,20 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/admin/shoots',
+        destination: '/shoots',
+        permanent: true,
+      },
+      {
+        source: '/admin/shoots/:path*',
+        destination: '/shoots/:path*',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);

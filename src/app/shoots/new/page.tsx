@@ -5,20 +5,22 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ShootForm } from '@/components/ShootForm';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
-import { Shoot, User, Assignment } from '@/types';
-import { Button } from '@/components/Button';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
-import { format, parseISO } from 'date-fns';
+import { useUsers } from '@/hooks/useUsers';
+import { Shoot, Assignment } from '@/types';
 import { generateUUID } from '@/lib/id';
 
 export default function NewShootPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
+    const { data: users = [] } = useUsers();
     const [isLoading, setIsLoading] = useState(false);
-    const [users, setUsers] = useState<User[]>([]);
+
+    useEffect(() => {
+        if (user && !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            router.push('/shoots');
+        }
+    }, [user, router]);
 
     // Get date from query params (if any) - from Calendar
     const dateParam = searchParams.get('date');
@@ -28,24 +30,6 @@ export default function NewShootPage() {
         // Default to 10:00 AM on the selected date to ensure it lands on the correct day in all timezones
         initialData.startTime = `${dateParam}T10:00:00`;
     }
-
-    useEffect(() => {
-        loadUsers();
-        if (user && user.role !== 'ADMIN') {
-            router.push('/admin/shoots');
-        }
-    }, [user, router]);
-
-    const loadUsers = async () => {
-        try {
-            const data = await storage.getUsers();
-            setUsers(data);
-        } catch (error) {
-            console.error('Failed to load users:', error);
-        }
-    };
-
-
 
     const isSubmittingRef = React.useRef(false);
 
@@ -60,7 +44,8 @@ export default function NewShootPage() {
             const newShoot: Shoot = {
                 ...data as Shoot,
                 id: shootId,
-                createdBy: user?.id || '', // Use User ID (UUID) for DB Foreign Key
+                createdBy: user?.id || '',
+                departmentId: user?.departmentId,
             };
 
             await storage.saveShoot(newShoot);
@@ -71,14 +56,13 @@ export default function NewShootPage() {
                 shootId: shootId,
                 userId: userId,
                 role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
-                status: 'PENDING'
+                status: 'PENDING',
+                departmentId: user?.departmentId
             }));
 
             if (assignments.length > 0) {
                 await storage.saveAssignments(assignments);
             }
-
-            // --- CRITICAL SAVE COMPLETE ---
 
             try {
                 // Log activity
@@ -89,7 +73,8 @@ export default function NewShootPage() {
                         entityId: shootId,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: `Created shoot "${newShoot.title}"`
+                        details: `Created shoot "${newShoot.title}"`,
+                        departmentId: user.departmentId
                     });
                 }
             } catch (nonCriticalError) {
@@ -97,7 +82,7 @@ export default function NewShootPage() {
             }
 
             // Redirect to the new shoot details page
-            router.push(`/admin/shoots/${shootId}`);
+            router.push(`/shoots/${shootId}`);
         } catch (error) {
             console.error('Failed to create shoot:', error);
             isSubmittingRef.current = false;
@@ -109,7 +94,6 @@ export default function NewShootPage() {
     return (
         <div className="px-2 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
-
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">New Shoot</h1>
             </div>
 

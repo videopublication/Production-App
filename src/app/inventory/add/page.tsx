@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { Equipment } from '@/types';
@@ -12,6 +12,12 @@ import { useAuth } from '@/lib/auth';
 export default function AddItemPage() {
     const router = useRouter();
     const { user } = useAuth();
+
+    useEffect(() => {
+        if (user && !['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            router.replace('/inventory');
+        }
+    }, [user, router]);
     const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
@@ -52,6 +58,7 @@ export default function AddItemPage() {
                     model: formData.model,
                     serialNumber: formData.serialNumber,
                 },
+                departmentId: user?.departmentId
             };
 
             await storage.addEquipment(newItem);
@@ -64,7 +71,8 @@ export default function AddItemPage() {
                     entityId: newItem.id,
                     userId: user.id,
                     timestamp: new Date().toISOString(),
-                    details: `Added new equipment: ${newItem.name} (${newItem.barcode})`
+                    details: `Added new equipment: ${newItem.name} (${newItem.barcode})`,
+                    departmentId: user.departmentId
                 });
             }
 

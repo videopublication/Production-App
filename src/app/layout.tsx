@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import QueryProvider from "@/lib/query-provider";
+import { DepartmentProvider } from "@/lib/department-context";
 import { PreferencesProvider } from "@/lib/preferences-context";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -46,11 +47,13 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning>
         <QueryProvider>
           <AuthProvider>
-            <PreferencesProvider>
-              <AppLayout>
-                {children}
-              </AppLayout>
-            </PreferencesProvider>
+            <DepartmentProvider>
+              <PreferencesProvider>
+                <AppLayout>
+                  {children}
+                </AppLayout>
+              </PreferencesProvider>
+            </DepartmentProvider>
           </AuthProvider>
         </QueryProvider>
       </body>

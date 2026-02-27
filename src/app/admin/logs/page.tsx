@@ -40,11 +40,11 @@ export default function AdminLogsPage() {
 
     useEffect(() => {
         if (!user) return;
-        if (user.role !== 'ADMIN') {
+        if (!['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
             router.push('/dashboard');
             return;
         }
-        storage.getUsers().then(setUsers);
+        storage.getUsers(user.departmentId).then(setUsers);
         // Initial load is handled by the search effect above
     }, [user, router]);
 
@@ -52,7 +52,7 @@ export default function AdminLogsPage() {
         setLoading(true);
         try {
             const limit = 20;
-            const newLogs = await storage.getLogs(pageNum, limit, debouncedSearch);
+            const newLogs = await storage.getLogs(pageNum, limit, debouncedSearch, user?.departmentId);
 
             if (newLogs.length < limit) {
                 setHasMore(false);
@@ -111,7 +111,7 @@ export default function AdminLogsPage() {
         }
     };
 
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
         return null; // Or unauthorized view
     }
 

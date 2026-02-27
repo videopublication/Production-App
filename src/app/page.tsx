@@ -22,7 +22,7 @@ export default function Home() {
     }
 
     if (!isLoading && user) {
-      if (user.role === 'MANAGER' || user.role === 'ADMIN') {
+      if (['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
         router.push('/dashboard');
       } else {
         router.push('/checkout');

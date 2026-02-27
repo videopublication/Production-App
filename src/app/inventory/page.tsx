@@ -18,12 +18,14 @@ import { Skeleton } from '@/components/Skeleton';
 import { useEquipment, useUpdateEquipment, useDeleteEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
 import { useTransactions } from '@/hooks/useTransactions';
+import { useDepartment } from '@/lib/department-context';
 
 export default function InventoryPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
+    const { department } = useDepartment();
 
     // TanStack Query Hooks
     const { data: items = [], isLoading: equipmentLoading, refetch: refresh } = useEquipment();
@@ -33,7 +35,7 @@ export default function InventoryPage() {
     const { mutateAsync: updateEquipment } = useUpdateEquipment();
     const { mutateAsync: deleteEquipment } = useDeleteEquipment();
 
-    const isInventoryLoading = equipmentLoading || usersLoading;
+    const isInventoryLoading = authLoading || equipmentLoading || usersLoading;
 
     // Derived state for users map
     const users = useMemo(() => {
@@ -170,6 +172,10 @@ export default function InventoryPage() {
 
     const filteredItems = useMemo(() => {
         let result = items;
+
+        // NOTE: Department filtering is already done at the Supabase query level in useEquipment().
+        // No need to re-filter by department here — it would cause items to appear empty
+        // if item.departmentId isn't mapped correctly.
 
         if (search) {
             const q = search.toLowerCase();
@@ -441,10 +447,10 @@ export default function InventoryPage() {
                                 </svg>
                             </button>
                         </div>
-                        {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
+                        {(user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                             <div className="flex gap-1 sm:gap-2">
                                 {/* database cleanup button - shows only if needed */}
-                                {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && user.role === 'ADMIN' && (
+                                {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && ['ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
                                     <Button
                                         variant="danger"
                                         size="sm"
@@ -568,7 +574,7 @@ export default function InventoryPage() {
                                 </svg>
                                 Small QR
                             </Button>
-                            {user?.role === 'ADMIN' && (
+                            {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                                 <Button
                                     variant="danger"
                                     size="sm"

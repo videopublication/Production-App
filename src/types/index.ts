@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'MANAGER' | 'CREW';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'CREW';
 
 export type EquipmentStatus =
     | 'AVAILABLE'
@@ -16,6 +16,14 @@ export type Condition =
     | 'LOOSE_MOUNT'
     | 'DAMAGED';
 
+export interface Department {
+    id: string;
+    name: string;
+    slug: string;
+    enabledFeatures: string[]; // List of enabled feature slugs
+    settings: Record<string, any>;
+}
+
 export interface User {
     id: string;
     name: string;
@@ -25,6 +33,7 @@ export interface User {
     status: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
     fcmToken?: string | null;
     avatarUrl?: string | null;
+    departmentId?: string; // Initially optional during migration
 }
 
 export interface Equipment {
@@ -44,6 +53,7 @@ export interface Equipment {
     };
     assignedTo?: string; // User ID
     lastActivity?: string; // ISO Date
+    departmentId?: string;
 }
 
 export interface Transaction {
@@ -59,6 +69,7 @@ export interface Transaction {
     status: 'OPEN' | 'CLOSED';
     additionalUsers?: string[]; // IDs of other users involved
     notes?: string;
+    departmentId?: string;
 }
 
 export interface ReturnRecord {
@@ -80,6 +91,7 @@ export interface Log {
     details?: string;
     oldValue?: unknown;
     newValue?: unknown;
+    departmentId?: string;
 }
 
 export interface Notification {
@@ -90,6 +102,7 @@ export interface Notification {
     link?: string;
     read: boolean;
     createdAt: string;
+    departmentId?: string;
 }
 
 export type ShootStatus = 'CONFIRMED' | 'CANCELLED';
@@ -114,6 +127,7 @@ export interface Shoot {
     googleEventId?: string;
     shootNumber?: number;
     jiraTicketId?: string;
+    departmentId?: string;
 }
 
 export interface Assignment {
@@ -122,4 +136,5 @@ export interface Assignment {
     userId: string;
     role: string;
     status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    departmentId?: string;
 }

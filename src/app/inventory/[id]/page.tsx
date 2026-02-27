@@ -71,9 +71,9 @@ export default function ItemDetailsPage() {
     }, [item, users]);
 
     // Check if current user can manage equipment
-    const canManage = user && (user.role === 'MANAGER' || user.role === 'ADMIN');
+    const canManage = user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
     // Admin can edit everything including critical fields
-    const canEditEverything = user && user.role === 'ADMIN';
+    const canEditEverything = user && ['ADMIN', 'SUPER_ADMIN'].includes(user.role);
 
     // Handle save changes
     // Handle save changes

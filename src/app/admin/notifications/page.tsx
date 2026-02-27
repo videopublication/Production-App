@@ -22,11 +22,11 @@ export default function SendNotificationPage() {
     const [users, setUsers] = useState<User[]>([]);
 
     useEffect(() => {
-        if (!authLoading && user && (user.role !== 'ADMIN' && user.role !== 'MANAGER')) {
+        if (!authLoading && user && (!['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role))) {
             router.push('/');
         }
         if (user) {
-            storage.getUsers().then(setUsers);
+            storage.getUsers(user.departmentId).then(setUsers);
         }
     }, [user, authLoading, router]);
 
@@ -45,17 +45,17 @@ export default function SendNotificationPage() {
                 targets = users.filter(u => u.role === targetRole);
             }
 
-            // Exclude users without tokens if necessary, but we also want to save to DB so keep them
-            // Actually API handles sending, we loop here to save to DB + Call API
-
             const notifications = targets.map(async (target) => {
                 // 1. Save to Database
-                await storage.addNotification({
-                    userId: target.id,
-                    title,
-                    message,
-                    link: '/'
-                });
+                if (user) {
+                    await storage.addNotification({
+                        userId: target.id,
+                        title,
+                        message,
+                        link: '/',
+                        departmentId: user.departmentId
+                    });
+                }
 
                 // 2. Send Push Notification (if token exists)
                 if (target.fcmToken) {

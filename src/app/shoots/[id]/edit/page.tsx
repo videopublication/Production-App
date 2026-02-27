@@ -1,18 +1,17 @@
 'use client';
 
-import { format, parseISO } from 'date-fns';
-
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { ShootForm } from '@/components/ShootForm';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
-import { Shoot, User, Assignment } from '@/types';
-import { Button } from '@/components/Button';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { useUsers } from '@/hooks/useUsers';
+import { useShoot } from '@/hooks/useShoots';
+import { useAssignments } from '@/hooks/useAssignments';
+import { Shoot, Assignment } from '@/types';
 import { generateUUID } from '@/lib/id';
+import { format, parseISO } from 'date-fns';
 
 export default function EditShootPage() {
     const router = useRouter();
@@ -21,41 +20,17 @@ export default function EditShootPage() {
     const id = params?.id as string;
     const queryClient = useQueryClient();
 
-    const [shoot, setShoot] = useState<Shoot | null>(null);
-    const [users, setUsers] = useState<User[]>([]);
-    const [assignments, setAssignments] = useState<Assignment[]>([]);
+    const { data: shoot, isLoading: isShootLoading } = useShoot(id);
+    const { data: allUsers = [] } = useUsers();
+    const { data: allAssignments = [] } = useAssignments();
+
     const [isLoading, setIsLoading] = useState(false);
-    const [isFetching, setIsFetching] = useState(true);
 
     useEffect(() => {
-        if (id) {
-            loadData();
+        if (user && !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            router.push('/shoots');
         }
-    }, [id]);
-
-    const loadData = async () => {
-        try {
-            const [allShoots, allAssignments, allUsers] = await Promise.all([
-                storage.getShoots(),
-                storage.getAssignments(),
-                storage.getUsers()
-            ]);
-
-            const foundShoot = allShoots.find(s => s.id === id || s.shootNumber?.toString() === id);
-            if (foundShoot) {
-                setShoot(foundShoot);
-                // Make sure we filter using the UUID, not the URL param (which might be "23")
-                setAssignments(allAssignments.filter(a => a.shootId === foundShoot.id));
-                setUsers(allUsers);
-            } else {
-                router.push('/admin/shoots');
-            }
-        } catch (error) {
-            console.error('Failed to load data:', error);
-        } finally {
-            setIsFetching(false);
-        }
-    };
+    }, [user, router]);
 
     const isSubmittingRef = React.useRef(false);
 
@@ -72,10 +47,13 @@ export default function EditShootPage() {
             };
             await storage.saveShoot(updatedShoot);
 
+            // Current assignments for THIS shoot
+            const currentAssignments = allAssignments.filter(a => a.shootId === shoot.id);
+
             // Update Assignments
             // 1. Find removed assignments
-            const existingCrewIds = assignments.map(a => a.userId);
-            const toRemove = assignments.filter(a => !crewIds.includes(a.userId));
+            const existingCrewIds = currentAssignments.map(a => a.userId);
+            const toRemove = currentAssignments.filter(a => !crewIds.includes(a.userId));
             if (toRemove.length > 0) {
                 await Promise.all(toRemove.map(a => storage.deleteAssignment(a.id)));
             }
@@ -84,18 +62,18 @@ export default function EditShootPage() {
             const toAdd = crewIds.filter(uid => !existingCrewIds.includes(uid));
             const newAssignments: Assignment[] = toAdd.map(userId => ({
                 id: generateUUID(),
-                shootId: shoot.id, // Use UUID
+                shootId: shoot.id,
                 userId: userId,
-                role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
-                status: 'PENDING'
+                role: userId === inchargeId ? 'Incharge' : (allUsers.find(u => u.id === userId)?.role || 'Crew'),
+                status: 'PENDING',
+                departmentId: shoot.departmentId
             }));
             if (newAssignments.length > 0) {
                 await storage.saveAssignments(newAssignments);
             }
 
             // 3. Update existing roles if needed (e.g. if someone became incharge)
-            // Getting existing assignments that are still in crewIds
-            const keptAssignments = assignments.filter(a => crewIds.includes(a.userId));
+            const keptAssignments = currentAssignments.filter(a => crewIds.includes(a.userId));
             const assignmentsToUpdate: Assignment[] = [];
 
             keptAssignments.forEach(a => {
@@ -105,26 +83,18 @@ export default function EditShootPage() {
                 if (isNowIncharge && !wasIncharge) {
                     assignmentsToUpdate.push({ ...a, role: 'Incharge' });
                 } else if (!isNowIncharge && wasIncharge) {
-                    // Revert to user role
-                    const userRole = users.find(u => u.id === a.userId)?.role || 'Crew';
+                    const userRole = allUsers.find(u => u.id === a.userId)?.role || 'Crew';
                     assignmentsToUpdate.push({ ...a, role: userRole });
                 }
             });
 
-            // ... (Save logic remains the same up to here)
-
-            // 3. Update existing roles
             if (assignmentsToUpdate.length > 0) {
                 await storage.saveAssignments(assignmentsToUpdate);
             }
 
-            // --- CRITICAL SAVE COMPLETE --- 
-            // Now we try to log and invalidate, but we won't let errors here stop the redirect.
-
             try {
                 // Log activity
                 const changes: string[] = [];
-                // ... (existing change detection logic) ...
                 if (updatedShoot.title !== shoot.title) changes.push(`title to "${updatedShoot.title}"`);
                 if (updatedShoot.location !== shoot.location) changes.push(`location to "${updatedShoot.location}"`);
 
@@ -132,23 +102,6 @@ export default function EditShootPage() {
                     const newStart = format(parseISO(updatedShoot.startTime), 'MMM d, h:mm a');
                     const oldStart = shoot.startTime ? format(parseISO(shoot.startTime), 'MMM d, h:mm a') : '';
                     if (newStart !== oldStart) changes.push(`start time to "${newStart}"`);
-                }
-                if (updatedShoot.endTime) {
-                    const newEnd = format(parseISO(updatedShoot.endTime), 'MMM d, h:mm a');
-                    const oldEnd = shoot.endTime ? format(parseISO(shoot.endTime), 'MMM d, h:mm a') : '';
-                    if (newEnd !== oldEnd) changes.push(`end time to "${newEnd}"`);
-                }
-
-                const addedCrewNames = toAdd.map(id => users.find(u => u.id === id)?.name).filter(Boolean);
-                const removedCrewNames = toRemove.map(a => users.find(u => u.id === a.userId)?.name).filter(Boolean);
-
-                if (addedCrewNames.length > 0) changes.push(`added crew: ${addedCrewNames.join(', ')}`);
-                if (removedCrewNames.length > 0) changes.push(`removed crew: ${removedCrewNames.join(', ')}`);
-
-                if (inchargeId !== (assignments.find(a => a.role === 'Incharge')?.userId)) {
-                    const newInchargeName = users.find(u => u.id === inchargeId)?.name;
-                    if (newInchargeName) changes.push(`set incharge to ${newInchargeName}`);
-                    else if (!inchargeId) changes.push('removed incharge');
                 }
 
                 const details = changes.length > 0
@@ -162,45 +115,38 @@ export default function EditShootPage() {
                         entityId: shoot.id,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: details
+                        details: details,
+                        departmentId: shoot.departmentId
                     });
                 }
 
-                // Invalidate queries
                 await queryClient.invalidateQueries({ queryKey: ['shoots'] });
                 await queryClient.invalidateQueries({ queryKey: ['assignments'] });
             } catch (nonCriticalError) {
                 console.warn('Non-critical error during post-save operations:', nonCriticalError);
             }
 
-            // Force redirect to the details page (safer than back())
-            router.push(`/admin/shoots/${shoot.id}`);
-
+            router.push(`/shoots/${shoot.id}`);
         } catch (error) {
             console.error('Failed to update shoot:', error);
-            // Only reset the lock if we genuinely failed to save the core data
             isSubmittingRef.current = false;
-            // Optionally show an error toast here if you have a toast system available in this component context
-            // showToast("Failed to save changes", "error"); 
         } finally {
             setIsLoading(false);
         }
     };
 
-    if (isFetching) {
+    if (isShootLoading) {
         return <div className="p-6">Loading...</div>;
     }
 
     if (!shoot) return null;
 
-    // Derived initial states
-    const currentCrewIds = assignments.map(a => a.userId);
-    const currentInchargeId = assignments.find(a => a.role === 'Incharge')?.userId;
+    const currentCrewIds = allAssignments.filter(a => a.shootId === shoot.id).map(a => a.userId);
+    const currentInchargeId = allAssignments.find(a => a.shootId === shoot.id && a.role === 'Incharge')?.userId;
 
     return (
         <div className="px-2 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
-
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
                     Edit Shoot {shoot?.shootNumber ? <span className="text-gray-500 dark:text-gray-400">#{shoot.shootNumber}</span> : ''}
                 </h1>
@@ -210,7 +156,7 @@ export default function EditShootPage() {
                 initialData={shoot}
                 initialCrewIds={currentCrewIds}
                 initialInchargeId={currentInchargeId}
-                users={users}
+                users={allUsers}
                 onSubmit={handleSubmit}
                 isLoading={isLoading}
                 buttonLabel="Save Changes"

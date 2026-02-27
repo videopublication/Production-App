@@ -102,12 +102,22 @@ export default function CheckoutPage() {
         ]);
     };
 
-    // Filter users based on role for assignment dropdown
+    // Filter users based on role AND department for assignment dropdown
     const users = useMemo(() => {
-        if (user && ['MANAGER', 'ADMIN'].includes(user.role)) {
+        if (!user) return [];
+        if (!['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) return [];
+
+        // Super Admins: show all users (or filtered by selected department context)
+        if (user.role === 'SUPER_ADMIN') {
             return allUsers;
         }
-        return [];
+
+        // Regular Admins/Managers: only show users from their own department
+        if (user.departmentId) {
+            return allUsers.filter(u => u.departmentId === user.departmentId);
+        }
+
+        return allUsers;
     }, [user, allUsers]);
 
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -124,7 +134,7 @@ export default function CheckoutPage() {
             return;
         }
 
-        if (!['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
+        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
             router.replace('/');
         }
     }, [user, router, authLoading]);
@@ -184,14 +194,14 @@ export default function CheckoutPage() {
             try {
                 const parsed = JSON.parse(savedUsers);
                 // If user is Admin/Manager and the saved selection is just themselves, clear it (don't default select)
-                if (user && ['ADMIN', 'MANAGER'].includes(user.role) && parsed.length === 1 && parsed[0] === user.id) {
+                if (user && ['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role) && parsed.length === 1 && parsed[0] === user.id) {
                     setSelectedUserIds([]);
                     sessionStorage.removeItem('checkout-users');
                 } else {
                     setSelectedUserIds(parsed);
                 }
             } catch { }
-        } else if (user && !['ADMIN', 'MANAGER'].includes(user.role)) {
+        } else if (user && !['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role)) {
             // Only auto-select for Crew who can't change it
             setSelectedUserIds([user.id]);
         }
@@ -200,7 +210,7 @@ export default function CheckoutPage() {
     useEffect(() => {
         if (user && selectedUserIds.length === 0 && !sessionStorage.getItem('checkout-users')) {
             // Only auto-select for Crew who can't change it
-            if (!['ADMIN', 'MANAGER'].includes(user.role)) {
+            if (!['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role)) {
                 setSelectedUserIds([user.id]);
             }
         }
@@ -447,7 +457,8 @@ export default function CheckoutPage() {
                 additionalUsers: selectedUserIds.slice(1), // All other selected users
                 notes: notes.trim(),
                 project: project.trim(),
-                displayId: transactionIdRef.current // The readable TXN ID
+                displayId: transactionIdRef.current, // The readable TXN ID
+                departmentId: user?.departmentId
             });
 
             handleSuccess();
@@ -747,7 +758,7 @@ export default function CheckoutPage() {
                                         </div>
                                     )}
 
-                                    {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
+                                    {user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
                                         <MultiSelect
                                             label="Checkout For"
                                             value={selectedUserIds}

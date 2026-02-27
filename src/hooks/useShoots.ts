@@ -5,27 +5,47 @@ import { Shoot } from '@/types';
 // Keys for query caching
 export const SHOOT_KEYS = {
     all: ['shoots'] as const,
+    byDepartment: (deptId: string | null) => [...SHOOT_KEYS.all, 'department', deptId || 'all'] as const,
     detail: (id: string) => [...SHOOT_KEYS.all, id] as const,
 };
 
+import { useDepartment } from '@/lib/department-context';
+import { useAuth } from '@/lib/auth';
+
 // Hook to fetch all shoots
 export function useShoots() {
+    const { user } = useAuth();
+    const { department } = useDepartment();
+
+    // Regular users: ALWAYS use their own department
+    // Super Admins: use selected department from context (null = all)
+    const departmentId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
+        ? user.departmentId
+        : (department?.id || null);
+
     return useQuery({
-        queryKey: SHOOT_KEYS.all,
-        queryFn: () => storage.getShoots(),
-        // staleTime: 0, // REMOVED: Rely on global defaults (5 mins) and invalidation to prevent over-fetching on slow networks.
+        queryKey: SHOOT_KEYS.byDepartment(departmentId),
+        queryFn: () => storage.getShoots(departmentId),
+        enabled: !!user,
     });
 }
 
 // Hook to fetch a single shoot
 export function useShoot(id: string) {
+    const { user } = useAuth();
+    const { department } = useDepartment();
+
+    const departmentId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
+        ? user.departmentId
+        : (department?.id || null);
+
     return useQuery({
         queryKey: SHOOT_KEYS.detail(id),
         queryFn: async () => {
-            const shoots = await storage.getShoots();
+            const shoots = await storage.getShoots(departmentId);
             return shoots.find(s => s.id === id || s.shootNumber?.toString() === id);
         },
-        enabled: !!id, // Only run if ID is provided
+        enabled: !!id && !!user, // Only run if ID is provided
     });
 }
 

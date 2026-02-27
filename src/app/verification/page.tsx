@@ -6,6 +6,7 @@ import { storage } from '@/lib/storage';
 import { Equipment, User } from '@/types';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
+import { useDepartment } from '@/lib/department-context';
 
 type SortField = 'item' | 'project' | 'user' | 'date';
 type SortDirection = 'asc' | 'desc';
@@ -16,6 +17,12 @@ export default function VerificationPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
+    const { department } = useDepartment();
+
+    // Enforce department isolation: regular users see only their dept
+    const effectiveDeptId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
+        ? user.departmentId
+        : (department?.id || null);
     const [isLoading, setIsLoading] = useState(true); // Data loading state
     const [pendingItems, setPendingItems] = useState<Equipment[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -41,9 +48,9 @@ export default function VerificationPage() {
     const loadItems = React.useCallback(async () => {
         // Removed setIsLoading(true) to allow seamless updates
         try {
-            const items = await storage.getEquipment();
-            const txns = await storage.getTransactions();
-            const usersList = await storage.getUsers();
+            const items = await storage.getEquipment(effectiveDeptId);
+            const txns = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, effectiveDeptId);
+            const usersList = await storage.getUsers(effectiveDeptId);
 
             setPendingItems(items.filter(i => i.status === 'PENDING_VERIFICATION'));
             setTransactions(txns);
@@ -63,7 +70,7 @@ export default function VerificationPage() {
             return;
         }
 
-        if (!['MANAGER', 'ADMIN'].includes(user.role)) {
+        if (!['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
             router.replace('/');
             return;
         }
@@ -203,7 +210,7 @@ export default function VerificationPage() {
 
     const handleVerify = async (id: string, status: 'AVAILABLE' | 'DAMAGED' | 'MAINTENANCE') => {
         try {
-            const items = await storage.getEquipment();
+            const items = await storage.getEquipment(effectiveDeptId);
             const item = items.find(i => i.id === id);
 
             if (!item) {
@@ -219,7 +226,7 @@ export default function VerificationPage() {
             });
 
             // 2. Find and Update Transaction
-            const allTransactions = await storage.getTransactions();
+            const allTransactions = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, effectiveDeptId);
             const relatedTransaction = allTransactions.find(
                 t => t.status === 'OPEN' && t.items.includes(id)
             );

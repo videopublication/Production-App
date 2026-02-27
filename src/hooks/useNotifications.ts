@@ -11,7 +11,7 @@ export function useNotifications() {
         queryKey: ['notifications', user?.id],
         queryFn: async () => {
             if (!user) return [];
-            return storage.getNotifications(user.id);
+            return storage.getNotifications(user.id, user.departmentId);
         },
         enabled: !!user,
         staleTime: 10 * 1000, // 10 seconds

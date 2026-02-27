@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
 import { storage } from '@/lib/storage';
+import { useDepartment } from '@/lib/department-context';
 import { Notification as AppNotification } from '@/types';
 import { useNotifications } from '@/hooks/useNotifications';
 import useFcmToken from '@/hooks/useFcmToken';
@@ -16,6 +17,7 @@ export const Header = () => {
     const { user } = useAuth();
     const { isCollapsed } = useSidebar();
     const { notificationPermission } = useFcmToken();
+    const { department, allDepartments, switchDepartment } = useDepartment();
     const router = useRouter();
     const pathname = usePathname();
 
@@ -46,10 +48,10 @@ export const Header = () => {
             } pl-6 dark:bg-[#2c2c2e]/80 dark:border-[#3a3a3c]`}>
             {/* Page title area */}
             <div className="flex-1 flex items-center">
-                {pathname?.startsWith('/admin/shoots/') && pathname !== '/admin/shoots' ? (
+                {pathname?.startsWith('/shoots/') && pathname !== '/shoots' ? (
                     (() => {
                         const isEditPage = pathname.endsWith('/edit');
-                        const backLink = isEditPage ? pathname.replace('/edit', '') : '/admin/shoots';
+                        const backLink = isEditPage ? pathname.replace('/edit', '') : '/shoots';
                         const backText = isEditPage ? 'Back to Shoot' : 'Back to Shoots';
 
                         return (
@@ -75,7 +77,24 @@ export const Header = () => {
                 )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+                {/* Department Switcher for Super Admin */}
+                {user?.role === 'SUPER_ADMIN' && switchDepartment && (
+                    <div className="hidden md:flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+                        <span className="text-xs font-medium text-gray-500 px-2">View:</span>
+                        <select
+                            className="bg-transparent text-sm font-medium text-gray-900 dark:text-gray-100 outline-none cursor-pointer min-w-[140px]"
+                            value={department?.id || ''}
+                            onChange={(e) => switchDepartment(e.target.value || null)}
+                        >
+                            <option value="">Global Overview</option>
+                            {allDepartments.map(dept => (
+                                <option key={dept.id} value={dept.id}>{dept.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 <div className="relative">
                     <button
                         onClick={() => {

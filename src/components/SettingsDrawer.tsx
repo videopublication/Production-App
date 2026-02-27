@@ -1,6 +1,8 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { usePreferences } from '@/lib/preferences-context';
+import { useDepartment } from '@/lib/department-context';
+import { useAuth } from '@/lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SettingsDrawerProps {
@@ -14,6 +16,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
         accentColor, setAccentColor,
         density, setDensity,
     } = usePreferences();
+
+    const { user } = useAuth();
+    const { department, allDepartments, switchDepartment } = useDepartment();
 
     // Portal needs to know when valid DOM exists
     const [mounted, setMounted] = React.useState(false);
@@ -60,6 +65,28 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
 
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto p-5 space-y-8">
+
+                            {/* Department Context (Super Admin) - Mobile Friendly */}
+                            {user?.role === 'SUPER_ADMIN' && switchDepartment && (
+                                <section>
+                                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Context Scope</h3>
+                                    <div className="bg-gray-100 dark:bg-gray-800 p-2 rounded-lg">
+                                        <select
+                                            className="w-full bg-transparent text-sm font-medium text-gray-900 dark:text-gray-100 p-2 outline-none cursor-pointer"
+                                            value={department?.id || ''}
+                                            onChange={(e) => switchDepartment(e.target.value || null)}
+                                        >
+                                            <option value="">Full Organization (Global)</option>
+                                            {allDepartments.map(dept => (
+                                                <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 mt-2 px-1">
+                                        Changing this affects your dashboard and data views globally.
+                                    </p>
+                                </section>
+                            )}
 
                             {/* Theme Section */}
                             <section>

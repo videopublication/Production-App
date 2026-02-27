@@ -73,8 +73,8 @@ export async function createGoogleCalendarEvent(
     // Ideally, we save to DB first, get ID, then add to Calendar. But our current flow is flexible.
     // If ID is missing, we point to the main shoots list.
     const appUrl = shoot.id
-        ? `${window.location.origin}/admin/shoots/${shoot.id}`
-        : `${window.location.origin}/admin/shoots`;
+        ? `${window.location.origin}/shoots/${shoot.id}`
+        : `${window.location.origin}/shoots`;
     descriptionParts.push(`\n🔗 View Shoot Details:\n${appUrl}`);
 
     const event: CalendarEvent = {
@@ -123,8 +123,8 @@ export async function updateGoogleCalendarEvent(
 
     // App Link
     const appUrl = shoot.id
-        ? `${window.location.origin}/admin/shoots/${shoot.id}`
-        : `${window.location.origin}/admin/shoots`;
+        ? `${window.location.origin}/shoots/${shoot.id}`
+        : `${window.location.origin}/shoots`;
     descriptionParts.push(`\n🔗 View Shoot Details:\n${appUrl}`);
 
     const event: CalendarEvent = {

@@ -239,7 +239,7 @@ export default function CalendarPage() {
                     </div>
 
                     {/* Filter */}
-                    {user?.role === 'ADMIN' && (
+                    {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                         <div className="relative z-20" ref={filterRef}>
                             <button
                                 onClick={() => {
@@ -587,8 +587,8 @@ export default function CalendarPage() {
                                         </p>
                                     )}
                                 </div>
-                                {selectedDate && user?.role === 'ADMIN' && (
-                                    <Link href={`/admin/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
+                                {selectedDate && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                    <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
                                         <button
                                             className="p-2 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                                             title="Schedule another shoot"
@@ -612,8 +612,8 @@ export default function CalendarPage() {
                                             <CalendarIcon size={24} className="text-gray-400 dark:text-gray-500" />
                                         </div>
                                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No shoots on this day</p>
-                                        {user?.role === 'ADMIN' && (
-                                            <Link href={`/admin/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`} className="mt-3 inline-block">
+                                        {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                            <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`} className="mt-3 inline-block">
                                                 <Button size="sm" variant="secondary">Schedule Shoot</Button>
                                             </Link>
                                         )}
@@ -793,8 +793,8 @@ export default function CalendarPage() {
                                                             )}
 
                                                             {/* View Details Button - Admin Only */}
-                                                            {user?.role === 'ADMIN' && (
-                                                                <Link href={`/admin/shoots/${shoot.id}`} className="block mt-4">
+                                                            {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                                                <Link href={`/shoots/${shoot.id}`} className="block mt-4">
                                                                     <Button size="sm" className="w-full">
                                                                         View Full Details
                                                                     </Button>
