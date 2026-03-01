@@ -63,7 +63,7 @@ export const MobileHeader = () => {
                 {/* Content */}
                 <div className="relative flex items-center justify-between h-11 px-4 pt-safe-top">
                     {/* Left Action / Spacer */}
-                    <div className="w-[72px] flex items-center">
+                    <div className="flex-none w-[110px] flex items-center justify-start">
                         {(pathname === '/profile' ||
                             (pathname.startsWith('/shoots/') && pathname !== '/shoots') ||
                             (pathname.startsWith('/transactions/') && pathname !== '/transactions')
@@ -79,11 +79,11 @@ export const MobileHeader = () => {
                     </div>
 
                     {/* Centered title & Switcher */}
-                    <div className="absolute left-[50%] transform -translate-x-1/2 flex flex-col items-center justify-center max-w-[45%]">
+                    <div className="flex flex-col items-center justify-center flex-1 min-w-0 px-1 overflow-hidden">
                         {user?.role === 'SUPER_ADMIN' && switchDepartment ? (
-                            <div className="relative flex items-center max-w-full">
+                            <div className="w-full flex justify-center items-center">
                                 <select
-                                    className="bg-transparent text-[15px] font-semibold text-[#1d1d1f] dark:text-white tracking-[-0.3px] truncate text-center appearance-none outline-none cursor-pointer pr-4"
+                                    className="bg-transparent text-[15px] font-semibold text-[#1d1d1f] dark:text-white tracking-[-0.3px] truncate text-center appearance-none outline-none cursor-pointer pr-4 max-w-full"
                                     style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2210%22%20height%3D%2210%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M2%203l3%203%203-3%22%20stroke%3D%22%2386868b%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right center' }}
                                     value={department?.id || ''}
                                     onChange={(e) => switchDepartment(e.target.value || null)}
@@ -103,14 +103,14 @@ export const MobileHeader = () => {
                         )}
                         {/* Subtitle to show current view context clearly */}
                         {user?.role === 'SUPER_ADMIN' && (
-                            <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider leading-none mt-0.5">
+                            <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider leading-none mt-0.5 truncate max-w-full">
                                 {department ? 'Scoped View' : 'Global View'}
                             </span>
                         )}
                     </div>
 
                     {/* Right icons */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex-none w-[110px] flex items-center justify-end gap-1">
                         <Link href="/notifications" className="relative w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-gray-800 hover:text-[#1d1d1f] dark:hover:text-white transition-colors active:scale-95">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
