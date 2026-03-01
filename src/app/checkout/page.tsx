@@ -141,16 +141,13 @@ export default function CheckoutPage() {
         }
     }, [user, router, authLoading]);
 
-    // Filter to active and upcoming shoots only
+    // Keep all active shoots in the dropdown (don't strictly hide if they just ended)
     const availableShoots = useMemo(() => {
-        const now = new Date();
         return shoots.filter(shoot => {
             // Exclude cancelled shoots
             if (shoot.status === 'CANCELLED') return false;
-            // Include shoots that haven't ended yet
-            if (shoot.endTime && new Date(shoot.endTime) < now) return false;
             return true;
-        }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        }).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
     }, [shoots]);
 
     // Ensure selected shoot is always in options even if hidden from main list
