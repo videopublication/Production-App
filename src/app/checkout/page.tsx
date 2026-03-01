@@ -18,16 +18,18 @@ import { generateTransactionId, generateUUID } from '@/lib/id';
 import { useInventory } from '@/hooks/useInventory';
 import { useShoots } from '@/hooks/useShoots';
 import { useCheckOut } from '@/hooks/useTransactions';
-
 import { useAssignments } from '@/hooks/useAssignments';
+import { useDepartment } from '@/lib/department-context';
 
 export default function CheckoutPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
+    const { department } = useDepartment();
     const { showToast } = useToast();
     const confirm = useConfirm();
 
     const [cart, setCart] = useState<Equipment[]>([]);
+    const cartRef = React.useRef<Equipment[]>([]);
     const [scanInput, setScanInput] = useState('');
     const [project, setProject] = useState('');
     const [notes, setNotes] = useState('');
@@ -109,7 +111,7 @@ export default function CheckoutPage() {
 
         // Super Admins: show all users (or filtered by selected department context)
         if (user.role === 'SUPER_ADMIN') {
-            return allUsers;
+            return department?.id ? allUsers.filter(u => u.departmentId === department.id) : allUsers;
         }
 
         // Regular Admins/Managers: only show users from their own department
@@ -118,7 +120,7 @@ export default function CheckoutPage() {
         }
 
         return allUsers;
-    }, [user, allUsers]);
+    }, [user, allUsers, department?.id]);
 
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
@@ -177,7 +179,11 @@ export default function CheckoutPage() {
     useEffect(() => {
         const savedCart = sessionStorage.getItem('checkout-cart');
         if (savedCart) {
-            try { setCart(JSON.parse(savedCart)); } catch { sessionStorage.removeItem('checkout-cart'); }
+            try {
+                const parsed = JSON.parse(savedCart);
+                setCart(parsed);
+                cartRef.current = parsed;
+            } catch { sessionStorage.removeItem('checkout-cart'); }
         }
 
         const savedProject = sessionStorage.getItem('checkout-project');
@@ -329,14 +335,17 @@ export default function CheckoutPage() {
             return;
         }
 
-        if (cart.find(i => i.id === item.id)) {
+        if (cartRef.current.find(i => i.id === item.id)) {
             const serialInfo = item.serialNumber ? ` (S/N: ${item.serialNumber})` : '';
             showToast(`Item "${item.name}"${serialInfo} is already in cart`, 'info');
             playErrorSound();
             return;
         }
 
-        setCart(prev => [...prev, item]);
+        const newCart = [...cartRef.current, item];
+        cartRef.current = newCart;
+        setCart(newCart);
+
         showToast(`Added "${item.name}"`, 'success');
         playSuccessSound();
 
@@ -388,7 +397,9 @@ export default function CheckoutPage() {
     };
 
     const removeFromCart = (id: string) => {
-        setCart(cart.filter(i => i.id !== id));
+        const newCart = cartRef.current.filter(i => i.id !== id);
+        cartRef.current = newCart;
+        setCart(newCart);
     };
 
     const handleConfirmClear = async () => {
@@ -400,6 +411,7 @@ export default function CheckoutPage() {
         });
 
         if (isConfirmed) {
+            cartRef.current = [];
             setCart([]);
             sessionStorage.removeItem('checkout-cart');
             showToast('Cart cleared', 'info');
@@ -412,6 +424,7 @@ export default function CheckoutPage() {
     const transactionIdRef = React.useRef<string | null>(null);
 
     const handleSuccess = () => {
+        cartRef.current = [];
         setCart([]);
         setSelectedShootId('');
         sessionStorage.removeItem('checkout-cart');
@@ -449,6 +462,7 @@ export default function CheckoutPage() {
         setIsLoading(true);
 
         try {
+            const filterDeptId = user?.role === 'SUPER_ADMIN' ? department?.id : user?.departmentId;
             await checkout({
                 id: transactionIdRef.current, // Pass the idempotent ID
                 items: cart,
@@ -458,7 +472,7 @@ export default function CheckoutPage() {
                 notes: notes.trim(),
                 project: project.trim(),
                 displayId: transactionIdRef.current, // The readable TXN ID
-                departmentId: user?.departmentId
+                departmentId: filterDeptId
             });
 
             handleSuccess();
@@ -694,69 +708,67 @@ export default function CheckoutPage() {
 
                                 <div className="space-y-5">
                                     {/* Shoot Selector - Premium Card (Moved to Top) */}
-                                    {(availableShoots.length > 0 || selectedShootId) && (
-                                        <div className="relative bg-muted/40 rounded-2xl p-4 border border-border shadow-sm">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                                    <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                                                    </svg>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[14px] font-semibold text-foreground">Link to Shoot</p>
-                                                </div>
+                                    <div className="relative bg-muted/40 rounded-2xl p-4 border border-border shadow-sm">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                                                </svg>
                                             </div>
-
-                                            <Select
-                                                value={selectedShootId}
-                                                onChange={(val: string) => {
-                                                    setSelectedShootId(val);
-                                                    if (val) {
-                                                        const shoot = shoots.find(s => s.id === val);
-                                                        if (shoot) {
-                                                            setProject(shoot.title);
-                                                        }
-                                                    } else {
-                                                        setProject('');
-                                                        if (user) setSelectedUserIds([user.id]);
-                                                        else setSelectedUserIds([]);
-                                                    }
-                                                }}
-                                                options={activeShootOptions}
-                                                placeholder="Select a shoot..."
-                                                className="w-full"
-                                            />
-                                            {selectedShootId && (
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedShootId('');
-                                                        setProject('');
-                                                        if (user) setSelectedUserIds([user.id]);
-                                                        else setSelectedUserIds([]);
-                                                    }}
-                                                    className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
-                                                    title="Clear selection"
-                                                >
-                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                        <path d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
-                                            )}
-
-                                            {selectedShootId && (
-                                                <div className="flex items-center gap-2 mt-2.5 px-1">
-                                                    <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                                                        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                        </svg>
-                                                    </div>
-                                                    <p className="text-xs font-medium text-green-700 dark:text-green-400">
-                                                        Values linked to shoot
-                                                    </p>
-                                                </div>
-                                            )}
+                                            <div>
+                                                <p className="text-[14px] font-semibold text-foreground">Link to Shoot</p>
+                                            </div>
                                         </div>
-                                    )}
+
+                                        <Select
+                                            value={selectedShootId}
+                                            onChange={(val: string) => {
+                                                setSelectedShootId(val);
+                                                if (val) {
+                                                    const shoot = shoots.find(s => s.id === val);
+                                                    if (shoot) {
+                                                        setProject(shoot.title);
+                                                    }
+                                                } else {
+                                                    setProject('');
+                                                    if (user) setSelectedUserIds([user.id]);
+                                                    else setSelectedUserIds([]);
+                                                }
+                                            }}
+                                            options={activeShootOptions}
+                                            placeholder="Select a shoot..."
+                                            className="w-full"
+                                        />
+                                        {selectedShootId && (
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedShootId('');
+                                                    setProject('');
+                                                    if (user) setSelectedUserIds([user.id]);
+                                                    else setSelectedUserIds([]);
+                                                }}
+                                                className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
+                                                title="Clear selection"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                    <path d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        )}
+
+                                        {selectedShootId && (
+                                            <div className="flex items-center gap-2 mt-2.5 px-1">
+                                                <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                                                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                                <p className="text-xs font-medium text-green-700 dark:text-green-400">
+                                                    Values linked to shoot
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
                                         <MultiSelect
@@ -824,58 +836,56 @@ export default function CheckoutPage() {
                         <div className="bg-card rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-border">
                             <div className="p-4">
                                 {/* Shoot Selector for Mobile - Premium Card */}
-                                {(availableShoots.length > 0 || selectedShootId) && (
-                                    <div className="relative bg-muted/40 rounded-2xl p-4 border border-border mb-4">
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <p className="text-[14px] font-semibold text-foreground">Link to Shoot</p>
-                                            </div>
+                                <div className="relative bg-muted/40 rounded-2xl p-4 border border-border mb-4">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                            <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                                            </svg>
                                         </div>
-
-                                        <Select
-                                            value={selectedShootId}
-                                            onChange={(val: string) => {
-                                                setSelectedShootId(val);
-                                                if (val) {
-                                                    const shoot = shoots.find(s => s.id === val);
-                                                    if (shoot) {
-                                                        setProject(shoot.title);
-                                                    }
-                                                } else {
-                                                    setProject('');
-                                                    if (user) setSelectedUserIds([user.id]);
-                                                    else setSelectedUserIds([]);
-                                                }
-                                            }}
-                                            options={activeShootOptions}
-                                            placeholder="Select a shoot..."
-                                            className="w-full"
-                                            onOpenChange={setIsDropdownOpen}
-                                        />
-
-                                        {selectedShootId && (
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedShootId('');
-                                                    setProject('');
-                                                    if (user) setSelectedUserIds([user.id]);
-                                                    else setSelectedUserIds([]);
-                                                }}
-                                                className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
-                                                title="Clear selection"
-                                            >
-                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                    <path d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        )}
+                                        <div>
+                                            <p className="text-[14px] font-semibold text-foreground">Link to Shoot</p>
+                                        </div>
                                     </div>
-                                )}
+
+                                    <Select
+                                        value={selectedShootId}
+                                        onChange={(val: string) => {
+                                            setSelectedShootId(val);
+                                            if (val) {
+                                                const shoot = shoots.find(s => s.id === val);
+                                                if (shoot) {
+                                                    setProject(shoot.title);
+                                                }
+                                            } else {
+                                                setProject('');
+                                                if (user) setSelectedUserIds([user.id]);
+                                                else setSelectedUserIds([]);
+                                            }
+                                        }}
+                                        options={activeShootOptions}
+                                        placeholder="Select a shoot..."
+                                        className="w-full"
+                                        onOpenChange={setIsDropdownOpen}
+                                    />
+
+                                    {selectedShootId && (
+                                        <button
+                                            onClick={() => {
+                                                setSelectedShootId('');
+                                                setProject('');
+                                                if (user) setSelectedUserIds([user.id]);
+                                                else setSelectedUserIds([]);
+                                            }}
+                                            className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
+                                            title="Clear selection"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                <path d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
 
                                 {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
                                     <div className="mb-4">

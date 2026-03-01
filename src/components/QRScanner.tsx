@@ -12,6 +12,8 @@ interface QRScannerProps {
 }
 
 export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuous = true }) => {
+    const latestOnScan = useRef(onScan);
+    useEffect(() => { latestOnScan.current = onScan; }, [onScan]);
     const [isScanning, setIsScanning] = useState(false);
     const [error, setError] = useState<string>('');
     const [torchOn, setTorchOn] = useState(false);
@@ -79,7 +81,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
                     }
 
                     lastScannedRef.current = { text: decodedText, time: now };
-                    onScan(decodedText);
+                    latestOnScan.current(decodedText);
 
                     if (!continuous) {
                         stopScanning();
@@ -221,6 +223,8 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
     onClose,
     autoStart = true
 }) => {
+    const latestOnScan = useRef(onScan);
+    useEffect(() => { latestOnScan.current = onScan; }, [onScan]);
     const [isScanning, setIsScanning] = useState(false);
     const [error, setError] = useState<string>('');
     const [scanCount, setScanCount] = useState(0);
@@ -291,7 +295,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
 
                     lastScannedRef.current = { text: decodedText, time: now };
                     setScanCount(prev => prev + 1);
-                    onScan(decodedText);
+                    latestOnScan.current(decodedText);
 
                     // Brief pause then refresh camera for fresh data
                     try {
