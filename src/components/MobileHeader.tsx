@@ -28,7 +28,7 @@ const pageNames: Record<string, string> = {
 
 export const MobileHeader = () => {
     const { user } = useAuth();
-    const { department } = useDepartment();
+    const { department, allDepartments, switchDepartment } = useDepartment();
     const pathname = usePathname();
     const router = useRouter();
     const { notificationPermission } = useFcmToken();
@@ -78,10 +78,36 @@ export const MobileHeader = () => {
                             )}
                     </div>
 
-                    {/* Centered title */}
-                    <h1 className="text-[15px] font-semibold text-[#1d1d1f] dark:text-white tracking-[-0.3px] absolute left-[45%] transform -translate-x-1/2 max-w-[40%] truncate text-center">
-                        {getPageName()}
-                    </h1>
+                    {/* Centered title & Switcher */}
+                    <div className="absolute left-[50%] transform -translate-x-1/2 flex flex-col items-center justify-center max-w-[45%]">
+                        {user?.role === 'SUPER_ADMIN' && switchDepartment ? (
+                            <div className="relative flex items-center max-w-full">
+                                <select
+                                    className="bg-transparent text-[15px] font-semibold text-[#1d1d1f] dark:text-white tracking-[-0.3px] truncate text-center appearance-none outline-none cursor-pointer pr-4"
+                                    style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2210%22%20height%3D%2210%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M2%203l3%203%203-3%22%20stroke%3D%22%2386868b%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right center' }}
+                                    value={department?.id || ''}
+                                    onChange={(e) => switchDepartment(e.target.value || null)}
+                                >
+                                    <option value="" className="text-black bg-white dark:bg-[#1c1c1e] dark:text-white text-[14px]">Global: {getPageName()}</option>
+                                    {allDepartments.map(dept => (
+                                        <option key={dept.id} value={dept.id} className="text-black bg-white dark:bg-[#1c1c1e] dark:text-white text-[14px]">
+                                            {dept.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        ) : (
+                            <h1 className="text-[15px] font-semibold text-[#1d1d1f] dark:text-white tracking-[-0.3px] truncate text-center w-full">
+                                {getPageName()}
+                            </h1>
+                        )}
+                        {/* Subtitle to show current view context clearly */}
+                        {user?.role === 'SUPER_ADMIN' && (
+                            <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider leading-none mt-0.5">
+                                {department ? 'Scoped View' : 'Global View'}
+                            </span>
+                        )}
+                    </div>
 
                     {/* Right icons */}
                     <div className="flex items-center gap-1">
