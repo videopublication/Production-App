@@ -1,0 +1,45 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { storage } from '@/lib/storage';
+import { Leave } from '@/types';
+import { useAuth } from '@/lib/auth';
+
+export function useLeaves() {
+    const { user } = useAuth();
+    const queryClient = useQueryClient();
+
+    const leavesQuery = useQuery({
+        queryKey: ['leaves', user?.departmentId],
+        queryFn: () => storage.getLeaves(user?.departmentId),
+        enabled: !!user
+    });
+
+    const addLeaveMutation = useMutation({
+        mutationFn: (leave: Partial<Leave>) => storage.addLeave(leave),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['leaves', user?.departmentId] });
+        }
+    });
+
+    const updateLeaveMutation = useMutation({
+        mutationFn: ({ id, updates }: { id: string, updates: Partial<Leave> }) => storage.updateLeave(id, updates),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['leaves', user?.departmentId] });
+        }
+    });
+
+    const deleteLeaveMutation = useMutation({
+        mutationFn: (id: string) => storage.deleteLeave(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['leaves', user?.departmentId] });
+        }
+    });
+
+    return {
+        leaves: leavesQuery.data || [],
+        isLoading: leavesQuery.isLoading,
+        error: leavesQuery.error,
+        addLeave: addLeaveMutation.mutateAsync,
+        updateLeave: updateLeaveMutation.mutateAsync,
+        deleteLeave: deleteLeaveMutation.mutateAsync
+    };
+}

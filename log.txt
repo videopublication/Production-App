@@ -1,20 +1,43 @@
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-Unchecked runtime.lastError: The message port closed before a response was received.
-login:1 Refused to execute script from 'https://production-app-three.vercel.app/login' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled.
-layout-e8811fb777c512d8.js:7 Cache restored from persistence (IndexedDB)
-login:1 [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) <input class=​"flex h-12 w-full rounded-2xl border border-input bg-secondary px-4 py-2 text-[15px]​ text-foreground placeholder:​text-muted-foreground focus:​outline-none focus:​ring-2 focus:​ring-primary focus:​border-transparent disabled:​cursor-not-allowed disabled:​opacity-50 transition-all duration-200  " required type=​"password" value>​flex
-login:1 Uncaught (in promise) SecurityError: Failed to register a ServiceWorker for scope ('https://production-app-three.vercel.app/') with script ('https://production-app-three.vercel.app/sw.js'): The script resource is behind a redirect, which is disallowed.
+## Error Type
+Console FirebaseError
+
+## Error Message
+Installations: Missing App configuration value: "projectId" (installations/missing-app-config-values).
+
+
+    at initFirebase (src/lib/firebase.ts:28:37)
+    at async useFcmToken.useEffect.setupToken (src/hooks/useFcmToken.ts:55:39)
+
+## Code Frame
+  26 |         } else {
+  27 |             firebaseApp = getApp();
+> 28 |             messaging = getMessaging(firebaseApp);
+     |                                     ^
+  29 |         }
+  30 |     }
+  31 |     return { firebaseApp, messaging };
+
+Next.js version: 16.1.1 (Turbopack)
+
+
+
+## Error Type
+Console FirebaseError
+
+## Error Message
+Installations: Missing App configuration value: "projectId" (installations/missing-app-config-values).
+
+
+    at initFirebase (src/lib/firebase.ts:22:41)
+    at async useFcmToken.useEffect.setupListener (src/hooks/useFcmToken.ts:104:35)
+
+## Code Frame
+  20 |             try {
+  21 |                 firebaseApp = initializeApp(firebaseConfig);
+> 22 |                 messaging = getMessaging(firebaseApp);
+     |                                         ^
+  23 |             } catch (e) {
+  24 |                 console.error("Firebase init error", e);
+  25 |             }
+
+Next.js version: 16.1.1 (Turbopack)

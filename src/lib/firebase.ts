@@ -16,6 +16,11 @@ let messaging: Messaging | undefined = undefined;
 
 export const initFirebase = async () => {
     if (typeof window !== 'undefined' && await isSupported()) {
+        if (!firebaseConfig.projectId) {
+            console.warn("Firebase projectId is missing. Skipping Firebase initialization.");
+            return { firebaseApp, messaging };
+        }
+        
         if (!getApps().length) {
             try {
                 firebaseApp = initializeApp(firebaseConfig);

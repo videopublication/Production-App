@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { User, Equipment, Transaction, Log, Shoot, Assignment, Department } from '@/types';
+import { User, Equipment, Transaction, Log, Shoot, Assignment, Department, Leave } from '@/types';
 
 class StorageService {
     // Departments
@@ -798,6 +798,79 @@ class StorageService {
             .eq('user_id', userId);
 
         if (error) console.error('Error deleting all user sessions:', error);
+    }
+
+    // Leaves
+    async getLeaves(departmentId?: string | null): Promise<Leave[]> {
+        let query = supabase.from('leaves').select('*').order('created_at', { ascending: false });
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error fetching leaves:', error);
+            return [];
+        }
+
+        return data.map((l: any) => ({
+            id: l.id,
+            userId: l.user_id,
+            departmentId: l.department_id,
+            startDate: l.start_date,
+            endDate: l.end_date,
+            reason: l.reason,
+            status: l.status,
+            approverId: l.approver_id,
+            createdAt: l.created_at,
+            updatedAt: l.updated_at
+        })) as Leave[];
+    }
+
+    async addLeave(leave: Partial<Leave>): Promise<void> {
+        const dbLeave = {
+            id: leave.id,
+            user_id: leave.userId,
+            department_id: leave.departmentId,
+            start_date: leave.startDate,
+            end_date: leave.endDate,
+            reason: leave.reason,
+            status: leave.status || 'PENDING',
+            approver_id: leave.approverId || null
+        };
+
+        const { error } = await supabase.from('leaves').insert(dbLeave);
+        if (error) {
+            console.error('Error adding leave:', error);
+            throw error;
+        }
+    }
+
+    async updateLeave(id: string, updates: Partial<Leave>): Promise<void> {
+        const dbUpdates: any = {};
+        if (updates.status !== undefined) dbUpdates.status = updates.status;
+        if (updates.approverId !== undefined) dbUpdates.approver_id = updates.approverId;
+        if (updates.startDate !== undefined) dbUpdates.start_date = updates.startDate;
+        if (updates.endDate !== undefined) dbUpdates.end_date = updates.endDate;
+        if (updates.reason !== undefined) dbUpdates.reason = updates.reason;
+        
+        dbUpdates.updated_at = new Date().toISOString();
+
+        const { error } = await supabase.from('leaves').update(dbUpdates).eq('id', id);
+        if (error) {
+            console.error('Error updating leave:', error);
+            throw error;
+        }
+    }
+
+    async deleteLeave(id: string): Promise<void> {
+        const { error } = await supabase.from('leaves').delete().eq('id', id);
+        if (error) {
+            console.error('Error deleting leave:', error);
+            throw error;
+        }
     }
 }
 

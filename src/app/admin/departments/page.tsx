@@ -16,6 +16,7 @@ const AVAILABLE_FEATURES = [
     { id: 'shoots', label: 'Shoot Management', description: 'Plan and manage shoots with crew assignments' },
     { id: 'calendar', label: 'Calendar', description: 'Visual calendar view of shoots and schedules' },
     { id: 'crew_management', label: 'User & Crew Management', description: 'Manage users, roles and permissions' },
+    { id: 'leaves', label: 'Leaves Management', description: 'Apply for leaves and manage approvals' },
 ];
 
 export default function DepartmentManagementPage() {

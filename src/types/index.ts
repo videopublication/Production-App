@@ -138,3 +138,16 @@ export interface Assignment {
     status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
     departmentId?: string;
 }
+
+export interface Leave {
+    id: string;
+    userId: string;
+    departmentId?: string;
+    startDate: string;
+    endDate: string;
+    reason: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    approverId?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}

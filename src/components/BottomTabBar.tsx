@@ -121,6 +121,22 @@ export const BottomTabBar = () => {
             roles: ['CREW', 'MANAGER', 'ADMIN'],
             feature: 'calendar',
         },
+        {
+            name: 'Leaves',
+            path: '/leaves',
+            icon: (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+            ),
+            activeIcon: (
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path fillRule="evenodd" d="M8 5a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-3v1a2 2 0 01-2 2H9a2 2 0 01-2-2V5H8zm3 0a1 1 0 011-1h2a1 1 0 011 1v1a1 1 0 01-1 1h-2a1 1 0 01-1-1V5z" clipRule="evenodd" />
+                </svg>
+            ),
+            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+            feature: 'leaves',
+        },
     ];
 
     // Filter tabs by role AND feature gating (matches Sidebar logic)
@@ -135,7 +151,7 @@ export const BottomTabBar = () => {
             <div className="absolute inset-0 bg-gray-200 dark:bg-[#2c2c2e] backdrop-blur-xl backdrop-saturate-150 border-t border-gray-300 dark:border-[#3a3a3c]" />
 
             {/* Tab container */}
-            <div className="relative flex items-center justify-around px-2 pb-safe-bottom pt-2">
+            <div className={`relative flex items-center px-2 pb-safe-bottom pt-2 overflow-x-auto custom-scrollbar ${visibleTabs.length > 5 ? 'justify-start gap-1 snap-x snap-mandatory' : 'justify-around'}`}>
                 {visibleTabs.map((tab) => {
                     const active = isActive(tab.path);
                     return (
@@ -143,7 +159,7 @@ export const BottomTabBar = () => {
                             key={tab.path}
                             href={tab.path}
                             replace
-                            className={`flex flex-col items-center justify-center min-w-[64px] py-1 px-3 transition-all duration-200 ${active ? 'text-primary' : 'text-gray-500 dark:text-zinc-400'
+                            className={`flex flex-col items-center justify-center min-w-[72px] shrink-0 py-1 px-2 transition-all duration-200 ${visibleTabs.length > 5 ? 'snap-center' : ''} ${active ? 'text-primary' : 'text-gray-500 dark:text-zinc-400'
                                 }`}
                         >
                             <div className={`relative transition-transform duration-200 ${active ? 'scale-110' : 'scale-100'}`}>
@@ -152,7 +168,7 @@ export const BottomTabBar = () => {
                                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[var(--primary)] rounded-full" />
                                 )}
                             </div>
-                            <span className={`text-[10px] mt-1 font-medium ${active ? 'font-semibold' : ''}`}>
+                            <span className={`text-[10px] mt-1 font-medium whitespace-nowrap ${active ? 'font-semibold' : ''}`}>
                                 {tab.name}
                             </span>
                         </Link>
