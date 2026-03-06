@@ -8,6 +8,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { useAuth } from '@/lib/auth';
+import { useDepartment } from '@/lib/department-context';
 import { Badge } from '@/components/Badge';
 import { PullToRefresh } from '@/components/PullToRefresh';
 
@@ -22,6 +23,8 @@ export default function AdminLogsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [filterAction, setFilterAction] = useState<string>('ALL');
+    const { department } = useDepartment();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -36,7 +39,7 @@ export default function AdminLogsPage() {
         setLogs([]);
         setHasMore(true);
         loadData(1, true);
-    }, [debouncedSearch]);
+    }, [debouncedSearch, activeDepartmentId]);
 
     useEffect(() => {
         if (!user) return;
@@ -44,15 +47,15 @@ export default function AdminLogsPage() {
             router.push('/dashboard');
             return;
         }
-        storage.getUsers(user.departmentId).then(setUsers);
+        storage.getUsers(activeDepartmentId || undefined).then(setUsers);
         // Initial load is handled by the search effect above
-    }, [user, router]);
+    }, [user, router, activeDepartmentId]);
 
     const loadData = async (pageNum: number = 1, isReset: boolean = false) => {
         setLoading(true);
         try {
             const limit = 20;
-            const newLogs = await storage.getLogs(pageNum, limit, debouncedSearch, user?.departmentId);
+            const newLogs = await storage.getLogs(pageNum, limit, debouncedSearch, activeDepartmentId || undefined);
 
             if (newLogs.length < limit) {
                 setHasMore(false);

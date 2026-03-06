@@ -121,6 +121,8 @@ export function useCheckOut() {
 export function useCheckIn() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
+    const { department } = useDepartment();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     return useMutation({
         mutationFn: async ({
@@ -137,7 +139,7 @@ export function useCheckIn() {
             condition?: Equipment['condition']
         }) => {
 
-            const allTransactions = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, user?.departmentId);
+            const allTransactions = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, activeDepartmentId);
             const timestamp = new Date().toISOString();
 
             for (const item of items) {

@@ -12,6 +12,7 @@ import { useEquipment, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
+import { useDepartment } from '@/lib/department-context';
 
 export default function ReturnsPage() {
     const router = useRouter();
@@ -23,6 +24,8 @@ export default function ReturnsPage() {
 
     const { data: allTransactions = [] } = useTransactions();
     const { data: allAssignments = [] } = useAssignments();
+    const { department } = useDepartment();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     // Derive checked out items from transactions where the user is involved
     const checkedOutItems = React.useMemo(() => {
@@ -128,7 +131,7 @@ export default function ReturnsPage() {
 
             // Send Push Notification to Managers
             try {
-                const allUsers = await storage.getUsers(user?.departmentId);
+                const allUsers = await storage.getUsers(activeDepartmentId);
                 const managers = allUsers.filter(u =>
                     ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role) && u.fcmToken
                 );
@@ -157,7 +160,7 @@ export default function ReturnsPage() {
                             title: 'Items Returned',
                             message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
                             link: '/verification',
-                            departmentId: user?.departmentId
+                            departmentId: activeDepartmentId
                         })
                     );
 

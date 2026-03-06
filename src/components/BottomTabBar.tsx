@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
@@ -15,10 +15,14 @@ interface TabItem {
     feature?: string; // optional feature gate — hides tab if dept doesn't have this feature
 }
 
+const MAX_VISIBLE_TABS = 5;
+
 export const BottomTabBar = () => {
     const pathname = usePathname();
     const { user } = useAuth();
     const { hasFeature } = useDepartment();
+    const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    const moreMenuRef = useRef<HTMLDivElement>(null);
 
     if (!user) return null;
 
@@ -140,26 +144,101 @@ export const BottomTabBar = () => {
     ];
 
     // Filter tabs by role AND feature gating (matches Sidebar logic)
-    const visibleTabs = tabItems.filter(tab =>
+    const allVisibleTabs = tabItems.filter(tab =>
         tab.roles.includes(user.role) &&
         (!tab.feature || hasFeature(tab.feature))
     );
 
+    // If more than MAX_VISIBLE_TABS, show first (MAX_VISIBLE_TABS - 1) + "More" button
+    const needsMore = allVisibleTabs.length > MAX_VISIBLE_TABS;
+    const primaryTabs = needsMore ? allVisibleTabs.slice(0, MAX_VISIBLE_TABS - 1) : allVisibleTabs;
+    const overflowTabs = needsMore ? allVisibleTabs.slice(MAX_VISIBLE_TABS - 1) : [];
+
+    // Check if any overflow tab is currently active
+    const isOverflowActive = overflowTabs.some(tab => isActive(tab.path));
+
+    // Close more menu when clicking outside
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+            if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+                setMoreMenuOpen(false);
+            }
+        };
+        if (moreMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('touchstart', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+        };
+    }, [moreMenuOpen]);
+
+    // Close more menu when path changes (user navigated)
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useEffect(() => {
+        setMoreMenuOpen(false);
+    }, [pathname]);
+
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-[100] md:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-[100] md:hidden pb-safe-bottom">
             {/* Glassmorphic background */}
             <div className="absolute inset-0 bg-gray-200 dark:bg-[#2c2c2e] backdrop-blur-xl backdrop-saturate-150 border-t border-gray-300 dark:border-[#3a3a3c]" />
 
+            {/* More menu popup */}
+            {moreMenuOpen && overflowTabs.length > 0 && (
+                <>
+                    {/* Backdrop */}
+                    <div
+                        className="fixed inset-0 bg-black/30 z-[99] animate-in fade-in duration-150"
+                        onClick={() => setMoreMenuOpen(false)}
+                    />
+                    {/* Menu */}
+                    <div
+                        ref={moreMenuRef}
+                        className="absolute bottom-full right-2 mb-2 z-[100] bg-white dark:bg-[#2c2c2e] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[180px] animate-in slide-in-from-bottom-4 fade-in duration-200"
+                    >
+                        {overflowTabs.map((tab) => {
+                            const active = isActive(tab.path);
+                            return (
+                                <Link
+                                    key={tab.path}
+                                    href={tab.path}
+                                    replace
+                                    className={`flex items-center gap-3 px-4 py-3.5 transition-colors ${
+                                        active
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700'
+                                    }`}
+                                    onClick={() => setMoreMenuOpen(false)}
+                                >
+                                    <div className="w-6 h-6 shrink-0">
+                                        {active ? tab.activeIcon : tab.icon}
+                                    </div>
+                                    <span className={`text-sm ${active ? 'font-semibold' : 'font-medium'}`}>
+                                        {tab.name}
+                                    </span>
+                                    {active && (
+                                        <div className="ml-auto w-2 h-2 bg-primary rounded-full" />
+                                    )}
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </>
+            )}
+
             {/* Tab container */}
-            <div className={`relative flex items-center px-2 pb-safe-bottom pt-2 overflow-x-auto custom-scrollbar ${visibleTabs.length > 5 ? 'justify-start gap-1 snap-x snap-mandatory' : 'justify-around'}`}>
-                {visibleTabs.map((tab) => {
+            <div className="relative flex items-center justify-around px-2 pb-3 pt-2">
+                {primaryTabs.map((tab) => {
                     const active = isActive(tab.path);
                     return (
                         <Link
                             key={tab.path}
                             href={tab.path}
                             replace
-                            className={`flex flex-col items-center justify-center min-w-[72px] shrink-0 py-1 px-2 transition-all duration-200 ${visibleTabs.length > 5 ? 'snap-center' : ''} ${active ? 'text-primary' : 'text-gray-500 dark:text-zinc-400'
+                            className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 transition-all duration-200 select-none ${active ? 'text-primary' : 'text-gray-500 dark:text-zinc-400'
                                 }`}
                         >
                             <div className={`relative transition-transform duration-200 ${active ? 'scale-110' : 'scale-100'}`}>
@@ -174,6 +253,28 @@ export const BottomTabBar = () => {
                         </Link>
                     );
                 })}
+
+                {/* More button */}
+                {needsMore && (
+                    <button
+                        onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                        className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 transition-all duration-200 select-none ${
+                            isOverflowActive || moreMenuOpen ? 'text-primary' : 'text-gray-500 dark:text-zinc-400'
+                        }`}
+                    >
+                        <div className={`relative transition-transform duration-200 ${isOverflowActive ? 'scale-110' : 'scale-100'}`}>
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                            </svg>
+                            {isOverflowActive && (
+                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[var(--primary)] rounded-full" />
+                            )}
+                        </div>
+                        <span className={`text-[10px] mt-1 font-medium whitespace-nowrap ${isOverflowActive ? 'font-semibold' : ''}`}>
+                            More
+                        </span>
+                    </button>
+                )}
             </div>
         </nav>
     );

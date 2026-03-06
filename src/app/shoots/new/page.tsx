@@ -8,11 +8,14 @@ import { useAuth } from '@/lib/auth';
 import { useUsers } from '@/hooks/useUsers';
 import { Shoot, Assignment } from '@/types';
 import { generateUUID } from '@/lib/id';
+import { useDepartment } from '@/lib/department-context';
 
 export default function NewShootPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
+    const { department } = useDepartment();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
     const { data: users = [] } = useUsers();
     const [isLoading, setIsLoading] = useState(false);
 
@@ -45,7 +48,7 @@ export default function NewShootPage() {
                 ...data as Shoot,
                 id: shootId,
                 createdBy: user?.id || '',
-                departmentId: user?.departmentId,
+                departmentId: activeDepartmentId || undefined,
             };
 
             await storage.saveShoot(newShoot);
@@ -57,7 +60,7 @@ export default function NewShootPage() {
                 userId: userId,
                 role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
                 status: 'PENDING',
-                departmentId: user?.departmentId
+                departmentId: activeDepartmentId || undefined
             }));
 
             if (assignments.length > 0) {
@@ -74,7 +77,7 @@ export default function NewShootPage() {
                         userId: user.id,
                         timestamp: new Date().toISOString(),
                         details: `Created shoot "${newShoot.title}"`,
-                        departmentId: user.departmentId
+                        departmentId: activeDepartmentId || undefined
                     });
                 }
             } catch (nonCriticalError) {

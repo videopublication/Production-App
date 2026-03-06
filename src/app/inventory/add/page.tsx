@@ -8,10 +8,13 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/lib/auth';
+import { useDepartment } from '@/lib/department-context';
 
 export default function AddItemPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { department } = useDepartment();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     useEffect(() => {
         if (user && !['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
@@ -58,7 +61,7 @@ export default function AddItemPage() {
                     model: formData.model,
                     serialNumber: formData.serialNumber,
                 },
-                departmentId: user?.departmentId
+                departmentId: activeDepartmentId || undefined
             };
 
             await storage.addEquipment(newItem);
@@ -72,7 +75,7 @@ export default function AddItemPage() {
                     userId: user.id,
                     timestamp: new Date().toISOString(),
                     details: `Added new equipment: ${newItem.name} (${newItem.barcode})`,
-                    departmentId: user.departmentId
+                    departmentId: activeDepartmentId || undefined
                 });
             }
 

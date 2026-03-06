@@ -13,6 +13,7 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useInventory } from '@/hooks/useInventory';
 import { useShoots } from '@/hooks/useShoots';
+import { useDepartment } from '@/lib/department-context';
 
 export default function TransactionsPage() {
     const router = useRouter();
@@ -33,6 +34,9 @@ export default function TransactionsPage() {
     // Auxiliary Data
     const { equipment, users, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
     const { data: shoots = [] } = useShoots();
+    const { department } = useDepartment();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
+
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
     // Debounce Search
@@ -49,7 +53,7 @@ export default function TransactionsPage() {
         setTransactions([]);
         setHasMore(true);
         loadData(1, true);
-    }, [debouncedSearch, filterStatus]);
+    }, [debouncedSearch, filterStatus, activeDepartmentId]);
 
     // Initial Load
     useEffect(() => {
@@ -65,11 +69,11 @@ export default function TransactionsPage() {
 
         loadStats();
         // loadData is triggered by the dependency change above on mount too
-    }, [user, router, authLoading]);
+    }, [user, router, authLoading, activeDepartmentId]);
 
     const loadStats = async () => {
         try {
-            const newStats = await storage.getTransactionStats(user?.departmentId);
+            const newStats = await storage.getTransactionStats(activeDepartmentId);
             setStats(newStats);
         } catch (error) {
             console.error('Error loading stats:', error);
@@ -97,7 +101,7 @@ export default function TransactionsPage() {
                 filterStatus,
                 undefined, // filterUserIds (strict)
                 searchUserIds, // searchUserIds (OR match)
-                user?.departmentId // Isolation
+                activeDepartmentId // Isolation
             );
 
             if (newTxns.length < limit) {

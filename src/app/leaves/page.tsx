@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useLeaves } from '@/hooks/useLeaves';
 import { useUsers } from '@/hooks/useUsers';
+import { useDepartment } from '@/lib/department-context';
 import { format, parseISO } from 'date-fns';
 import { Plus, CheckCircle, XCircle, Clock, Calendar, Users, Filter, User } from 'lucide-react';
 import { Button } from '@/components/Button';
@@ -16,6 +17,8 @@ export default function LeavesPage() {
     const { user } = useAuth();
     const { leaves, isLoading, addLeave, updateLeave } = useLeaves();
     const { data: users = [] } = useUsers();
+    const { department } = useDepartment();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     const [statusFilter, setStatusFilter] = useState<LeaveStatus>('ALL');
     const [isApplying, setIsApplying] = useState(false);
@@ -43,24 +46,35 @@ export default function LeavesPage() {
         try {
             await addLeave({
                 userId: user!.id,
-                departmentId: user!.departmentId,
+                departmentId: activeDepartmentId || undefined,
                 startDate,
                 endDate,
                 reason,
                 status: 'PENDING'
             });
+
+            // Log the leave application
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'CREATE',
+                entityId: user!.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Applied for leave from ${format(parseISO(startDate), 'MMM d, yyyy')} to ${format(parseISO(endDate), 'MMM d, yyyy')}. Reason: ${reason}`,
+                departmentId: activeDepartmentId || undefined
+            });
             
             // Notify admins and managers in the same department
             const adminsAndManagers = users.filter(u => 
                 (u.role === 'ADMIN' || u.role === 'SUPER_ADMIN' || u.role === 'MANAGER') && 
-                u.departmentId === user?.departmentId &&
+                u.departmentId === activeDepartmentId &&
                 u.id !== user?.id
             );
             
             for (const admin of adminsAndManagers) {
                 await storage.addNotification({
                     userId: admin.id,
-                    departmentId: user?.departmentId,
+                    departmentId: activeDepartmentId,
                     title: 'New Leave Request',
                     message: `${user?.name} has requested leave from ${format(parseISO(startDate), 'MMM d')} to ${format(parseISO(endDate), 'MMM d')}.`,
                     link: '/leaves'
@@ -80,11 +94,26 @@ export default function LeavesPage() {
     const handleStatusUpdate = async (id: string, status: 'APPROVED' | 'REJECTED', applicantId: string) => {
         try {
             await updateLeave({ id, updates: { status, approverId: user?.id } });
+
+            // Find the applicant's name for better log messages
+            const applicant = users.find(u => u.id === applicantId);
+            const applicantName = applicant?.name || 'Unknown User';
+
+            // Log the approval/rejection
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `${status === 'APPROVED' ? 'Approved' : 'Rejected'} leave request from ${applicantName}`,
+                departmentId: activeDepartmentId || undefined
+            });
             
             // Notify the user about their leave status change
             await storage.addNotification({
                 userId: applicantId,
-                departmentId: user?.departmentId,
+                departmentId: activeDepartmentId,
                 title: `Leave Request ${status.charAt(0) + status.slice(1).toLowerCase()}`,
                 message: `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`,
                 link: '/leaves'

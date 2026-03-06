@@ -295,7 +295,7 @@ export default function BulkAddPage() {
                     serialNumber: row.serialNumber || undefined,
                     assignedTo: undefined,
                     lastActivity: new Date().toISOString(),
-                    departmentId: user?.departmentId
+                    departmentId: effectiveDeptId || undefined
                 });
             }
 
@@ -316,7 +316,7 @@ export default function BulkAddPage() {
                     userId: user.id,
                     timestamp: new Date().toISOString(),
                     details: `Bulk imported ${newEquipment.length} items to inventory`,
-                    departmentId: user.departmentId
+                    departmentId: effectiveDeptId || undefined
                 });
             }
 
