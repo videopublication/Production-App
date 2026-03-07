@@ -291,6 +291,37 @@ export default function UserManagementPage() {
         finally { setProcessingIds(prev => { const next = new Set(prev); next.delete(userId); return next; }); }
     };
 
+    const handlePrimaryApproverChange = async (userId: string, isApprover: boolean) => {
+        if (processingIds.has(userId)) return;
+        setProcessingIds(prev => new Set(prev).add(userId));
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: userId, isPrimaryLeaveApprover: isApprover })
+            });
+            if (res.ok) {
+                fetchUsers();
+                showToast(`Primary leave approver updated`, 'success');
+                const targetUser = users.find(u => u.id === userId);
+                if (user && targetUser) {
+                    await storage.addLog({
+                        id: crypto.randomUUID(),
+                        action: 'EDIT',
+                        entityId: userId,
+                        userId: user.id,
+                        timestamp: new Date().toISOString(),
+                        details: `Set user "${targetUser.name}" as ${isApprover ? 'primary' : 'non-primary'} leave approver`
+                    });
+                }
+            } else {
+                const error = await res.json();
+                showToast(error.error || 'Failed to update leave approver status', 'error');
+            }
+        } catch { showToast('Failed to update leave approver status', 'error'); }
+        finally { setProcessingIds(prev => { const next = new Set(prev); next.delete(userId); return next; }); }
+    };
+
     const handleDepartmentChange = async (userId: string, newDeptId: string) => {
         if (processingIds.has(userId)) return;
         setProcessingIds(prev => new Set(prev).add(userId));
@@ -581,6 +612,19 @@ export default function UserManagementPage() {
                                                 </select>
                                             )}
 
+                                            {/* Primary Approver Toggle (Only for Admin/Manager) */}
+                                            {['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(u.role) && (
+                                                <button
+                                                    onClick={() => handlePrimaryApproverChange(u.id, !u.isPrimaryLeaveApprover)}
+                                                    className={`p-1.5 rounded-lg transition-colors ${u.isPrimaryLeaveApprover ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400 hover:bg-yellow-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-yellow-500 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                                                    title={u.isPrimaryLeaveApprover ? "Remove Primary Approver" : "Make Primary Approver"}
+                                                >
+                                                    <svg className="w-4 h-4" fill={u.isPrimaryLeaveApprover ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                                                    </svg>
+                                                </button>
+                                            )}
+
                                             {/* Password */}
                                             <button onClick={() => openPasswordModal(u)} className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors" title="Change Password">
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -653,6 +697,19 @@ export default function UserManagementPage() {
                                                         <option value="">Global</option>
                                                         {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                                     </select>
+                                                )}
+
+                                                {/* Primary Approver Toggle (Only for Admin/Manager) */}
+                                                {['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(u.role) && (
+                                                    <button
+                                                        onClick={() => handlePrimaryApproverChange(u.id, !u.isPrimaryLeaveApprover)}
+                                                        className={`p-2.5 rounded-xl transition-colors ${u.isPrimaryLeaveApprover ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400 hover:bg-yellow-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-yellow-500 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                                                        title={u.isPrimaryLeaveApprover ? "Remove Primary Approver" : "Make Primary Approver"}
+                                                    >
+                                                        <svg className="w-4 h-4" fill={u.isPrimaryLeaveApprover ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                                                        </svg>
+                                                    </button>
                                                 )}
 
                                                 <button onClick={() => openPasswordModal(u)} className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-blue-600">

@@ -884,7 +884,7 @@ export default function CheckoutPage() {
                                     )}
                                 </div>
 
-                                {user && ['MANAGER', 'ADMIN'].includes(user.role) && (
+                                {user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
                                     <div className="mb-4">
                                         <div className="relative z-20">
                                             <MultiSelect

@@ -34,6 +34,7 @@ export interface User {
     fcmToken?: string | null;
     avatarUrl?: string | null;
     departmentId?: string; // Initially optional during migration
+    isPrimaryLeaveApprover?: boolean;
 }
 
 export interface Equipment {

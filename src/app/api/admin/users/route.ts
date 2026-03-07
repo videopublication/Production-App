@@ -82,7 +82,7 @@ export async function GET(request: Request) {
         const supabaseAdmin = getSupabaseAdmin();
         const { data: users, error } = await supabaseAdmin
             .from('users')
-            .select('id, name, email, role, status, department_id, department:departments(name)')
+            .select('id, name, email, role, status, department_id, is_primary_leave_approver, department:departments(name)')
             .order('name', { ascending: true });
 
         if (error) {
@@ -167,7 +167,8 @@ const updateUserSchema = z.object({
     password: z.string().min(6).optional(),
     status: z.string().optional(),
     role: z.string().optional(),
-    departmentId: z.string().optional().nullable()
+    departmentId: z.string().optional().nullable(),
+    isPrimaryLeaveApprover: z.boolean().optional()
 });
 
 export async function PUT(request: Request) {
@@ -189,7 +190,7 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { id, password, status, role, departmentId } = result.data;
+        const { id, password, status, role, departmentId, isPrimaryLeaveApprover } = result.data;
 
         if (password) {
             const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(id, {
@@ -202,6 +203,7 @@ export async function PUT(request: Request) {
         if (status) updates.status = status;
         if (role) updates.role = role;
         if (departmentId !== undefined) updates.department_id = departmentId;
+        if (isPrimaryLeaveApprover !== undefined) updates.is_primary_leave_approver = isPrimaryLeaveApprover;
 
         if (Object.keys(updates).length > 0) {
             const { error: updateError } = await supabaseAdmin

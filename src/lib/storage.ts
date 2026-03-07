@@ -61,7 +61,8 @@ class StorageService {
         return data.map((u: any) => ({
             ...u,
             fcmToken: u.fcm_token,
-            departmentId: u.department_id
+            departmentId: u.department_id,
+            isPrimaryLeaveApprover: u.is_primary_leave_approver
         })) as User[];
     }
 

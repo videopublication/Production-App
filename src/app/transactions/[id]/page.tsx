@@ -55,7 +55,7 @@ export default function TransactionDetailPage() {
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        if (user && !['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
+        if (user && !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
             router.push('/');
             return;
         }
@@ -444,7 +444,7 @@ export default function TransactionDetailPage() {
         );
     });
 
-    if (!user || !['CREW', 'MANAGER', 'ADMIN'].includes(user.role)) {
+    if (!user || !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
         return null;
     }
 

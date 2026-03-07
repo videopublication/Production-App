@@ -128,20 +128,29 @@ const ALL_QUICK_ACTIONS = [
         icon: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
         roles: ['ADMIN', 'SUPER_ADMIN'] as UserRole[], // Only admins can access settings
     },
+    {
+        id: 'leaves',
+        label: 'Leaves',
+        route: '/leaves',
+        gradient: 'from-violet-500 to-violet-600',
+        shadow: 'shadow-violet-500/25',
+        icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15z',
+        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'] as UserRole[], // Everyone can view their leaves
+    },
 ];
 
 // Default actions per role
 const getDefaultActionsForRole = (role: UserRole): string[] => {
     switch (role) {
         case 'CREW':
-            return ['checkout', 'returns', 'inventory', 'calendar', 'shoots'];
+            return ['checkout', 'returns', 'inventory', 'calendar', 'shoots', 'leaves'];
         case 'MANAGER':
-            return ['checkout', 'returns', 'verify', 'inventory', 'shoots', 'history', 'calendar', 'add-item'];
+            return ['checkout', 'returns', 'verify', 'inventory', 'shoots', 'history', 'calendar', 'add-item', 'leaves'];
         case 'ADMIN':
         case 'SUPER_ADMIN':
-            return ['checkout', 'returns', 'verify', 'inventory', 'history', 'calendar', 'add-item', 'shoots', 'users', 'departments', 'notify'];
+            return ['checkout', 'returns', 'verify', 'inventory', 'history', 'calendar', 'add-item', 'shoots', 'users', 'departments', 'notify', 'leaves'];
         default:
-            return ['checkout', 'returns', 'inventory', 'calendar'];
+            return ['checkout', 'returns', 'inventory', 'calendar', 'leaves'];
     }
 };
 
@@ -149,6 +158,7 @@ const STORAGE_KEY = 'dashboard_quick_actions';
 
 import { useInventory } from '@/hooks/useInventory';
 import { useTransactions } from '@/hooks/useTransactions';
+import { useLeaves } from '@/hooks/useLeaves';
 import { useDepartment } from '@/lib/department-context';
 
 // ... (other imports remain)
@@ -159,8 +169,13 @@ export default function DashboardPage() {
     const { department } = useDepartment();
 
     // Use the hook instead of manual fetching
-    const { equipment, isLoading: inventoryLoading, refresh } = useInventory();
+    const { equipment, isLoading: inventoryLoading, refresh: refreshInventory } = useInventory();
     const { data: allTransactions = [], isLoading: transactionsLoading } = useTransactions();
+    const { leaves, isLoading: leavesLoading, refetch: refreshLeaves } = useLeaves();
+
+    const handleRefresh = async () => {
+        await Promise.all([refreshInventory(), refreshLeaves()]);
+    };
 
     // Derive stats from the cached/live data
     const stats = useMemo(() => {
@@ -169,13 +184,16 @@ export default function DashboardPage() {
             .filter(t => t.status === 'OPEN')
             .reduce((sum, t) => sum + t.items.length, 0);
 
+        const pendingLeavesCount = leaves.filter(l => l.status === 'PENDING').length;
+
         return {
             available: equipment.filter(i => i.status === 'AVAILABLE').length,
             checkedOut: checkedOutCount,
             pendingVerification: equipment.filter(i => i.status === 'PENDING_VERIFICATION').length,
             attention: equipment.filter(i => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(i.status)).length,
+            pendingLeaves: pendingLeavesCount
         };
-    }, [equipment, allTransactions]);
+    }, [equipment, allTransactions, leaves]);
 
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedActionIds, setSelectedActionIds] = useState<string[]>([]);
@@ -342,7 +360,7 @@ export default function DashboardPage() {
     }
 
     return (
-        <PullToRefresh onRefresh={refresh}>
+        <PullToRefresh onRefresh={handleRefresh}>
             <div className="max-w-6xl mx-auto animate-fade-in">
                 {/* Header */}
                 <div className="mb-8">
@@ -355,7 +373,7 @@ export default function DashboardPage() {
                 {/* Stats Cards */}
                 <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-[#e5e5ea] dark:border-gray-800 p-4 sm:p-6 mb-8 transition-colors">
                     <h2 className="text-sm font-semibold text-[#86868b] dark:text-gray-400 uppercase tracking-wider mb-4">Inventory Overview</h2>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
                         {/* Available */}
                         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-900/10 border border-emerald-200/50 dark:border-emerald-900/30">
                             <div className="flex items-center justify-between mb-3">
@@ -415,6 +433,29 @@ export default function DashboardPage() {
                             <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-red-50">{stats.attention}</p>
                             <p className="text-sm text-[#86868b] dark:text-red-400/80 mt-1">Needs Attention</p>
                         </div>
+
+                        {/* Pending Leaves (Admins/Managers only) */}
+                        {['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(userRole) && (
+                            <div
+                                className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-violet-50 to-violet-100/50 dark:from-violet-900/20 dark:to-violet-900/10 border border-violet-200/50 dark:border-violet-900/30 cursor-pointer hover:border-violet-300 transition-colors col-span-2 lg:col-span-1"
+                                onClick={() => router.push('/leaves')}
+                            >
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="w-10 h-10 rounded-xl bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    {stats.pendingLeaves > 0 && (
+                                        <span className="px-2 py-0.5 bg-violet-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                                            Action
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-violet-50">{stats.pendingLeaves}</p>
+                                <p className="text-sm text-[#86868b] dark:text-violet-400/80 mt-1">Pending Leaves</p>
+                            </div>
+                        )}
                     </div>
                 </div>
 

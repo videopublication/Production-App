@@ -168,6 +168,18 @@ export default function TransactionsPage() {
 
         const allNames = [userName, ...additionalNames].join(', ');
         const itemNames = getItemNames(txn.items);
+
+        // Group duplicate items and count them
+        const itemCounts = itemNames.reduce((acc, name) => {
+            acc[name] = (acc[name] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        // Format as "Item Name - 3" or "Item Name" depending on count
+        const formattedItems = Object.entries(itemCounts).map(([name, count]) => {
+            return count > 1 ? `• ${name} - ${count}` : `• ${name}`;
+        });
+
         const date = new Date(txn.timestampOut).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
         return `🎥 *Equipment Checkout Details*
@@ -178,7 +190,7 @@ export default function TransactionsPage() {
 *Date:* ${date}
 
 *Equipment List:*
-${itemNames.map(name => `• ${name}`).join('\n')}${txn.notes ? `\n\n*Notes / Other Items:*\n${txn.notes}` : ''}`;
+${formattedItems.join('\n')}${txn.notes ? `\n\n*Notes / Other Items:*\n${txn.notes}` : ''}`;
     };
 
     const handleShareWhatsApp = (e: React.MouseEvent, txn: Transaction) => {
