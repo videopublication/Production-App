@@ -434,8 +434,8 @@ export default function DashboardPage() {
                             <p className="text-sm text-[#86868b] dark:text-red-400/80 mt-1">Needs Attention</p>
                         </div>
 
-                        {/* Pending Leaves (Admins/Managers only) */}
-                        {['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(userRole) && (
+                        {/* Pending Leaves (Admins only) */}
+                        {['ADMIN', 'SUPER_ADMIN'].includes(userRole) && (
                             <div
                                 className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-violet-50 to-violet-100/50 dark:from-violet-900/20 dark:to-violet-900/10 border border-violet-200/50 dark:border-violet-900/30 cursor-pointer hover:border-violet-300 transition-colors col-span-2 lg:col-span-1"
                                 onClick={() => router.push('/leaves')}

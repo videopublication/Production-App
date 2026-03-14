@@ -64,12 +64,12 @@ export default function LeavesPage() {
     const [endDate, setEndDate] = useState('');
     const [reason, setReason] = useState('');
 
-    const isAdminOrManager = ['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '');
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
     // Filter leaves based on role and selected status
     const filteredLeaves = leaves.filter((leave: Leave) => {
-        // If not admin/manager, only show their own leaves
-        if (!isAdminOrManager && leave.userId !== user?.id) return false;
+        // If not admin, only show their own leaves
+        if (!isAdmin && leave.userId !== user?.id) return false;
 
         // Filter by status
         if (statusFilter !== 'ALL' && leave.status !== statusFilter) return false;
@@ -127,39 +127,36 @@ export default function LeavesPage() {
                 departmentId: activeDepartmentId || undefined
             });
 
-            // Notify admins and managers in the same department
-            const adminsAndManagers = users.filter(u =>
-                (u.role === 'ADMIN' || u.role === 'SUPER_ADMIN' || u.role === 'MANAGER') &&
+            // Notify admins in the same department
+            const admins = users.filter(u =>
+                (u.role === 'ADMIN' || u.role === 'SUPER_ADMIN') &&
                 u.departmentId === activeDepartmentId &&
                 u.id !== user?.id
             );
 
-            for (const admin of adminsAndManagers) {
-                await storage.addNotification({
+            // OPTIMIZATION: Fire notifications off in parallel
+            await Promise.all(admins.map(admin => 
+                storage.addNotification({
                     userId: admin.id,
                     departmentId: activeDepartmentId,
                     title: 'New Leave Request',
                     message: `${user?.name} has requested leave from ${format(parseISO(startDate), 'MMM d')} to ${format(parseISO(endDate), 'MMM d')}.`,
                     link: '/leaves'
-                });
-            }
+                })
+            ));
 
-            // Send Email notification
-            try {
-                await fetch('/api/send-leave-email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        applicantName: user?.name,
-                        startDate: format(parseISO(startDate), 'MMM d, yyyy'),
-                        endDate: format(parseISO(endDate), 'MMM d, yyyy'),
-                        reason,
-                        departmentId: activeDepartmentId
-                    })
-                });
-            } catch (e) {
-                console.error('Failed to trigger email notification', e);
-            }
+            // Send Email notification in the background (fire and forget) - do not await
+            fetch('/api/send-leave-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    applicantName: user?.name,
+                    startDate: format(parseISO(startDate), 'MMM d, yyyy'),
+                    endDate: format(parseISO(endDate), 'MMM d, yyyy'),
+                    reason,
+                    departmentId: activeDepartmentId
+                })
+            }).catch(e => console.error('Failed to trigger email notification', e));
 
             setIsApplying(false);
             setStartDate('');
@@ -181,25 +178,27 @@ export default function LeavesPage() {
             const applicant = users.find(u => u.id === applicantId);
             const applicantName = applicant?.name || 'Unknown User';
 
-            // Log the approval/rejection
-            await storage.addLog({
-                id: crypto.randomUUID(),
-                action: 'EDIT',
-                entityId: id,
-                userId: user!.id,
-                timestamp: new Date().toISOString(),
-                details: `${status === 'APPROVED' ? 'Approved' : 'Rejected'} leave request from ${applicantName}`,
-                departmentId: activeDepartmentId || undefined
-            });
-
-            // Notify the user about their leave status change
-            await storage.addNotification({
-                userId: applicantId,
-                departmentId: activeDepartmentId,
-                title: `Leave Request ${status.charAt(0) + status.slice(1).toLowerCase()}`,
-                message: `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`,
-                link: '/leaves'
-            });
+            // OPTIMIZATION: Fire side effects in parallel without blocking the UI
+            Promise.all([
+                // Log the approval/rejection
+                storage.addLog({
+                    id: crypto.randomUUID(),
+                    action: 'EDIT',
+                    entityId: id,
+                    userId: user!.id,
+                    timestamp: new Date().toISOString(),
+                    details: `${status === 'APPROVED' ? 'Approved' : 'Rejected'} leave request from ${applicantName}`,
+                    departmentId: activeDepartmentId || undefined
+                }),
+                // Notify the user about their leave status change
+                storage.addNotification({
+                    userId: applicantId,
+                    departmentId: activeDepartmentId,
+                    title: `Leave Request ${status.charAt(0) + status.slice(1).toLowerCase()}`,
+                    message: `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`,
+                    link: '/leaves'
+                })
+            ]).catch(e => console.error("Failed to add log/notification", e));
 
         } catch (error) {
             console.error('Failed to update leave status:', error);
@@ -220,7 +219,7 @@ export default function LeavesPage() {
 
     if (isLoading) {
         return (
-            <div className="px-4 py-6 sm:p-6 space-y-6 max-w-5xl mx-auto pb-24 md:pb-6">
+            <div className="px-2 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-24 md:pb-6">
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
                     <div className="space-y-3">
                         <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded-md w-32 animate-pulse"></div>
@@ -265,7 +264,7 @@ export default function LeavesPage() {
 
     return (
         <div
-            className="px-4 py-6 sm:p-6 space-y-6 max-w-5xl mx-auto min-h-[calc(100vh-80px)] pb-24 md:pb-6 relative transition-transform duration-200 ease-out"
+            className="px-2 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] pb-24 md:pb-6 relative transition-transform duration-200 ease-out"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -294,8 +293,8 @@ export default function LeavesPage() {
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Leaves</h1>
                     <p className="text-sm text-gray-500 mt-1">Manage your time off requests</p>
                 </div>
-                {!isAdminOrManager && (
-                    <Button onClick={() => setIsApplying(!isApplying)} className="gap-2">
+                {!isAdmin && (
+                    <Button onClick={() => setIsApplying(!isApplying)} className="gap-2 shrink-0">
                         {isApplying ? <XCircle size={18} /> : <Plus size={18} />}
                         {isApplying ? 'Cancel' : 'Apply for Leave'}
                     </Button>
@@ -351,7 +350,7 @@ export default function LeavesPage() {
             )}
 
             <div className="bg-white dark:bg-[#1c1c1e] rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+                <div className="p-3 sm:p-5 border-b border-gray-200 dark:border-gray-800">
                     <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-900 rounded-lg w-full overflow-x-auto custom-scrollbar">
                         {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as LeaveStatus[]).map(status => (
                             <button
@@ -379,8 +378,8 @@ export default function LeavesPage() {
                             const approver = users.find(u => u.id === leave.approverId);
 
                             return (
-                                <div key={leave.id} className="p-4 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                                <div key={leave.id} className="p-3 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
                                         <div className="space-y-3 flex-1">
                                             <div className="flex items-center justify-between sm:justify-start gap-4">
                                                 <div className="flex items-center gap-2">
@@ -417,7 +416,7 @@ export default function LeavesPage() {
                                             )}
                                         </div>
 
-                                        {isAdminOrManager && leave.status === 'PENDING' && (
+                                        {isAdmin && leave.status === 'PENDING' && (
                                             <div className="flex sm:flex-col gap-2 shrink-0 pt-2 sm:pt-0">
                                                 <Button
                                                     variant="outline"

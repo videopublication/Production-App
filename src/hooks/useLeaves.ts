@@ -33,7 +33,9 @@ export function useLeaves() {
     const leavesQuery = useQuery({
         queryKey: ['leaves', activeDepartmentId],
         queryFn: () => storage.getLeaves(activeDepartmentId),
-        enabled: !!user
+        enabled: !!user,
+        staleTime: 0, // Force fresh data always on mount
+        refetchInterval: 7000, // Poll every 7 seconds as a reliable fallback for Realtime
     });
 
     const addLeaveMutation = useMutation({

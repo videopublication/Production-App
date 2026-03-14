@@ -132,14 +132,17 @@ export default function UserManagementPage() {
 
         // Department filter
         // Super Admins: filter by selected department context (if any)
-        // Regular Admins: always filter by their own department
+        // Regular Admins: always filter by their own department and hide SUPER_ADMINs
         if (user?.role === 'SUPER_ADMIN') {
             if (department) {
                 result = result.filter(u => u.departmentId === department.id);
             }
         } else if (user?.role === 'ADMIN' && user.departmentId) {
-            // Regular Admin: only show users from their own department
-            result = result.filter(u => u.departmentId === user.departmentId);
+            // Regular Admin: only show non-super-admin users from their own department
+            result = result.filter(u => u.departmentId === user.departmentId && u.role !== 'SUPER_ADMIN');
+        } else {
+            // Fallback for any other non-super-admin viewing the list
+            result = result.filter(u => u.role !== 'SUPER_ADMIN');
         }
 
         // Search filter
@@ -184,7 +187,9 @@ export default function UserManagementPage() {
                 base = base.filter(u => u.departmentId === department.id);
             }
         } else if (user?.role === 'ADMIN' && user.departmentId) {
-            base = base.filter(u => u.departmentId === user.departmentId);
+            base = base.filter(u => u.departmentId === user.departmentId && u.role !== 'SUPER_ADMIN');
+        } else {
+            base = base.filter(u => u.role !== 'SUPER_ADMIN');
         }
         return {
             ALL: base.length,
