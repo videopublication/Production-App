@@ -78,10 +78,14 @@ export async function middleware(request: NextRequest) {
         // Handle inactive users
         if (status) {
             const isInactive = status === 'PENDING' || status === 'SUSPENDED'
-            const isOnInactivePage = path === '/inactive'
+            const isOnInactivePage = path === '/inactive' || path === '/select-department'
+            const isAllowedApi = path.startsWith('/api/departments') || path.startsWith('/api/auth/')
 
-            // If inactive and NOT on inactive page -> Redirect to inactive
-            if (isInactive && !isOnInactivePage) {
+            // If inactive and NOT on an allowed page/api -> Redirect or reject
+            if (isInactive && !isOnInactivePage && !isAllowedApi) {
+                if (path.startsWith('/api/')) {
+                    return NextResponse.json({ error: 'Account is pending/suspended' }, { status: 403 })
+                }
                 const reason = status === 'SUSPENDED' ? 'suspended' : 'pending'
                 return NextResponse.redirect(new URL(`/inactive?reason=${reason}`, request.url))
             }

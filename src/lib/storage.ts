@@ -801,4 +801,33 @@ class StorageService {
     }
 }
 
-export const storage = new StorageService();
+const rawStorage = new StorageService();
+
+export const storage = new Proxy(rawStorage, {
+    get(target, prop, receiver) {
+        const origMethod = Reflect.get(target, prop, receiver);
+        if (typeof origMethod === 'function') {
+            return async function (...args: any[]) {
+                const result = await origMethod.apply(target, args);
+                
+                // Fire an event for mutating operations so that React Query can immediately invalidate the cache
+                const propStr = String(prop);
+                const isMutation = propStr.startsWith('add') || 
+                                   propStr.startsWith('save') || 
+                                   propStr.startsWith('update') || 
+                                   propStr.startsWith('delete') || 
+                                   propStr.startsWith('bulk') || 
+                                   propStr.startsWith('mark') || 
+                                   propStr.startsWith('reset') ||
+                                   propStr.startsWith('upsert');
+                                   
+                if (isMutation && typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('app-mutation'));
+                }
+                
+                return result;
+            };
+        }
+        return origMethod;
+    }
+});

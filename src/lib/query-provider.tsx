@@ -14,7 +14,7 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
             new QueryClient({
                 defaultOptions: {
                     queries: {
-                        staleTime: 5 * 60 * 1000, // 5 minutes
+                        staleTime: 0, // ALWAYS re-fetch in background to prevent stale data
                         gcTime: 24 * 60 * 60 * 1000, // 24 hours
                         retry: 3, // Increase retry count for unstable networks
                         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
@@ -32,6 +32,17 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
 
     const [persister, setPersister] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Provide a global invalidation mechanism via window events
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const handleAppMutation = () => {
+                queryClient.invalidateQueries();
+            };
+            window.addEventListener('app-mutation', handleAppMutation);
+            return () => window.removeEventListener('app-mutation', handleAppMutation);
+        }
+    }, [queryClient]);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
