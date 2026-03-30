@@ -94,9 +94,12 @@ export default function TransactionDetailPage() {
                 linkedAssignments = assignments.filter(a => a.shootId === txn.shootId);
             }
 
-            // Filter logs for this transaction
+            // Filter logs for this transaction AND its items
+            // Return/Verify actions are logged with entityId = equipment.id,
+            // so we must include those to show the full activity history.
+            const txnItemIds = new Set(txn.items);
             const transactionLogs = allLogs
-                .filter(l => l.entityId === transactionId)
+                .filter(l => l.entityId === transactionId || txnItemIds.has(l.entityId))
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
             setTransaction(txn);
@@ -941,6 +944,10 @@ export default function TransactionDetailPage() {
 
                             const isCheckedOut = item.status === 'CHECKED_OUT';
                             const isPendingVerification = item.status === 'PENDING_VERIFICATION';
+                            // Check if item was returned through the proper transaction flow
+                            const hasReturnRecord = transaction.postReturnConditions?.[itemId] !== undefined;
+                            // Item shows as available but wasn't formally returned from THIS transaction
+                            const isReturnedExternally = !isCheckedOut && !isPendingVerification && !hasReturnRecord;
 
                             const isSelected = selectedItems.has(itemId);
                             const canSelect = isCheckedOut && transaction.status === 'OPEN';
@@ -1006,9 +1013,11 @@ export default function TransactionDetailPage() {
                                                 ? 'bg-orange-500 text-white'
                                                 : isPendingVerification
                                                     ? 'bg-blue-500 text-white'
-                                                    : 'bg-green-500 text-white'
+                                                    : isReturnedExternally
+                                                        ? 'bg-gray-400 text-white'
+                                                        : 'bg-green-500 text-white'
                                                 }`}>
-                                                {isCheckedOut ? 'Checked Out' : isPendingVerification ? 'Pending Verify' : 'Returned'}
+                                                {isCheckedOut ? 'Checked Out' : isPendingVerification ? 'Pending Verify' : isReturnedExternally ? 'Returned (Crew)' : 'Returned'}
                                             </span>
 
                                             {/* Actions */}

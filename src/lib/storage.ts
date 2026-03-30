@@ -877,6 +877,20 @@ class StorageService {
 
 const rawStorage = new StorageService();
 
+// Debounced mutation event dispatcher
+// During batch operations (e.g., checkout with 10 items), each storage call
+// would fire immediately causing React Query to refetch mid-batch.
+// This coalesces rapid-fire mutations into a single event after 300ms of quiet.
+let _mutationTimer: ReturnType<typeof setTimeout> | null = null;
+function dispatchMutationEvent() {
+    if (typeof window === 'undefined') return;
+    if (_mutationTimer) clearTimeout(_mutationTimer);
+    _mutationTimer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('app-mutation'));
+        _mutationTimer = null;
+    }, 300);
+}
+
 export const storage = new Proxy(rawStorage, {
     get(target, prop, receiver) {
         const origMethod = Reflect.get(target, prop, receiver);
@@ -884,7 +898,8 @@ export const storage = new Proxy(rawStorage, {
             return async function (...args: any[]) {
                 const result = await origMethod.apply(target, args);
                 
-                // Fire an event for mutating operations so that React Query can immediately invalidate the cache
+                // Fire a debounced event for mutating operations so React Query
+                // invalidates the cache ONCE after batch operations complete
                 const propStr = String(prop);
                 const isMutation = propStr.startsWith('add') || 
                                    propStr.startsWith('save') || 
@@ -895,8 +910,8 @@ export const storage = new Proxy(rawStorage, {
                                    propStr.startsWith('reset') ||
                                    propStr.startsWith('upsert');
                                    
-                if (isMutation && typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('app-mutation'));
+                if (isMutation) {
+                    dispatchMutationEvent();
                 }
                 
                 return result;
