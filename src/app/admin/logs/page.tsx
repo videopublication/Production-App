@@ -33,13 +33,13 @@ export default function AdminLogsPage() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    // Reset when search changes
+    // Reset when search or filter changes
     useEffect(() => {
         setPage(1);
         setLogs([]);
         setHasMore(true);
         loadData(1, true);
-    }, [debouncedSearch, activeDepartmentId]);
+    }, [debouncedSearch, filterAction, activeDepartmentId]);
 
     useEffect(() => {
         if (!user) return;
@@ -55,7 +55,8 @@ export default function AdminLogsPage() {
         setLoading(true);
         try {
             const limit = 20;
-            const newLogs = await storage.getLogs(pageNum, limit, debouncedSearch, activeDepartmentId || undefined);
+            const actionFilter = filterAction !== 'ALL' ? filterAction : undefined;
+            const newLogs = await storage.getLogs(pageNum, limit, debouncedSearch, activeDepartmentId || undefined, actionFilter);
 
             if (newLogs.length < limit) {
                 setHasMore(false);
@@ -93,11 +94,9 @@ export default function AdminLogsPage() {
         return found ? found.name : 'Unknown User';
     };
 
-    // Filter action on Client Side (on loaded logs)
-    const filteredLogs = logs.filter(log => {
-        if (filterAction !== 'ALL' && log.action !== filterAction) return false;
-        return true;
-    });
+    // Filtering is now done server-side via the action parameter in getLogs.
+    // No client-side filter needed.
+    const filteredLogs = logs;
 
     const getActionVariant = (action: string): 'default' | 'success' | 'warning' | 'secondary' | 'outline' => {
         switch (action) {
@@ -178,7 +177,7 @@ export default function AdminLogsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                {logs.length === 0 && !loading ? (
+                                {filteredLogs.length === 0 && !loading ? (
                                     <tr>
                                         <td colSpan={4} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">No logs found</td>
                                     </tr>
@@ -209,7 +208,7 @@ export default function AdminLogsPage() {
 
                 {/* Mobile View List */}
                 <div className="md:hidden space-y-3">
-                    {logs.length === 0 && !loading ? (
+                    {filteredLogs.length === 0 && !loading ? (
                         <div className="text-center py-10 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                             No logs found
                         </div>

@@ -942,12 +942,17 @@ export default function TransactionDetailPage() {
                             const item = getItemDetails(itemId);
                             if (!item) return null;
 
-                            const isCheckedOut = item.status === 'CHECKED_OUT';
-                            const isPendingVerification = item.status === 'PENDING_VERIFICATION';
-                            // Check if item was returned through the proper transaction flow
+                            // For CLOSED transactions: all items were returned (that's why it closed).
+                            // Don't read the equipment's current global status — it may have been
+                            // re-checked-out for a different shoot, causing false "Checked Out" badges.
+                            const isTxnClosed = transaction.status === 'CLOSED';
                             const hasReturnRecord = transaction.postReturnConditions?.[itemId] !== undefined;
-                            // Item shows as available but wasn't formally returned from THIS transaction
-                            const isReturnedExternally = !isCheckedOut && !isPendingVerification && !hasReturnRecord;
+
+                            // Status determination is transaction-context-aware
+                            const isCheckedOut = !isTxnClosed && item.status === 'CHECKED_OUT';
+                            const isPendingVerification = !isTxnClosed && item.status === 'PENDING_VERIFICATION';
+                            const isReturnedExternally = !isTxnClosed && !isCheckedOut && !isPendingVerification && !hasReturnRecord;
+                            const isReturned = isTxnClosed || hasReturnRecord;
 
                             const isSelected = selectedItems.has(itemId);
                             const canSelect = isCheckedOut && transaction.status === 'OPEN';

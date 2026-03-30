@@ -412,7 +412,7 @@ class StorageService {
     }
 
     // Logs
-    async getLogs(page?: number, limit?: number, search?: string, departmentId?: string | null): Promise<Log[]> {
+    async getLogs(page?: number, limit?: number, search?: string, departmentId?: string | null, actionFilter?: string): Promise<Log[]> {
         let query = supabase
             .from('logs')
             .select('*', { count: 'exact' }) // Get count for UI logic if needed later
@@ -422,8 +422,12 @@ class StorageService {
             query = query.eq('department_id', departmentId);
         }
 
+        if (actionFilter) {
+            query = query.eq('action', actionFilter);
+        }
+
         if (search) {
-            query = query.or(`details.ilike.%${search}%,action.ilike.%${search}%`);
+            query = query.or(`details.ilike.%${search}%,action.ilike.%${search}%,entity_id.ilike.%${search}%`);
         }
 
         if (page && limit) {

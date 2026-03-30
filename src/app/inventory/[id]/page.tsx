@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Equipment, EquipmentStatus, Condition } from '@/types';
+import { Equipment, EquipmentStatus, Condition, Log, Transaction, Shoot } from '@/types';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
@@ -12,6 +12,7 @@ import Image from 'next/image';
 
 import { useEquipmentItem, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
+import { useDepartment } from '@/lib/department-context';
 
 export default function ItemDetailsPage() {
     const params = useParams();
@@ -25,6 +26,17 @@ export default function ItemDetailsPage() {
 
     const [qrCode, setQrCode] = useState<string>('');
     const [assignedUser, setAssignedUser] = useState<string>('');
+
+    // Item History Timeline state
+    const [itemLogs, setItemLogs] = useState<Log[]>([]);
+    const [itemTransactions, setItemTransactions] = useState<Transaction[]>([]);
+    const [currentShoot, setCurrentShoot] = useState<Shoot | null>(null);
+    const [historyLoading, setHistoryLoading] = useState(true);
+    const [showAllHistory, setShowAllHistory] = useState(false);
+    const { department } = useDepartment();
+    const effectiveDeptId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
+        ? user.departmentId
+        : (department?.id || null);
 
     // Management state
     const [isEditing, setIsEditing] = useState(false);
@@ -69,6 +81,75 @@ export default function ItemDetailsPage() {
             }
         }
     }, [item, users]);
+
+    // Load item history (logs + transactions + shoots)
+    useEffect(() => {
+        if (!item) return;
+        const loadHistory = async () => {
+            setHistoryLoading(true);
+            try {
+                const [equipmentLogs, txns, shoots] = await Promise.all([
+                    storage.getLogsByEntity(item.id),
+                    storage.getTransactions(undefined, undefined, undefined, 'ALL', undefined, undefined, effectiveDeptId),
+                    storage.getShoots(effectiveDeptId || undefined)
+                ]);
+
+                // Filter transactions that include this item
+                const relatedTxns = txns.filter(t => t.items.includes(item.id));
+                setItemTransactions(relatedTxns);
+
+                // Also fetch logs from each related transaction (checkout/return logs use transactionId as entityId)
+                const txnIds = relatedTxns.map(t => t.id);
+                const txnLogPromises = txnIds.map(txnId => storage.getLogsByEntity(txnId));
+                const txnLogsArrays = await Promise.all(txnLogPromises);
+                const allTxnLogs = txnLogsArrays.flat();
+
+                // Filter transaction logs to only those relevant to THIS specific item
+                // Strategy:
+                //   - CHECKOUT logs: always include (they're transaction-wide, and we already know
+                //     these transactions contain this item). These don't mention individual items.
+                //   - RETURN/VERIFY/EDIT logs: filter by unique identifiers (barcode, ID) to
+                //     exclude logs for OTHER items in the same transaction.
+                //   - Use barcode/ID only — NOT item name (shared across variants like ZOOM-1 vs ZOOM-2)
+                const uniqueIds = [item.id, item.barcode].filter(Boolean).map(s => s.toLowerCase());
+                const txnLogs = allTxnLogs.filter(log => {
+                    // CHECKOUT logs are per-transaction ("Checked out X items for Project")
+                    // Since we only fetched logs from transactions containing this item, include them
+                    if (log.action === 'CHECKOUT') return true;
+                    // All other logs: only include if they specifically mention this item
+                    const details = (log.details || '').toLowerCase();
+                    return uniqueIds.some(uid => details.includes(uid));
+                });
+
+                // Merge equipment-level + filtered transaction-level logs, deduplicate by ID, sort by date
+                const allLogsMap = new Map<string, Log>();
+                [...equipmentLogs, ...txnLogs].forEach(log => {
+                    allLogsMap.set(log.id, log);
+                });
+                const mergedLogs = Array.from(allLogsMap.values())
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                setItemLogs(mergedLogs);
+
+                // Find current shoot if item is checked out
+                if (item.status === 'CHECKED_OUT') {
+                    const activeTransaction = relatedTxns.find(t => t.status === 'OPEN');
+                    if (activeTransaction?.shootId) {
+                        const shoot = shoots.find(s => s.id === activeTransaction.shootId) || null;
+                        setCurrentShoot(shoot);
+                    } else {
+                        setCurrentShoot(null);
+                    }
+                } else {
+                    setCurrentShoot(null);
+                }
+            } catch (err) {
+                console.error('Failed to load item history:', err);
+            } finally {
+                setHistoryLoading(false);
+            }
+        };
+        loadHistory();
+    }, [item?.id, item?.status, effectiveDeptId]);
 
     // Check if current user can manage equipment
     const canManage = user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
@@ -493,14 +574,74 @@ export default function ItemDetailsPage() {
                                 </svg>
                                 Current Assignment
                             </h3>
-                            <div className="flex items-center space-x-4">
-                                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg">
-                                    {assignedUser.charAt(0).toUpperCase()}
+                            <div className="space-y-4">
+                                {/* Assigned User */}
+                                <div className="flex items-center space-x-4">
+                                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg">
+                                        {assignedUser.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-foreground">Assigned to {assignedUser}</p>
+                                        {(() => {
+                                            const activeTxn = itemTransactions.find(t => t.status === 'OPEN');
+                                            return activeTxn ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Since {new Date(activeTxn.timestampOut).toLocaleDateString()} • {activeTxn.id}
+                                                </p>
+                                            ) : (
+                                                <p className="text-sm text-muted-foreground">Active</p>
+                                            );
+                                        })()}
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="font-medium text-foreground">Assigned to {assignedUser}</p>
-                                    <p className="text-sm text-muted-foreground">Active since {new Date().toLocaleDateString()}</p>
-                                </div>
+
+                                {/* Linked Shoot Details */}
+                                {currentShoot && (
+                                    <div className="bg-background/80 rounded-xl p-3.5 border border-border/50 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                            <span className="text-sm font-semibold text-foreground">{currentShoot.title}</span>
+                                            {currentShoot.shootNumber && (
+                                                <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">#{currentShoot.shootNumber}</span>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                            {currentShoot.location && (
+                                                <span className="flex items-center gap-1">
+                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                    </svg>
+                                                    {currentShoot.location}
+                                                </span>
+                                            )}
+                                            <span className="flex items-center gap-1">
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                                {new Date(currentShoot.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                {currentShoot.endTime && ` - ${new Date(currentShoot.endTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+                                            </span>
+                                        </div>
+                                        {currentShoot.pocName && (
+                                            <p className="text-xs text-muted-foreground">
+                                                POC: {currentShoot.pocName}{currentShoot.pocContact ? ` • ${currentShoot.pocContact}` : ''}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Transaction Project */}
+                                {(() => {
+                                    const activeTxn = itemTransactions.find(t => t.status === 'OPEN');
+                                    return activeTxn?.project ? (
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <span className="font-medium">Project:</span>
+                                            <span>{activeTxn.project}</span>
+                                        </div>
+                                    ) : null;
+                                })()}
                             </div>
                         </Card>
                     )}
@@ -526,6 +667,164 @@ export default function ItemDetailsPage() {
                         </div>
                     </Card>
                 </div>
+            </div>
+
+            {/* Item History Timeline + Usage Stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-12">
+                {/* Usage Stats */}
+                <Card className="lg:col-span-1">
+                    <h3 className="font-semibold text-lg mb-5 flex items-center gap-2">
+                        <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Usage Stats
+                    </h3>
+                    {historyLoading ? (
+                        <div className="space-y-3">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className="h-12 bg-muted/50 rounded-lg animate-pulse" />
+                            ))}
+                        </div>
+                    ) : (() => {
+                        const totalCheckouts = itemTransactions.length;
+                        const lastTxn = itemTransactions[0];
+                        const lastCheckoutUser = lastTxn ? users.find(u => u.id === lastTxn.userId) : null;
+                        const daysSinceActivity = item.lastActivity
+                            ? Math.floor((Date.now() - new Date(item.lastActivity).getTime()) / (1000 * 60 * 60 * 24))
+                            : null;
+
+                        return (
+                            <dl className="space-y-3">
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm text-muted-foreground">Total Checkouts</dt>
+                                    <dd className="text-lg font-bold text-primary">{totalCheckouts}</dd>
+                                </div>
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm text-muted-foreground">Last User</dt>
+                                    <dd className="text-sm font-medium truncate max-w-[120px]">{lastCheckoutUser?.name || '\u2014'}</dd>
+                                </div>
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm text-muted-foreground">Last Project</dt>
+                                    <dd className="text-sm font-medium truncate max-w-[120px]">{lastTxn?.project || '\u2014'}</dd>
+                                </div>
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm text-muted-foreground">Last Activity</dt>
+                                    <dd className="text-sm font-medium">
+                                        {daysSinceActivity !== null ? (
+                                            daysSinceActivity === 0 ? 'Today' : `${daysSinceActivity}d ago`
+                                        ) : '\u2014'}
+                                    </dd>
+                                </div>
+                            </dl>
+                        );
+                    })()}
+                </Card>
+
+                {/* Item History Timeline */}
+                <Card className="lg:col-span-2">
+                    <div className="flex items-center justify-between mb-5">
+                        <h3 className="font-semibold text-lg flex items-center gap-2">
+                            <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Item History
+                        </h3>
+                        <span className="text-xs text-muted-foreground">{itemLogs.length} events</span>
+                    </div>
+
+                    {historyLoading ? (
+                        <div className="space-y-3">
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <div key={i} className="flex gap-3">
+                                    <div className="w-8 h-8 bg-muted/50 rounded-full animate-pulse shrink-0" />
+                                    <div className="flex-1 space-y-1.5">
+                                        <div className="h-4 bg-muted/50 rounded w-3/4 animate-pulse" />
+                                        <div className="h-3 bg-muted/30 rounded w-1/2 animate-pulse" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : itemLogs.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                            <svg className="w-10 h-10 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p className="text-sm">No activity recorded for this item</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-0">
+                            {(showAllHistory ? itemLogs : itemLogs.slice(0, 8)).map((log, index) => {
+                                const logUser = users.find(u => u.id === log.userId);
+                                const relatedTxn = itemTransactions.find(t => t.id === log.entityId);
+                                const isLast = index === (showAllHistory ? itemLogs.length : Math.min(8, itemLogs.length)) - 1;
+
+                                const getActionIcon = (action: string) => {
+                                    switch (action) {
+                                        case 'CHECKOUT': return { icon: '\u2197', bg: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' };
+                                        case 'RETURN': return { icon: '\u2199', bg: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' };
+                                        case 'VERIFY': return { icon: '\u2713', bg: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' };
+                                        case 'EDIT': return { icon: '\u270e', bg: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' };
+                                        case 'CREATE': return { icon: '+', bg: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' };
+                                        default: return { icon: '\u2022', bg: 'bg-gray-100 dark:bg-gray-800 text-gray-500' };
+                                    }
+                                };
+
+                                const { icon, bg } = getActionIcon(log.action);
+                                const logDate = new Date(log.timestamp);
+
+                                return (
+                                    <div key={log.id} className="flex gap-3 group">
+                                        {/* Timeline line + icon */}
+                                        <div className="flex flex-col items-center">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${bg}`}>
+                                                {icon}
+                                            </div>
+                                            {!isLast && (
+                                                <div className="w-px flex-1 min-h-[16px] bg-border/60" />
+                                            )}
+                                        </div>
+
+                                        {/* Content */}
+                                        <div className={`flex-1 min-w-0 ${!isLast ? 'pb-4' : ''}`}>
+                                            <div className="flex items-baseline gap-2 flex-wrap">
+                                                <span className="text-sm font-semibold text-foreground">
+                                                    {log.action.charAt(0) + log.action.slice(1).toLowerCase()}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    by {logUser?.name || 'System'}
+                                                </span>
+                                            </div>
+                                            {log.details && (
+                                                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">
+                                                    {log.details}
+                                                </p>
+                                            )}
+                                            {relatedTxn?.project && (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded mt-1">
+                                                    🎬 {relatedTxn.project}
+                                                </span>
+                                            )}
+                                            <p className="text-[10px] text-muted-foreground/60 mt-1">
+                                                {logDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                {' \u2022 '}
+                                                {logDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {itemLogs.length > 8 && (
+                                <button
+                                    onClick={() => setShowAllHistory(!showAllHistory)}
+                                    className="w-full mt-3 py-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors text-center"
+                                >
+                                    {showAllHistory ? 'Show Less' : `Show All (${itemLogs.length} events)`}
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </Card>
             </div>
         </div>
     );
