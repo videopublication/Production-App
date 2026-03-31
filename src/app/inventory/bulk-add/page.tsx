@@ -117,12 +117,13 @@ export default function BulkAddPage() {
         }));
     };
 
-    // Normalize model string for barcode (remove spaces, special chars)
+    // Normalize model string for barcode (remove spaces, special chars, limit length)
     const normalizeModel = (model: string): string => {
-        return model.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        return guessModelCode(model).substring(0, 10);
     };
 
     const getPreviewBarcode = (row: BulkRow, rowIndex: number) => {
+        if (!row.company && !row.model && !row.serialNumber) return '';
         // Removed early exit for missing model to allow fallback to serial number
 
         const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
@@ -149,6 +150,7 @@ export default function BulkAddPage() {
     };
 
     const getPreviewName = (row: BulkRow) => {
+        if (!row.company && !row.model && !row.serialNumber) return '';
         if (!row.company && !row.model) return row.category;
         return `${row.company} ${row.model}`.trim();
     };
@@ -203,6 +205,9 @@ export default function BulkAddPage() {
                 // Normalize category (capitalize first letter only)
                 const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
 
+                // Completely empty row detection (after basic category fallback)
+                if (!company && !model && !serialNumber) continue;
+
                 if (serialNumber) {
                     // Check if serial already exists in inventory or in current batch
                     const isDuplicateInInventory = existingItems.some(item => item.serialNumber === serialNumber);
@@ -212,16 +217,16 @@ export default function BulkAddPage() {
                         duplicateSerials.push(`${serialNumber} (${company} ${model})`);
                         continue; // Skip processing this row
                     }
-
-                    newRows.push({
-                        id: uuid(),
-                        category: normalizedCategory,
-                        company,
-                        model,
-                        serialNumber,
-                        location: loc
-                    });
                 }
+
+                newRows.push({
+                    id: uuid(),
+                    category: normalizedCategory,
+                    company,
+                    model,
+                    serialNumber,
+                    location: loc
+                });
             }
 
             if (duplicateSerials.length > 0) {
@@ -231,12 +236,12 @@ export default function BulkAddPage() {
             if (newRows.length > 0) {
                 let currentRows = [...rows];
                 // If only one empty row exists, replace it
-                if (currentRows.length === 1 && !currentRows[0].serialNumber) {
+                if (currentRows.length === 1 && !currentRows[0].company && !currentRows[0].model && !currentRows[0].serialNumber) {
                     currentRows = [];
                 }
                 setRows([...currentRows, ...newRows]);
             } else if (duplicateSerials.length === 0) {
-                alert('No valid rows found in CSV. Make sure each row has: Category, Company, Model, Serial Number, Location');
+                alert('No valid rows found in CSV. Make sure each row has at least Category, Company, or Model.');
             }
         };
         reader.readAsText(file);
@@ -252,8 +257,8 @@ export default function BulkAddPage() {
 
             // Pre-calculate existing counts for each base barcode
             for (const row of rows) {
-                // Modified: Allow rows without model/company if they have serial
-                if (!row.category && !row.serialNumber) continue;
+                // Skip completely empty rows
+                if (!row.company && !row.model && !row.serialNumber) continue;
 
                 const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
                 // Fallback: If no model, use full Serial Number or 'GEN' (Generic)
@@ -269,8 +274,8 @@ export default function BulkAddPage() {
             }
 
             for (const row of rows) {
-                // Modified: Allow rows without model/company if they have serial
-                if (!row.category && !row.serialNumber) continue;
+                // Skip completely empty rows
+                if (!row.company && !row.model && !row.serialNumber) continue;
 
                 const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
                 // Fallback: Use model OR Serial Number for barcode uniqueness
@@ -369,6 +374,21 @@ export default function BulkAddPage() {
                 </div>
             </div>
 
+            {/* Department Confirmation Banner */}
+            <div className={`p-4 rounded-xl border flex items-center gap-3 text-sm ${department ? 'bg-indigo-50/50 border-indigo-100 text-indigo-800 dark:bg-indigo-500/10 dark:border-indigo-500/20 dark:text-indigo-400' : 'bg-primary/5 border-primary/10 text-primary'}`}>
+                <div className="p-2 bg-background/50 rounded-lg shadow-sm border border-border/50 shrink-0">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                </div>
+                <div>
+                    <span className="font-semibold block sm:inline">Import Destination: </span>
+                    <span>Items will be added permanently to </span>
+                    <strong className="font-semibold">{department?.name || 'All Organizations (Super Admin)'}</strong>
+                    <span>. Please verify this is correct before importing.</span>
+                </div>
+            </div>
+
             <div className="bg-secondary/20 border border-border rounded-xl p-3 sm:p-6 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-secondary/50 rounded-lg border border-border/50">
                     <label className="text-xs sm:text-sm font-medium whitespace-nowrap">Default Location:</label>
@@ -407,7 +427,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-2 py-1.5 outline-none"
                                             value={row.category}
                                             onChange={(e) => updateRow(row.id, { category: e.target.value })}
-                                            placeholder="Camera"
+                                            placeholder="e.g. Camera"
                                         />
                                     </td>
                                     <td className="py-2 px-2">
@@ -415,7 +435,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-2 py-1.5 outline-none"
                                             value={row.company}
                                             onChange={(e) => updateRow(row.id, { company: e.target.value })}
-                                            placeholder="SONY"
+                                            placeholder="e.g. Sony"
                                         />
                                     </td>
                                     <td className="py-2 px-2">
@@ -423,7 +443,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-2 py-1.5 outline-none"
                                             value={row.model}
                                             onChange={(e) => updateRow(row.id, { model: e.target.value })}
-                                            placeholder="A7S3"
+                                            placeholder="e.g. A7S3"
                                         />
                                     </td>
                                     <td className="py-2 px-2">
@@ -431,7 +451,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-2 py-1.5 outline-none font-mono text-xs"
                                             value={row.serialNumber}
                                             onChange={(e) => updateRow(row.id, { serialNumber: e.target.value })}
-                                            placeholder="5777780"
+                                            placeholder="e.g. 5777780"
                                         />
                                     </td>
                                     <td className="py-2 px-2">
@@ -451,6 +471,7 @@ export default function BulkAddPage() {
                                                     {getPreviewBarcode(row, index)}
                                                 </span>
                                             )}
+                                            {(!getPreviewBarcode(row, index)) && <span className="text-xs text-muted-foreground italic">Enter details...</span>}
                                         </div>
                                     </td>
                                     <td className="py-2 px-2 text-right">
@@ -484,7 +505,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-3 py-2 outline-none text-sm"
                                             value={row.category}
                                             onChange={(e) => updateRow(row.id, { category: e.target.value })}
-                                            placeholder="Camera"
+                                            placeholder="e.g. Camera"
                                         />
                                     </div>
                                     <div>
@@ -493,7 +514,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-3 py-2 outline-none text-sm"
                                             value={row.company}
                                             onChange={(e) => updateRow(row.id, { company: e.target.value })}
-                                            placeholder="SONY"
+                                            placeholder="e.g. Sony"
                                         />
                                     </div>
                                 </div>
@@ -505,7 +526,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-3 py-2 outline-none text-sm"
                                             value={row.model}
                                             onChange={(e) => updateRow(row.id, { model: e.target.value })}
-                                            placeholder="A7S3"
+                                            placeholder="e.g. A7S3"
                                         />
                                     </div>
                                     <div>
@@ -514,7 +535,7 @@ export default function BulkAddPage() {
                                             className="w-full bg-background border border-border rounded px-3 py-2 outline-none font-mono text-xs"
                                             value={row.serialNumber}
                                             onChange={(e) => updateRow(row.id, { serialNumber: e.target.value })}
-                                            placeholder="5777780"
+                                            placeholder="e.g. 5777780"
                                         />
                                     </div>
                                 </div>
@@ -553,7 +574,7 @@ export default function BulkAddPage() {
                         <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                             Total: <span className="font-medium text-foreground">{rows.length}</span> items
                         </div>
-                        <Button onClick={handleSave} disabled={saving || rows.some(r => !r.serialNumber)} size="sm" className="flex-1 sm:flex-none">
+                        <Button onClick={handleSave} disabled={saving || rows.every(r => !r.company && !r.model && !r.serialNumber)} size="sm" className="flex-1 sm:flex-none">
                             {saving ? 'Saving...' : 'Import All'}
                         </Button>
                     </div>

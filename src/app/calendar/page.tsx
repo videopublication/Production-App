@@ -74,7 +74,7 @@ export default function CalendarPage() {
     };
 
     const [currentMonth, setCurrentMonth] = useState(new Date());
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
     const [selectedShoot, setSelectedShoot] = useState<Shoot | null>(null);
     const [crewFilter, setCrewFilter] = useState<string>('ALL');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -225,7 +225,7 @@ export default function CalendarPage() {
 
     return (
         <PullToRefresh onRefresh={handleRefresh}>
-            <div className="p-2 sm:p-6 space-y-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)]">
+            <div className="p-2 sm:p-6 space-y-6 w-full max-w-[1800px] mx-auto min-h-[calc(100vh-80px)]">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2 sm:px-0">
                     <div>
@@ -318,9 +318,9 @@ export default function CalendarPage() {
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 xl:grid-cols-4 lg:grid-cols-3 gap-6">
                     {/* Calendar */}
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-2 xl:col-span-3">
                         <div className="rounded-2xl shadow-sm overflow-hidden bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
                             {/* Calendar Header */}
                             <div className="px-3 sm:px-6 py-4 flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">

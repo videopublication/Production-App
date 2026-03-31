@@ -429,7 +429,7 @@ export default function UserManagementPage() {
 
     // --- Loading ---
     if (isLoading) return (
-        <div className="max-w-5xl mx-auto p-8">
+        <div className="max-w-[1400px] xl:max-w-[1600px] mx-auto p-8">
             <div className="animate-pulse space-y-4">
                 <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded-xl w-48" />
                 <div className="h-12 bg-gray-200 dark:bg-gray-800 rounded-xl" />
@@ -439,7 +439,7 @@ export default function UserManagementPage() {
     );
 
     return (
-        <div className="max-w-5xl mx-auto animate-fade-in">
+        <div className="max-w-[1400px] xl:max-w-[1600px] mx-auto animate-fade-in">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
@@ -542,6 +542,9 @@ export default function UserManagementPage() {
                         <button className="flex items-center gap-1 w-[140px] hover:text-gray-700 dark:hover:text-gray-200 transition-colors" onClick={() => handleSort('department')}>
                             Department <SortIcon active={sortKey === 'department'} dir={sortKey === 'department' ? sortDir : 'asc'} />
                         </button>
+                        <div className="hidden lg:block w-[340px] shrink-0 text-right pr-2">
+                            Actions
+                        </div>
                     </div>
 
                     {filteredUsers.length === 0 ? (
@@ -563,37 +566,39 @@ export default function UserManagementPage() {
                                     key={u.id}
                                     className={`p-4 sm:px-5 sm:py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${processingIds.has(u.id) ? 'opacity-60 pointer-events-none' : ''}`}
                                 >
-                                    {/* Desktop Layout - Info Row */}
-                                    <div className="hidden sm:flex items-center">
-                                        {/* Name + Avatar */}
-                                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-md ${avatarGradient(u.role)}`}>
-                                                {u.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{u.name}</span>
-                                                    {user?.id === u.id && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[9px] font-bold rounded-full shrink-0">YOU</span>}
+                                    {/* Desktop Layout */}
+                                    <div className="hidden sm:flex flex-col lg:flex-row lg:items-center justify-between">
+                                        <div className="flex items-center flex-1 min-w-0">
+                                            {/* Name + Avatar */}
+                                            <div className="flex items-center gap-3 min-w-0 flex-1 pr-4">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-md ${avatarGradient(u.role)}`}>
+                                                    {u.name.charAt(0).toUpperCase()}
                                                 </div>
-                                                <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{u.name}</span>
+                                                        {user?.id === u.id && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[9px] font-bold rounded-full shrink-0">YOU</span>}
+                                                    </div>
+                                                    <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Role */}
+                                            <div className="w-[120px] shrink-0">{roleBadge(u.role)}</div>
+
+                                            {/* Status */}
+                                            <div className="w-[110px] shrink-0">{statusBadge(u.status)}</div>
+
+                                            {/* Department */}
+                                            <div className="w-[140px] shrink-0 text-xs text-gray-600 dark:text-gray-300 font-medium truncate">
+                                                {getDeptName(u.departmentId)}
                                             </div>
                                         </div>
 
-                                        {/* Role */}
-                                        <div className="w-[120px] shrink-0">{roleBadge(u.role)}</div>
-
-                                        {/* Status */}
-                                        <div className="w-[110px] shrink-0">{statusBadge(u.status)}</div>
-
-                                        {/* Department */}
-                                        <div className="w-[140px] shrink-0 text-xs text-gray-600 dark:text-gray-300 font-medium truncate">
-                                            {getDeptName(u.departmentId)}
-                                        </div>
-                                    </div>
-
-                                    {/* Desktop Layout - Actions Row */}
-                                    {user?.id !== u.id && (
-                                        <div className="hidden sm:flex items-center gap-2 mt-2.5 ml-[52px]">
+                                        {/* Actions Row */}
+                                        <div className="hidden sm:flex items-center gap-2 mt-3 ml-[52px] lg:mt-0 lg:ml-4 lg:w-[340px] lg:justify-end shrink-0">
+                                        {user?.id !== u.id ? (
+                                            <>
                                             {/* Role Changer */}
                                             <select
                                                 className="bg-gray-100 dark:bg-gray-800 border-0 rounded-lg px-2.5 py-1.5 text-xs font-medium cursor-pointer focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300"
@@ -647,19 +652,16 @@ export default function UserManagementPage() {
                                             >
                                                 {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
                                             </button>
-                                        </div>
-                                    )}
-
-                                    {/* Desktop - Password only for own row */}
-                                    {user?.id === u.id && (
-                                        <div className="hidden sm:flex items-center gap-2 mt-2.5 ml-[52px]">
+                                            </>
+                                        ) : (
                                             <button onClick={() => openPasswordModal(u)} className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors" title="Change Password">
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
                                                 </svg>
                                             </button>
+                                        )}
                                         </div>
-                                    )}
+                                    </div>
 
                                     {/* Mobile Layout */}
                                     <div className="sm:hidden space-y-3">

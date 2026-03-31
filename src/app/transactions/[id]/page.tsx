@@ -942,17 +942,12 @@ export default function TransactionDetailPage() {
                             const item = getItemDetails(itemId);
                             if (!item) return null;
 
-                            // For CLOSED transactions: all items were returned (that's why it closed).
-                            // Don't read the equipment's current global status — it may have been
-                            // re-checked-out for a different shoot, causing false "Checked Out" badges.
                             const isTxnClosed = transaction.status === 'CLOSED';
                             const hasReturnRecord = transaction.postReturnConditions?.[itemId] !== undefined;
 
-                            // Status determination is transaction-context-aware
-                            const isCheckedOut = !isTxnClosed && item.status === 'CHECKED_OUT';
-                            const isPendingVerification = !isTxnClosed && item.status === 'PENDING_VERIFICATION';
-                            const isReturnedExternally = !isTxnClosed && !isCheckedOut && !isPendingVerification && !hasReturnRecord;
+                            // Status determination is strictly transaction-context-aware
                             const isReturned = isTxnClosed || hasReturnRecord;
+                            const isCheckedOut = !isReturned;
 
                             const isSelected = selectedItems.has(itemId);
                             const canSelect = isCheckedOut && transaction.status === 'OPEN';
@@ -1013,16 +1008,11 @@ export default function TransactionDetailPage() {
                                     {/* Bottom Row - Status + Actions (hide in selection mode) */}
                                     {!selectionMode && (
                                         <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/50">
-                                            {/* Status Badge */}
                                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isCheckedOut
                                                 ? 'bg-orange-500 text-white'
-                                                : isPendingVerification
-                                                    ? 'bg-blue-500 text-white'
-                                                    : isReturnedExternally
-                                                        ? 'bg-gray-400 text-white'
-                                                        : 'bg-green-500 text-white'
+                                                : 'bg-green-500 text-white'
                                                 }`}>
-                                                {isCheckedOut ? 'Checked Out' : isPendingVerification ? 'Pending Verify' : isReturnedExternally ? 'Returned (Crew)' : 'Returned'}
+                                                {isCheckedOut ? 'Checked Out' : 'Returned'}
                                             </span>
 
                                             {/* Actions */}

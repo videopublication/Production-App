@@ -135,9 +135,9 @@ export const Navbar = () => {
                                         onChange={(e) => switchDepartment(e.target.value || null)}
                                         title="Switch Department Context"
                                     >
-                                        <option value="">Global Overview</option>
+                                        <option value="" className="bg-background text-foreground">Global Overview</option>
                                         {allDepartments.map(dept => (
-                                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                            <option key={dept.id} value={dept.id} className="bg-background text-foreground">{dept.name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -260,9 +260,9 @@ export const Navbar = () => {
                                             setIsMobileMenuOpen(false);
                                         }}
                                     >
-                                        <option value="">Global Overview</option>
+                                        <option value="" className="bg-background text-foreground">Global Overview</option>
                                         {allDepartments.map(dept => (
-                                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                            <option key={dept.id} value={dept.id} className="bg-background text-foreground">{dept.name}</option>
                                         ))}
                                     </select>
                                 </div>

@@ -87,9 +87,9 @@ export const Header = () => {
                             value={department?.id || ''}
                             onChange={(e) => switchDepartment(e.target.value || null)}
                         >
-                            <option value="">Global Overview</option>
+                            <option value="" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">Global Overview</option>
                             {allDepartments.map(dept => (
-                                <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                <option key={dept.id} value={dept.id} className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">{dept.name}</option>
                             ))}
                         </select>
                     </div>

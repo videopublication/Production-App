@@ -236,7 +236,7 @@ export default function ShootDetailsPage() {
     }
 
     return (
-        <div className="max-w-5xl mx-auto space-y-4 animate-fade-in pb-12 p-3 sm:p-5">
+        <div className="max-w-[1400px] xl:max-w-[1600px] mx-auto w-full space-y-4 animate-fade-in pb-12 p-3 sm:p-5 sm:space-y-6">
             {/* Navigation & Header */}
             <div className="flex flex-col gap-4">
                 {/* Title Section */}

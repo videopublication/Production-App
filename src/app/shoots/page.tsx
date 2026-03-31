@@ -221,7 +221,7 @@ export default function ShootList() {
 
     return (
         <PullToRefresh onRefresh={handleRefresh}>
-            <div className="px-1 py-2 sm:p-6 space-y-3 sm:space-y-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)]">
+            <div className="px-1 py-2 sm:p-6 space-y-3 sm:space-y-6 max-w-[1400px] xl:max-w-[1600px] mx-auto w-full min-h-[calc(100vh-80px)] animate-fade-in">
                 {/* Header */}
                 <div className="flex items-center justify-between gap-4 px-2 sm:px-0">
                     <div>
@@ -569,7 +569,7 @@ export default function ShootList() {
                     </div>
                 ) : viewMode === 'card' ? (
                     /* Card View */
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-5">
                         {sortedShoots.map(shoot => {
                             const statusStyle = getStatusStyle(shoot.status);
                             const crewCount = getCrewCount(shoot.id);
@@ -810,14 +810,14 @@ export default function ShootList() {
                                             }`}
                                     >
                                         {/* Shoot Info */}
-                                        <div className="col-span-4 min-w-0">
-                                            <div className="flex items-center gap-2">
+                                        <div className="col-span-4 min-w-0 pr-4">
+                                            <div className="flex items-start gap-2">
                                                 {shoot.shootNumber && (
-                                                    <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded tracking-wide shrink-0">
+                                                    <span className="mt-0.5 text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded tracking-wide shrink-0">
                                                         #{shoot.shootNumber}
                                                     </span>
                                                 )}
-                                                <h4 className="font-semibold truncate hover:text-blue-600 dark:hover:text-blue-400 text-gray-900 dark:text-white">
+                                                <h4 className="font-semibold line-clamp-2 hover:text-blue-600 dark:hover:text-blue-400 text-gray-900 dark:text-white leading-snug">
                                                     {shoot.title}
                                                 </h4>
                                                 {shoot.googleEventId && (

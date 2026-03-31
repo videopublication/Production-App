@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { Equipment, EquipmentStatus } from '@/types';
 import { Card } from '@/components/Card';
@@ -20,7 +20,31 @@ import { useUsers } from '@/hooks/useUsers';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useDepartment } from '@/lib/department-context';
 
-export default function InventoryPage() {
+const InlineInput = ({ value, onChange, placeholder }: { value: string, onChange: (v: string) => void, placeholder?: string }) => {
+    const [val, setVal] = useState(value);
+    useEffect(() => { setVal(value); }, [value]);
+    
+    return (
+        <input
+            type="text"
+            value={val || ''}
+            placeholder={placeholder}
+            onChange={(e) => setVal(e.target.value)}
+            onBlur={() => {
+                if (val !== value) onChange(val);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                }
+            }}
+            className="w-full bg-background border border-border/50 hover:border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+        />
+    );
+};
+
+function InventoryPageContent() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
@@ -123,7 +147,14 @@ export default function InventoryPage() {
 
     // ... (rest of component state) ...
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL'>('ALL');
+    const searchParams = useSearchParams();
+    const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL' | 'NEEDS_ATTENTION'>(() => {
+        const statusParam = searchParams.get('status');
+        if (statusParam && ['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'].includes(statusParam)) {
+            return statusParam as EquipmentStatus | 'ALL' | 'NEEDS_ATTENTION';
+        }
+        return 'ALL';
+    });
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
         if (typeof window !== 'undefined') {
             return (sessionStorage.getItem('inventoryViewMode') as 'grid' | 'list') || 'grid';
@@ -135,6 +166,19 @@ export default function InventoryPage() {
     const [isGeneratingQR, setIsGeneratingQR] = useState(false);
     // Local loading state for non-query async actions if needed, though query handles most
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [isBulkEditMode, setIsBulkEditMode] = useState(false);
+    const [editDrafts, setEditDrafts] = useState<Record<string, Partial<Equipment>>>({});
+    const [isSavingDrafts, setIsSavingDrafts] = useState(false);
+
+    const handleDraftChange = (id: string, field: keyof Equipment, value: string) => {
+        setEditDrafts(prev => ({
+            ...prev,
+            [id]: {
+                ...prev[id],
+                [field]: value
+            }
+        }));
+    };
 
     useEffect(() => {
         sessionStorage.setItem('inventoryViewMode', viewMode);
@@ -188,7 +232,11 @@ export default function InventoryPage() {
         }
 
         if (statusFilter !== 'ALL') {
-            result = result.filter(item => item.status === statusFilter);
+            if (statusFilter === 'NEEDS_ATTENTION') {
+                result = result.filter(item => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(item.status));
+            } else {
+                result = result.filter(item => item.status === statusFilter);
+            }
         }
 
         if (sortConfig) {
@@ -517,7 +565,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="w-full overflow-hidden -mx-3 px-3">
                     <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'MAINTENANCE'] as const).map((status) => (
+                        {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
                             <button
                                 key={status}
                                 onClick={() => setStatusFilter(status)}
@@ -525,8 +573,9 @@ export default function InventoryPage() {
                                     ? 'bg-[#1d1d1f] text-white dark:bg-white dark:text-black'
                                     : 'bg-transparent text-[#86868b] hover:bg-[#e8e8ed] hover:text-[#1d1d1f] dark:hover:bg-[#2c2c2e] dark:hover:text-white'
                                     }`}
+                                style={{ WebkitTapHighlightColor: 'transparent' }}
                             >
-                                {status === 'ALL' ? 'All' : status === 'PENDING_VERIFICATION' ? 'Pending' : status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                                {status === 'ALL' ? 'All' : status === 'NEEDS_ATTENTION' ? 'Needs Attention' : status === 'PENDING_VERIFICATION' ? 'Pending' : status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
                             </button>
                         ))}
                     </div>
@@ -534,7 +583,7 @@ export default function InventoryPage() {
             </div>
 
             {viewMode === 'list' && (
-                <div className="flex items-center justify-between bg-secondary/30 rounded-lg px-4 py-2 border border-border">
+                <div className="flex items-center justify-between bg-secondary/30 rounded-lg px-4 py-2 border border-border flex-wrap gap-3">
                     <div className="flex items-center gap-3">
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input
@@ -548,48 +597,128 @@ export default function InventoryPage() {
                             </span>
                         </label>
                     </div>
-                    {selectedItems.size > 0 && (
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleBulkDownloadQR('standard')}
-                                disabled={isGeneratingQR}
-                                className="gap-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                </svg>
-                                Standard QR
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleBulkDownloadQR('small')}
-                                disabled={isGeneratingQR}
-                                className="gap-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Small QR
-                            </Button>
-                            {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '') && (
+                            <>
+                                {isBulkEditMode ? (
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                setEditDrafts({});
+                                                setIsBulkEditMode(false);
+                                            }}
+                                            className="gap-2 text-muted-foreground"
+                                            disabled={isSavingDrafts}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            onClick={async () => {
+                                                const draftIds = Object.keys(editDrafts);
+                                                if (draftIds.length === 0) {
+                                                    setIsBulkEditMode(false);
+                                                    return;
+                                                }
+                                                setIsSavingDrafts(true);
+                                                let hasError = false;
+                                                for (const id of draftIds) {
+                                                    try {
+                                                        await updateEquipment({ id, updates: editDrafts[id] });
+                                                    } catch (error) {
+                                                        console.error(`Update failed for ${id}:`, error);
+                                                        hasError = true;
+                                                    }
+                                                }
+                                                setIsSavingDrafts(false);
+                                                if (hasError) {
+                                                    showToast('Some updates failed', 'error');
+                                                } else {
+                                                    showToast('All changes saved successfully', 'success');
+                                                    setEditDrafts({});
+                                                    setIsBulkEditMode(false);
+                                                    refresh();
+                                                }
+                                            }}
+                                            className="gap-2"
+                                            disabled={isSavingDrafts}
+                                        >
+                                            {isSavingDrafts ? (
+                                                <>
+                                                    <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    Save Changes
+                                                </>
+                                            )}
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => setIsBulkEditMode(true)}
+                                        className="gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                        Bulk Edit
+                                    </Button>
+                                )}
+                            </>
+                        )}
+                        {selectedItems.size > 0 && (
+                            <>
                                 <Button
-                                    variant="danger"
+                                    variant="secondary"
                                     size="sm"
-                                    onClick={handleBulkDelete}
-                                    disabled={isActionLoading}
+                                    onClick={() => handleBulkDownloadQR('standard')}
+                                    disabled={isGeneratingQR}
                                     className="gap-2"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                                     </svg>
-                                    Delete
+                                    Standard QR
                                 </Button>
-                            )}
-                        </div>
-                    )}
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleBulkDownloadQR('small')}
+                                    disabled={isGeneratingQR}
+                                    className="gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Small QR
+                                </Button>
+                                {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                    <Button
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={handleBulkDelete}
+                                        disabled={isActionLoading}
+                                        className="gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete
+                                    </Button>
+                                )}
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -701,8 +830,12 @@ export default function InventoryPage() {
                                         filteredItems.map((item) => (
                                             <tr
                                                 key={item.id}
-                                                onClick={() => router.push(`/inventory/${item.barcode}`)}
-                                                className={`border-b border-border hover:bg-secondary/50 transition-colors cursor-pointer ${selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
+                                                onClick={() => {
+                                                    if (!isBulkEditMode) {
+                                                        router.push(`/inventory/${item.barcode}`);
+                                                    }
+                                                }}
+                                                className={`border-b border-border transition-colors ${!isBulkEditMode && 'cursor-pointer hover:bg-secondary/50'} ${selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
                                             >
                                                 <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                                                     <input
@@ -713,11 +846,32 @@ export default function InventoryPage() {
                                                     />
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <div className="font-medium text-foreground">{item.name}</div>
-                                                    {item.serialNumber && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.serialNumber}</div>}
+                                                    {isBulkEditMode ? (
+                                                        <div className="flex flex-col gap-1 w-48">
+                                                            <InlineInput value={editDrafts[item.id]?.name ?? item.name} onChange={(val) => handleDraftChange(item.id, 'name', val)} placeholder="Name" />
+                                                            <InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N (Optional)" />
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="font-medium text-foreground">{item.name}</div>
+                                                            {item.serialNumber && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.serialNumber}</div>}
+                                                        </>
+                                                    )}
                                                 </td>
-                                                <td className="px-6 py-4 text-muted-foreground">{item.category}</td>
-                                                <td className="px-6 py-4 font-mono text-muted-foreground">{item.barcode}</td>
+                                                <td className="px-6 py-4 text-muted-foreground">
+                                                    {isBulkEditMode ? (
+                                                        <div className="w-32">
+                                                            <InlineInput value={editDrafts[item.id]?.category ?? item.category} onChange={(val) => handleDraftChange(item.id, 'category', val)} placeholder="Category" />
+                                                        </div>
+                                                    ) : item.category}
+                                                </td>
+                                                <td className="px-6 py-4 font-mono text-muted-foreground">
+                                                    {isBulkEditMode ? (
+                                                        <div className="w-32">
+                                                            <InlineInput value={editDrafts[item.id]?.barcode ?? item.barcode} onChange={(val) => handleDraftChange(item.id, 'barcode', val)} placeholder="Barcode" />
+                                                        </div>
+                                                    ) : item.barcode}
+                                                </td>
                                                 <td className="px-6 py-4">
                                                     <Badge variant={getStatusVariant(item.status)}>
                                                         {item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
@@ -768,5 +922,17 @@ export default function InventoryPage() {
                 )}
             </PullToRefresh>
         </div>
+    );
+}
+
+export default function InventoryPage() {
+    return (
+        <React.Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <InventoryPageContent />
+        </React.Suspense>
     );
 }

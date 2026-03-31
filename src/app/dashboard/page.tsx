@@ -375,7 +375,10 @@ export default function DashboardPage() {
                     <h2 className="text-sm font-semibold text-[#86868b] dark:text-gray-400 uppercase tracking-wider mb-4">Inventory Overview</h2>
                     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
                         {/* Available */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-900/10 border border-emerald-200/50 dark:border-emerald-900/30">
+                        <div 
+                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-900/10 border border-emerald-200/50 dark:border-emerald-900/30 cursor-pointer hover:border-emerald-300 transition-colors"
+                            onClick={() => router.push('/inventory?status=AVAILABLE')}
+                        >
                             <div className="flex items-center justify-between mb-3">
                                 <div className="w-10 h-10 rounded-xl bg-emerald-500 shadow-lg shadow-emerald-500/30 flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -388,7 +391,10 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Checked Out */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-200/50 dark:border-blue-900/30">
+                        <div 
+                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-200/50 dark:border-blue-900/30 cursor-pointer hover:border-blue-300 transition-colors"
+                            onClick={() => router.push('/inventory?status=CHECKED_OUT')}
+                        >
                             <div className="flex items-center justify-between mb-3">
                                 <div className="w-10 h-10 rounded-xl bg-blue-500 shadow-lg shadow-blue-500/30 flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -422,13 +428,21 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Attention */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-900/20 dark:to-red-900/10 border border-red-200/50 dark:border-red-900/30">
+                        <div 
+                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-900/20 dark:to-red-900/10 border border-red-200/50 dark:border-red-900/30 cursor-pointer hover:border-red-300 transition-colors"
+                            onClick={() => router.push('/inventory?status=NEEDS_ATTENTION')}
+                        >
                             <div className="flex items-center justify-between mb-3">
                                 <div className="w-10 h-10 rounded-xl bg-red-500 shadow-lg shadow-red-500/30 flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                     </svg>
                                 </div>
+                                {stats.attention > 0 && (
+                                    <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                                        Action
+                                    </span>
+                                )}
                             </div>
                             <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-red-50">{stats.attention}</p>
                             <p className="text-sm text-[#86868b] dark:text-red-400/80 mt-1">Needs Attention</p>
