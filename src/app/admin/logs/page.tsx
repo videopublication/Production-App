@@ -91,7 +91,7 @@ export default function AdminLogsPage() {
     const getUserName = (userId?: string) => {
         if (!userId) return 'System / Guest';
         const found = users.find(u => u.id === userId);
-        return found ? found.name : 'Unknown User';
+        return found?.name || found?.email || 'Unknown User';
     };
 
     // Filtering is now done server-side via the action parameter in getLogs.

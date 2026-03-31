@@ -6,6 +6,7 @@ import { storage } from '@/lib/storage';
 import { Equipment } from '@/types';
 import { Button } from '@/components/Button';
 import { downloadFile } from '@/lib/download';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
 
@@ -248,8 +249,15 @@ export default function BulkAddPage() {
         if (e.target) e.target.value = '';
     };
 
+    const queryClient = useQueryClient();
     const handleSave = async () => {
         if (saving) return;
+        
+        if (!effectiveDeptId) {
+            alert('Please select a specific department from the top dropdown before importing items. Cannot import to "All Organizations".');
+            return;
+        }
+
         setSaving(true);
         try {
             const newEquipment: Equipment[] = [];
@@ -325,6 +333,9 @@ export default function BulkAddPage() {
                 });
             }
 
+            // Invalidate React Query cache so new items show up in the inventory page
+            queryClient.invalidateQueries({ queryKey: ['equipment'] });
+
             router.push('/inventory');
             router.refresh();
         } catch (error) {
@@ -382,10 +393,16 @@ export default function BulkAddPage() {
                     </svg>
                 </div>
                 <div>
-                    <span className="font-semibold block sm:inline">Import Destination: </span>
-                    <span>Items will be added permanently to </span>
-                    <strong className="font-semibold">{department?.name || 'All Organizations (Super Admin)'}</strong>
-                    <span>. Please verify this is correct before importing.</span>
+                    <span className="font-semibold block sm:inline">{!effectiveDeptId ? "Error: " : "Import Destination: "}</span>
+                    {!effectiveDeptId ? (
+                        <span className="text-red-600 dark:text-red-400 font-medium">Please select a specific department from the top Navigation Bar. Cannot import to "All Organizations".</span>
+                    ) : (
+                        <>
+                            <span>Items will be added permanently to </span>
+                            <strong className="font-semibold">{department?.name}</strong>
+                            <span>. Please verify this is correct before importing.</span>
+                        </>
+                    )}
                 </div>
             </div>
 

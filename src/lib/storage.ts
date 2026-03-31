@@ -123,7 +123,7 @@ class StorageService {
             serial_number: item.serialNumber,
             assigned_to: item.assignedTo,
             last_activity: item.lastActivity,
-            department_id: item.departmentId
+            department_id: item.departmentId || null
         }));
 
         // Use the admin API route to bypass RLS for bulk upsert
