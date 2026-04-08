@@ -74,9 +74,7 @@ export default function BulkAddPage() {
     const [defaultLocation, setDefaultLocation] = useState('Suryakund Office');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [rows, setRows] = useState<BulkRow[]>([
-        { id: uuid(), category: 'Camera', company: '', model: '', serialNumber: '', location: 'Suryakund Office' }
-    ]);
+    const [rows, setRows] = useState<BulkRow[]>([]);
 
     useEffect(() => {
         const loadItems = async () => {
@@ -104,9 +102,7 @@ export default function BulkAddPage() {
     };
 
     const removeRow = (id: string) => {
-        if (rows.length > 1) {
-            setRows(rows.filter(r => r.id !== id));
-        }
+        setRows(rows.filter(r => r.id !== id));
     };
 
     const updateRow = (id: string, updates: Partial<BulkRow>) => {
@@ -124,10 +120,9 @@ export default function BulkAddPage() {
     };
 
     const getPreviewBarcode = (row: BulkRow, rowIndex: number) => {
-        if (!row.company && !row.model && !row.serialNumber) return '';
-        // Removed early exit for missing model to allow fallback to serial number
+        if (!row.category && !row.company && !row.model && !row.serialNumber) return '';
 
-        const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
+        const prefix = CATEGORY_PREFIXES[row.category] || (row.category ? row.category.substring(0, 3).toUpperCase() : 'ITM');
         const normalizedModel = normalizeModel(row.model || row.serialNumber || 'GEN');
         const baseBarcode = `${prefix}-${normalizedModel}`;
 
@@ -140,8 +135,8 @@ export default function BulkAddPage() {
         let pendingCount = 0;
         for (let i = 0; i < rowIndex; i++) {
             const prevRow = rows[i];
-            const prevPrefix = CATEGORY_PREFIXES[prevRow.category] || prevRow.category.substring(0, 3).toUpperCase() || 'ITEM';
-            const prevNormalizedModel = prevRow.model ? normalizeModel(prevRow.model) : (prevRow.serialNumber ? normalizeModel(prevRow.serialNumber) : 'UNKNOWN');
+            const prevPrefix = CATEGORY_PREFIXES[prevRow.category] || (prevRow.category ? prevRow.category.substring(0, 3).toUpperCase() : 'ITM');
+            const prevNormalizedModel = prevRow.model ? normalizeModel(prevRow.model) : (prevRow.serialNumber ? normalizeModel(prevRow.serialNumber) : 'GEN');
             const prevBase = `${prevPrefix}-${prevNormalizedModel}`;
             if (prevBase === baseBarcode) pendingCount++;
         }
@@ -151,8 +146,8 @@ export default function BulkAddPage() {
     };
 
     const getPreviewName = (row: BulkRow) => {
-        if (!row.company && !row.model && !row.serialNumber) return '';
-        if (!row.company && !row.model) return row.category;
+        if (!row.category && !row.company && !row.model && !row.serialNumber) return '';
+        if (!row.company && !row.model) return row.category || 'Unknown Item';
         return `${row.company} ${row.model}`.trim();
     };
 
@@ -194,20 +189,19 @@ export default function BulkAddPage() {
 
                 // Allow comma separation (simple split)
                 const cols = line.split(',');
-                if (cols.length < 4) continue; // Skip invalid rows (need at least category, company, model, serial)
-
-                // New format: MATERIAL CATEGORY, COMPANY, MODEL, SERIAL NUMBER, Location
-                const category = cols[0]?.trim() || 'Camera';
+                // Extract without defaults first to detect completely empty rows
+                const categoryRaw = cols[0]?.trim() || '';
                 const company = cols[1]?.trim() || '';
                 const model = cols[2]?.trim() || '';
                 const serialNumber = cols[3]?.trim() || '';
                 const loc = cols[4]?.trim() || defaultLocation;
 
-                // Normalize category (capitalize first letter only)
-                const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+                // Completely empty row detection from CSV
+                if (!categoryRaw && !company && !model && !serialNumber) continue;
 
-                // Completely empty row detection (after basic category fallback)
-                if (!company && !model && !serialNumber) continue;
+                // Apply defaults and normalizations
+                const category = categoryRaw || 'Camera';
+                const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
 
                 if (serialNumber) {
                     // Check if serial already exists in inventory or in current batch
@@ -235,12 +229,8 @@ export default function BulkAddPage() {
             }
 
             if (newRows.length > 0) {
-                let currentRows = [...rows];
-                // If only one empty row exists, replace it
-                if (currentRows.length === 1 && !currentRows[0].company && !currentRows[0].model && !currentRows[0].serialNumber) {
-                    currentRows = [];
-                }
-                setRows([...currentRows, ...newRows]);
+                // Simply append new rows from CSV
+                setRows([...rows, ...newRows]);
             } else if (duplicateSerials.length === 0) {
                 alert('No valid rows found in CSV. Make sure each row has at least Category, Company, or Model.');
             }
@@ -266,9 +256,9 @@ export default function BulkAddPage() {
             // Pre-calculate existing counts for each base barcode
             for (const row of rows) {
                 // Skip completely empty rows
-                if (!row.company && !row.model && !row.serialNumber) continue;
+                if (!row.category && !row.company && !row.model && !row.serialNumber) continue;
 
-                const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
+                const prefix = CATEGORY_PREFIXES[row.category] || (row.category ? row.category.substring(0, 3).toUpperCase() : 'ITM');
                 // Fallback: If no model, use full Serial Number or 'GEN' (Generic)
                 // We use the full serial to ensure each item gets its own unique base barcode (1-to-1)
                 const modelStr = row.model || row.serialNumber || 'GEN';
@@ -283,9 +273,9 @@ export default function BulkAddPage() {
 
             for (const row of rows) {
                 // Skip completely empty rows
-                if (!row.company && !row.model && !row.serialNumber) continue;
+                if (!row.category && !row.company && !row.model && !row.serialNumber) continue;
 
-                const prefix = CATEGORY_PREFIXES[row.category] || row.category.substring(0, 3).toUpperCase() || 'ITEM';
+                const prefix = CATEGORY_PREFIXES[row.category] || (row.category ? row.category.substring(0, 3).toUpperCase() : 'ITM');
                 // Fallback: Use model OR Serial Number for barcode uniqueness
                 const modelStr = row.model || row.serialNumber || 'GEN';
                 const normalizedModel = normalizeModel(modelStr);

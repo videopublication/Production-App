@@ -176,7 +176,7 @@ export default function LeavesPage() {
 
             // Find the applicant's name for better log messages
             const applicant = users.find(u => u.id === applicantId);
-            const applicantName = applicant?.name || 'Unknown User';
+            const applicantName = applicant?.name || applicant?.email || 'Unknown User';
 
             // OPTIMIZATION: Fire side effects in parallel without blocking the UI
             Promise.all([
@@ -388,7 +388,7 @@ export default function LeavesPage() {
                                                     </div>
                                                     <div>
                                                         <span className="font-semibold text-gray-900 dark:text-white block sm:inline">
-                                                            {employee?.name || 'Unknown Employee'}
+                                                            {employee?.name || employee?.email || 'Unknown Employee'}
                                                         </span>
                                                         <span className="text-xs text-gray-500 ml-0 sm:ml-2">Applied on {format(parseISO(leave.createdAt || new Date().toISOString()), 'MMM d, yyyy')}</span>
                                                     </div>
@@ -411,7 +411,7 @@ export default function LeavesPage() {
                                             {leave.status !== 'PENDING' && approver && (
                                                 <p className="text-xs text-gray-500 flex items-center gap-1.5">
                                                     <CheckCircle size={14} className={leave.status === 'APPROVED' ? 'text-green-500' : 'text-red-500'} />
-                                                    {leave.status === 'APPROVED' ? 'Approved' : 'Rejected'} by <span className="font-medium text-gray-700 dark:text-gray-300">{approver.name}</span>
+                                                    {leave.status === 'APPROVED' ? 'Approved' : 'Rejected'} by <span className="font-medium text-gray-700 dark:text-gray-300">{approver.name || approver.email}</span>
                                                 </p>
                                             )}
                                         </div>

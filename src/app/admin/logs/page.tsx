@@ -47,7 +47,7 @@ export default function AdminLogsPage() {
             router.push('/dashboard');
             return;
         }
-        storage.getUsers(activeDepartmentId || undefined).then(setUsers);
+        storage.getUsers().then(setUsers);
         // Initial load is handled by the search effect above
     }, [user, router, activeDepartmentId]);
 

@@ -49,7 +49,7 @@ class StorageService {
         let query = supabase.from('users').select('*');
 
         if (departmentId) {
-            query = query.eq('department_id', departmentId);
+            query = query.or(`department_id.eq.${departmentId},role.eq.SUPER_ADMIN`);
         }
 
         const { data, error } = await query;
@@ -62,7 +62,8 @@ class StorageService {
             ...u,
             fcmToken: u.fcm_token,
             departmentId: u.department_id,
-            isPrimaryLeaveApprover: u.is_primary_leave_approver
+            isPrimaryLeaveApprover: u.is_primary_leave_approver,
+            canManageExpenses: u.can_manage_expenses
         })) as User[];
     }
 
@@ -480,6 +481,36 @@ class StorageService {
         })) as Log[];
     }
 
+    async getLogsByEntities(entityIds: string[]): Promise<Log[]> {
+        if (!entityIds || entityIds.length === 0) return [];
+        
+        const chunkSize = 100;
+        let allLogs: any[] = [];
+        
+        for (let i = 0; i < entityIds.length; i += chunkSize) {
+            const chunk = entityIds.slice(i, i + chunkSize);
+            const { data, error } = await supabase
+                .from('logs')
+                .select('*')
+                .in('entity_id', chunk)
+                .order('timestamp', { ascending: false });
+                
+            if (error) {
+                console.error('Error fetching logs for entities:', error);
+            } else if (data) {
+                allLogs = [...allLogs, ...data];
+            }
+        }
+        
+        return allLogs.map((l: any) => ({
+            ...l,
+            entityId: l.entity_id,
+            userId: l.user_id,
+            oldValue: l.old_value,
+            newValue: l.new_value
+        })) as Log[];
+    }
+
     async addLog(log: Log): Promise<void> {
         const dbLog = {
             id: log.id,
@@ -615,7 +646,9 @@ class StorageService {
             createdBy: s.created_by,
             googleEventId: s.google_event_id, // Map DB column to type
             shootNumber: s.shoot_number,
-            jiraTicketId: s.jira_ticket_id
+            jiraTicketId: s.jira_ticket_id,
+            departmentId: s.department_id,
+            expenses: s.expenses || []
         })) as Shoot[];
     }
 
@@ -634,7 +667,8 @@ class StorageService {
             created_by: shoot.createdBy,
             google_event_id: shoot.googleEventId || null, // Save to DB, ensure null if undefined
             jira_ticket_id: shoot.jiraTicketId || null,
-            department_id: shoot.departmentId
+            department_id: shoot.departmentId,
+            expenses: shoot.expenses || []
         };
 
         const { error } = await supabase

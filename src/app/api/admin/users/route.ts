@@ -82,7 +82,7 @@ export async function GET(request: Request) {
         const supabaseAdmin = getSupabaseAdmin();
         const { data: users, error } = await supabaseAdmin
             .from('users')
-            .select('id, name, email, role, status, department_id, is_primary_leave_approver, department:departments(name)')
+            .select('id, name, email, role, status, department_id, is_primary_leave_approver, can_manage_expenses, department:departments(name)')
             .order('name', { ascending: true });
 
         if (error) {
@@ -104,7 +104,7 @@ const createUserSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6),
     name: z.string().min(1),
-    role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'CREW']),
+    role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'FINANCE_MANAGER', 'CREW']),
     departmentId: z.string().uuid().optional()
 });
 
@@ -168,7 +168,8 @@ const updateUserSchema = z.object({
     status: z.string().optional(),
     role: z.string().optional(),
     departmentId: z.string().optional().nullable(),
-    isPrimaryLeaveApprover: z.boolean().optional()
+    isPrimaryLeaveApprover: z.boolean().optional(),
+    canManageExpenses: z.boolean().optional()
 });
 
 export async function PUT(request: Request) {
@@ -190,7 +191,7 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { id, password, status, role, departmentId, isPrimaryLeaveApprover } = result.data;
+        const { id, password, status, role, departmentId, isPrimaryLeaveApprover, canManageExpenses } = result.data;
 
         if (password) {
             const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(id, {
@@ -204,6 +205,7 @@ export async function PUT(request: Request) {
         if (role) updates.role = role;
         if (departmentId !== undefined) updates.department_id = departmentId;
         if (isPrimaryLeaveApprover !== undefined) updates.is_primary_leave_approver = isPrimaryLeaveApprover;
+        if (canManageExpenses !== undefined) updates.can_manage_expenses = canManageExpenses;
 
         if (Object.keys(updates).length > 0) {
             const { error: updateError } = await supabaseAdmin

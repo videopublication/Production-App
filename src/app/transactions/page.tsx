@@ -62,7 +62,7 @@ export default function TransactionsPage() {
             router.push('/login');
             return;
         }
-        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
             router.push('/');
             return;
         }
@@ -150,7 +150,7 @@ export default function TransactionsPage() {
 
     const getUserName = (userId: string) => {
         const foundUser = users.find(u => u.id === userId);
-        return foundUser?.name || 'Unknown User';
+        return foundUser?.name || foundUser?.email || 'Unknown User';
     };
 
     const getItemNames = (itemIds: string[]) => {

@@ -358,7 +358,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     const crewOptions = users.map(u => ({ label: u.name, value: u.id }));
     const inchargeOptions = selectedCrewIds.map(id => {
         const user = users.find(u => u.id === id);
-        return { label: user?.name || 'Unknown', value: id };
+        return { label: user?.name || user?.email || 'Unknown', value: id };
     });
 
     return (
@@ -687,7 +687,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                         const user = users.find(u => u.id === id);
                                         return (
                                             <div key={id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${id === inchargeId ? 'bg-primary/10 border-primary/20 text-primary dark:bg-primary/20 dark:border-primary/30 dark:text-primary' : 'bg-white border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300'}`}>
-                                                <span>{user?.name}</span>
+                                                <span>{user?.name || user?.email || 'Unknown'}</span>
                                                 {id === inchargeId && <span className="text-[10px] font-bold bg-primary/20 text-primary dark:bg-primary/30 px-1.5 py-0.5 rounded">INCHARGE</span>}
                                                 <button
                                                     type="button"

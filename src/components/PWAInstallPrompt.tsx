@@ -26,9 +26,16 @@ export const PWAInstallPrompt = () => {
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
         if (isStandalone) return;
 
-        // Check if dismissed previously in this session
-        const isDismissed = sessionStorage.getItem('pwa-prompt-dismissed');
-        if (isDismissed) return;
+        // Check if dismissed previously and enforce a 12-hour "session" timeout
+        // (sessionStorage is unreliable on mobile browsers as tabs are frequently discarded)
+        const lastDismissedStr = localStorage.getItem('pwa-prompt-dismissed-time');
+        if (lastDismissedStr) {
+            const lastDismissed = parseInt(lastDismissedStr, 10);
+            const SESSION_DURATION = 12 * 60 * 60 * 1000; // 12 hours
+            if (Date.now() - lastDismissed < SESSION_DURATION) {
+                return;
+            }
+        }
 
         // 1. Listen for native install prompt (Android/Chrome)
         const handleBeforeInstallPrompt = (e: Event) => {
@@ -60,7 +67,7 @@ export const PWAInstallPrompt = () => {
 
     const handleDismiss = () => {
         setShowPrompt(false);
-        sessionStorage.setItem('pwa-prompt-dismissed', 'true');
+        localStorage.setItem('pwa-prompt-dismissed-time', Date.now().toString());
     };
 
     const handleInstallClick = async () => {
@@ -77,6 +84,9 @@ export const PWAInstallPrompt = () => {
         } else {
             console.log('User dismissed the install prompt');
         }
+
+        // Save dismissal to prevent immediate re-prompting if installation fails or is cancelled
+        localStorage.setItem('pwa-prompt-dismissed-time', Date.now().toString());
 
         // We can't use the prompt again, discard it
         setDeferredPrompt(null);

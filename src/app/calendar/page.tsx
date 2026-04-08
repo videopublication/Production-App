@@ -251,7 +251,7 @@ export default function CalendarPage() {
                                 <div className="flex items-center gap-2 overflow-hidden">
                                     <Users size={16} className="text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors shrink-0" />
                                     <span className={`text-sm font-medium truncate ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-blue-600 dark:text-blue-400'}`}>
-                                        {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || 'Unknown'}
+                                        {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
                                     </span>
                                 </div>
                                 <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
@@ -781,7 +781,7 @@ export default function CalendarPage() {
                                                                             </div>
                                                                             <div className="min-w-0 flex-1">
                                                                                 <p className="text-sm font-medium truncate text-gray-900 dark:text-white">
-                                                                                    {member.user?.name || 'Unknown'}
+                                                                                    {member.user?.name || member.user?.email || 'Unknown'}
                                                                                 </p>
                                                                                 <p className="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-500">
                                                                                     {member.role === 'Incharge' ? 'Lead' : member.user?.role || 'Crew'}

@@ -65,7 +65,7 @@ function InventoryPageContent() {
     const users = useMemo(() => {
         const map: Record<string, string> = {};
         usersList.forEach(u => {
-            map[u.id] = u.name;
+            map[u.id] = u.name || u.email || 'Unknown';
         });
         return map;
     }, [usersList]);

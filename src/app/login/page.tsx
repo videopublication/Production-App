@@ -18,7 +18,8 @@ export default function LoginPage() {
     // Redirect if already logged in
     React.useEffect(() => {
         if (user) {
-            if (['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            const normalizedRole = user.role?.toUpperCase().replace(' ', '_') || 'CREW';
+            if (['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(normalizedRole)) {
                 router.replace('/dashboard');
             } else {
                 router.replace('/checkout');

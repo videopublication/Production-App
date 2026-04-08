@@ -88,7 +88,7 @@ export default function VerificationPage() {
     const getUserName = (userId?: string) => {
         if (!userId) return 'Unknown';
         const foundUser = users.find(u => u.id === userId);
-        return foundUser ? foundUser.name : 'Unknown';
+        return foundUser ? (foundUser.name || foundUser.email || 'Unknown') : 'Unknown';
     };
 
     const getItemTransaction = (itemId: string) => {
@@ -239,7 +239,8 @@ export default function VerificationPage() {
                     entityId: id,
                     userId: user.id,
                     timestamp: new Date().toISOString(),
-                    details: `Verified item "${item.name}" (${item.barcode}) as ${status}${projectText}`
+                    details: `Verified item "${item.name}" (${item.barcode}) as ${status}${projectText}`,
+                    departmentId: effectiveDeptId || undefined
                 });
             }
 

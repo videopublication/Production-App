@@ -1,4 +1,4 @@
-export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'CREW';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'FINANCE_MANAGER' | 'CREW';
 
 export type EquipmentStatus =
     | 'AVAILABLE'
@@ -35,6 +35,7 @@ export interface User {
     avatarUrl?: string | null;
     departmentId?: string; // Initially optional during migration
     isPrimaryLeaveApprover?: boolean;
+    canManageExpenses?: boolean;
 }
 
 export interface Equipment {
@@ -113,6 +114,12 @@ export interface HumanResourceRequirement {
     count: number;
 }
 
+export interface ShootExpense {
+    id: string;
+    type: string;
+    amount: number;
+}
+
 export interface Shoot {
     id: string;
     title: string;
@@ -129,6 +136,7 @@ export interface Shoot {
     shootNumber?: number;
     jiraTicketId?: string;
     departmentId?: string;
+    expenses?: ShootExpense[];
 }
 
 export interface Assignment {

@@ -69,7 +69,7 @@ export default function ShootList() {
             const user = users.find(u => u.id === a.userId);
             return {
                 id: a.id,
-                name: user?.name || 'Unknown',
+                name: user?.name || user?.email || 'Unknown',
                 role: a.role,
                 userId: a.userId
             };
@@ -459,7 +459,7 @@ export default function ShootList() {
                                             className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-md border text-sm transition-all cursor-pointer bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 min-w-[140px] justify-between group"
                                         >
                                             <span className={`truncate max-w-[100px] ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-blue-600 dark:text-blue-400 font-medium'}`}>
-                                                {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || 'Unknown'}
+                                                {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
                                             </span>
                                             <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isCrewFilterOpen ? 'rotate-180' : ''}`} />
                                         </button>

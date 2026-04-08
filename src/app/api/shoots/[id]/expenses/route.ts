@@ -3,10 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-// Fetches user profile bypassing RLS — only returns data for the currently authenticated user
-export async function GET(request: Request) {
+export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     try {
-        // 1. Verify the requesting user is authenticated
+        const { id } = params;
+        const { expenses } = await request.json();
+
+        // 1. Verify authenticated user
         const cookieStore = await cookies();
         const supabase = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,15 +33,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 2. Only allow fetching own profile (security: userId param must match auth user)
-        const { searchParams } = new URL(request.url);
-        const requestedUserId = searchParams.get('userId');
-
-        if (requestedUserId !== user.id) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
-        // 3. Fetch profile using service role (bypasses RLS)
+        // 2. Fetch the user's profile to check permissions bypassing RLS
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -52,7 +47,7 @@ export async function GET(request: Request) {
 
         const { data: profile, error: profileError } = await supabaseAdmin
             .from('users')
-            .select('*')
+            .select('role, can_manage_expenses')
             .eq('id', user.id)
             .single();
 
@@ -60,18 +55,26 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
         }
 
-        // 4. Transform snake_case to camelCase for frontend
-        const result = {
-            ...profile,
-            avatarUrl: profile.avatar_url,
-            departmentId: profile.department_id,
-            canManageExpenses: profile.can_manage_expenses,
-            isPrimaryLeaveApprover: profile.is_primary_leave_approver
-        };
+        const canManageExpenses = profile.can_manage_expenses === true || ['FINANCE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(profile.role);
 
-        return NextResponse.json(result);
+        if (!canManageExpenses) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        // 3. Update the shoot expenses using service role to bypass restrictive RLS
+        const { error: updateError } = await supabaseAdmin
+            .from('shoots')
+            .update({ expenses: expenses })
+            .eq('id', id);
+
+        if (updateError) {
+            console.error('Error updating shoot expenses:', updateError);
+            return NextResponse.json({ error: 'Failed to update expenses' }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true });
     } catch (error: any) {
-        console.error('Error in /api/auth/profile:', error);
+        console.error('Error in PUT /api/shoots/[id]/expenses:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 const { data, error } = await supabase
                     .from('users')
-                    .select('*, avatarUrl:avatar_url, departmentId:department_id')
+                    .select('*, avatarUrl:avatar_url, departmentId:department_id, canManageExpenses:can_manage_expenses, isPrimaryLeaveApprover:is_primary_leave_approver')
                     .eq('id', userId)
                     .single();
 
@@ -99,6 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                 // Map snake_case to camelCase
                                 if (updatedUser.avatar_url) updatedUser.avatarUrl = updatedUser.avatar_url;
                                 if (updatedUser.department_id) updatedUser.departmentId = updatedUser.department_id;
+                                if (updatedUser.can_manage_expenses !== undefined) updatedUser.canManageExpenses = updatedUser.can_manage_expenses;
+                                if (updatedUser.is_primary_leave_approver !== undefined) updatedUser.isPrimaryLeaveApprover = updatedUser.is_primary_leave_approver;
 
                                 if (updatedUser.status === 'PENDING' || updatedUser.status === 'SUSPENDED') {
                                     const reason = updatedUser.status === 'SUSPENDED' ? 'suspended' : 'pending';

@@ -6,8 +6,7 @@ import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { motion, LayoutGroup } from 'framer-motion';
-
-type UserRole = 'CREW' | 'MANAGER' | 'ADMIN' | 'SUPER_ADMIN';
+type UserRole = 'CREW' | 'MANAGER' | 'ADMIN' | 'SUPER_ADMIN' | 'FINANCE_MANAGER';
 
 // Define all available quick actions with role-based access
 const ALL_QUICK_ACTIONS = [
@@ -45,7 +44,7 @@ const ALL_QUICK_ACTIONS = [
         gradient: 'from-orange-500 to-orange-600',
         shadow: 'shadow-orange-500/25',
         icon: 'M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z',
-        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'] as UserRole[],
+        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'] as UserRole[],
     },
     {
         id: 'history',
@@ -54,7 +53,7 @@ const ALL_QUICK_ACTIONS = [
         gradient: 'from-pink-500 to-pink-600',
         shadow: 'shadow-pink-500/25',
         icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
-        roles: ['MANAGER', 'ADMIN', 'SUPER_ADMIN'] as UserRole[], // Only managers and admins can see history
+        roles: ['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'] as UserRole[], // Only managers, admins, and finance can see history
     },
     {
         id: 'calendar',
@@ -63,7 +62,7 @@ const ALL_QUICK_ACTIONS = [
         gradient: 'from-red-500 to-red-600',
         shadow: 'shadow-red-500/25',
         icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5',
-        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'] as UserRole[],
+        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'] as UserRole[],
     },
     {
         id: 'add-item',
@@ -81,7 +80,7 @@ const ALL_QUICK_ACTIONS = [
         gradient: 'from-indigo-500 to-indigo-600',
         shadow: 'shadow-indigo-500/25',
         icon: 'M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z',
-        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'] as UserRole[], // Everyone can view shoots (CREW sees assigned only)
+        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'] as UserRole[], // Everyone can view shoots (CREW sees assigned only)
     },
     {
         id: 'users',
@@ -135,7 +134,7 @@ const ALL_QUICK_ACTIONS = [
         gradient: 'from-violet-500 to-violet-600',
         shadow: 'shadow-violet-500/25',
         icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15z',
-        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'] as UserRole[], // Everyone can view their leaves
+        roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'] as UserRole[], // Everyone can view their leaves
     },
 ];
 
@@ -149,6 +148,8 @@ const getDefaultActionsForRole = (role: UserRole): string[] => {
         case 'ADMIN':
         case 'SUPER_ADMIN':
             return ['checkout', 'returns', 'verify', 'inventory', 'history', 'calendar', 'add-item', 'shoots', 'users', 'departments', 'notify', 'leaves'];
+        case 'FINANCE_MANAGER':
+            return ['inventory', 'shoots', 'history', 'calendar', 'leaves'];
         default:
             return ['checkout', 'returns', 'inventory', 'calendar', 'leaves'];
     }

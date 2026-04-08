@@ -44,7 +44,9 @@ export function useCheckOut() {
             location,
             project,
             id,
-            departmentId
+            departmentId,
+            performerId,
+            targetUserName
         }: {
             items: Equipment[],
             shootId?: string,
@@ -55,7 +57,9 @@ export function useCheckOut() {
             project: string,
             id?: string,
             displayId?: string,
-            departmentId?: string
+            departmentId?: string,
+            performerId?: string,
+            targetUserName?: string
         }) => {
 
             const transactionId = id || generateTransactionId();
@@ -97,13 +101,19 @@ export function useCheckOut() {
             ));
 
             // 3. Log it
+            const isBehalf = performerId && performerId !== userId;
+            const logUserId = isBehalf ? performerId : userId;
+            const detailsMsg = isBehalf && targetUserName
+                ? `Checked out ${items.length} items for ${project} on behalf of ${targetUserName}`
+                : `Checked out ${items.length} items for ${project}`;
+
             await storage.addLog({
                 id: crypto.randomUUID(),
                 action: 'CHECKOUT',
                 entityId: transactionId,
-                userId,
+                userId: logUserId,
                 timestamp: new Date().toISOString(),
-                details: `Checked out ${items.length} items for ${project}`,
+                details: detailsMsg,
                 departmentId
             });
 
@@ -190,7 +200,8 @@ export function useCheckIn() {
                     entityId: item.id,
                     userId,
                     timestamp,
-                    details: `Returned item ${item.name} ` + (notes ? `(Notes: ${notes})` : '')
+                    details: `Returned item ${item.name} ` + (notes ? `(Notes: ${notes})` : ''),
+                    departmentId: item.departmentId
                 });
             }
         },

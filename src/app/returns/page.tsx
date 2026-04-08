@@ -124,7 +124,8 @@ export default function ReturnsPage() {
                         entityId: id,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: `Submitted for return (Condition: ${conditions[id] || 'OK'})`
+                        details: `Submitted for return (Condition: ${conditions[id] || 'OK'})`,
+                        departmentId: activeDepartmentId || undefined
                     });
                 }
             }));

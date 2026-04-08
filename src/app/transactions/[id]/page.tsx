@@ -55,7 +55,7 @@ export default function TransactionDetailPage() {
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        if (user && !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+        if (user && !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
             router.push('/');
             return;
         }
@@ -66,11 +66,10 @@ export default function TransactionDetailPage() {
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const [txns, equip, users, allLogs, shoots, assignments] = await Promise.all([
+            const [txns, equip, users, shoots, assignments] = await Promise.all([
                 storage.getTransactions(undefined, undefined, undefined, 'ALL', undefined, undefined, effectiveDeptId),
                 storage.getEquipment(effectiveDeptId),
                 storage.getUsers(effectiveDeptId),
-                storage.getLogs(undefined, undefined, undefined, effectiveDeptId),
                 storage.getShoots(effectiveDeptId),
                 storage.getAssignments(effectiveDeptId)
             ]);
@@ -81,6 +80,11 @@ export default function TransactionDetailPage() {
                 router.push('/transactions');
                 return;
             }
+
+            // Fetch logs for this transaction AND its items directly
+            // This prevents missing old transaction logs due to the 1000 row limits of global getLogs()
+            const entityIdsToFetch = [transactionId, ...txn.items];
+            const allLogs = await storage.getLogsByEntities(entityIdsToFetch);
 
             const txnUser = users.find(u => u.id === txn.userId);
             const available = equip.filter(e => e.status === 'AVAILABLE');
@@ -94,12 +98,27 @@ export default function TransactionDetailPage() {
                 linkedAssignments = assignments.filter(a => a.shootId === txn.shootId);
             }
 
-            // Filter logs for this transaction AND its items
-            // Return/Verify actions are logged with entityId = equipment.id,
-            // so we must include those to show the full activity history.
+            // Check if department filter needs to be applied manually for SUPER_ADMIN when viewing cross-dept
+            // But since logs are directly retrieved by entity IDs tied to this specific transaction,
+            // we don't strictly need to filter them out by effectiveDeptId here again.
+
+            // We time-bound the equipment logs to prevent showing the item's 
+            // entire historical usage across all projects.
             const txnItemIds = new Set(txn.items);
+            const txnStartTime = new Date(txn.timestampOut || 0).getTime() - 60000; // 1 min buffer
+            const txnEndTime = txn.timestampIn 
+                ? new Date(txn.timestampIn).getTime() + (14 * 24 * 60 * 60 * 1000) // 14 day buffer for verifications
+                : Infinity;
+
             const transactionLogs = allLogs
-                .filter(l => l.entityId === transactionId || txnItemIds.has(l.entityId))
+                .filter(l => {
+                    if (l.entityId === transactionId) return true;
+                    if (txnItemIds.has(l.entityId)) {
+                        const logTime = new Date(l.timestamp).getTime();
+                        return logTime >= txnStartTime && logTime <= txnEndTime;
+                    }
+                    return false;
+                })
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
             setTransaction(txn);
@@ -127,7 +146,7 @@ export default function TransactionDetailPage() {
     const getUserName = (userId?: string) => {
         if (!userId) return 'System / Guest';
         const found = allUsers.find(u => u.id === userId);
-        return found ? found.name : 'Unknown User';
+        return found ? (found.name || found.email || 'Unknown User') : 'Unknown User';
     };
 
     const handleAddItem = async (itemId: string) => {
@@ -273,9 +292,10 @@ export default function TransactionDetailPage() {
             return;
         }
 
-        // Only allow force return for items that are checked out
-        if (item.status !== 'CHECKED_OUT') {
-            showToast(`Item is not checked out (Status: ${item.status})`, 'error');
+        // Allow force return for items that are checked out, pending verification, 
+        // or already available (to fix state mismatches within the transaction)
+        if (!['CHECKED_OUT', 'PENDING_VERIFICATION', 'AVAILABLE'].includes(item.status)) {
+            showToast(`Item cannot be force returned (Status: ${item.status})`, 'error');
             return;
         }
 
@@ -329,6 +349,7 @@ export default function TransactionDetailPage() {
                 userId: user!.id,
                 timestamp: new Date().toISOString(),
                 details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Verified by ${user!.name}${allItemsReturned ? ' (Transaction Closed)' : ''}`,
+                departmentId: effectiveDeptId || undefined
             });
 
             await loadData(true);
@@ -375,7 +396,7 @@ export default function TransactionDetailPage() {
         longPressTimer.current = setTimeout(() => {
             setSelectionMode(true);
             setSelectedItems(new Set([itemId]));
-        }, 500); // 500ms for long press
+        }, 850); // Increased from 500ms to 850ms to prevent accidental selection while scrolling
     };
 
     const handleLongPressEnd = () => {
@@ -409,7 +430,7 @@ export default function TransactionDetailPage() {
         try {
             for (const itemId of selectedItems) {
                 const item = equipment.find(e => e.id === itemId);
-                if (!item || item.status !== 'CHECKED_OUT') continue;
+                if (!item || !['CHECKED_OUT', 'PENDING_VERIFICATION', 'AVAILABLE'].includes(item.status)) continue;
 
                 await storage.updateEquipment(itemId, {
                     status: 'PENDING_VERIFICATION',
@@ -423,6 +444,7 @@ export default function TransactionDetailPage() {
                     userId: user!.id,
                     timestamp: new Date().toISOString(),
                     details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Pending verification`,
+                    departmentId: effectiveDeptId || undefined
                 });
             }
 
@@ -447,7 +469,7 @@ export default function TransactionDetailPage() {
         );
     });
 
-    if (!user || !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+    if (!user || !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
         return null;
     }
 
@@ -473,8 +495,7 @@ export default function TransactionDetailPage() {
         );
     }
 
-    // Prepare list of all involved users
-    const primaryUserName = transactionUser?.name || 'Unknown User';
+    const primaryUserName = transactionUser?.name || transactionUser?.email || 'Unknown User';
 
     // Dynamic Crew List Logic
     let displayUserIds: string[] = [];
@@ -961,6 +982,7 @@ export default function TransactionDetailPage() {
                                         }`}
                                     onTouchStart={() => canSelect && handleLongPressStart(itemId)}
                                     onTouchEnd={handleLongPressEnd}
+                                    onTouchMove={handleLongPressEnd}
                                     onMouseDown={() => canSelect && handleLongPressStart(itemId)}
                                     onMouseUp={handleLongPressEnd}
                                     onMouseLeave={handleLongPressEnd}

@@ -136,8 +136,9 @@ export default function CheckoutPage() {
             return;
         }
 
-        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
-            router.replace('/');
+        const normalizedRole = user.role?.toUpperCase().replace(' ', '_') || 'CREW';
+        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(normalizedRole)) {
+            router.replace('/login');
         }
     }, [user, router, authLoading]);
 
@@ -460,6 +461,8 @@ export default function CheckoutPage() {
 
         try {
             const filterDeptId = user?.role === 'SUPER_ADMIN' ? department?.id : user?.departmentId;
+            const targetUser = users.find(u => u.id === selectedUserIds[0]);
+            
             await checkout({
                 id: transactionIdRef.current, // Pass the idempotent ID
                 items: cart,
@@ -469,7 +472,9 @@ export default function CheckoutPage() {
                 notes: notes.trim(),
                 project: project.trim(),
                 displayId: transactionIdRef.current, // The readable TXN ID
-                departmentId: filterDeptId
+                departmentId: filterDeptId,
+                performerId: user?.id,
+                targetUserName: targetUser?.name
             });
 
             handleSuccess();
