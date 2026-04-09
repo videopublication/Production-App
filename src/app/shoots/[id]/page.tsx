@@ -577,7 +577,7 @@ export default function ShootDetailsPage() {
                             </svg>
                             About this Shoot
                         </h3>
-                        <p className="leading-relaxed max-w-4xl text-[15px] text-gray-800 dark:text-gray-200">
+                        <p className="leading-relaxed max-w-4xl text-[15px] text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
                             {shoot.description}
                         </p>
                     </div>

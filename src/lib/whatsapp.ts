@@ -41,8 +41,7 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
     }
 
     if (shoot.description && shoot.description !== 'No description') {
-        const cleanDesc = shoot.description.length > 100 ? shoot.description.substring(0, 100) + '...' : shoot.description;
-        message += `*Description:* ${cleanDesc}\n`;
+        message += `*Description:*\n${shoot.description}\n`;
     }
 
     // Add spacing before POC
