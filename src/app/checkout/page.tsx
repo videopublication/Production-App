@@ -777,10 +777,12 @@ export default function CheckoutPage() {
                                             label="Checkout For"
                                             value={selectedUserIds}
                                             onChange={setSelectedUserIds}
-                                            options={users.map(u => ({
-                                                value: u.id,
-                                                label: `${u.name} (${u.role})`
-                                            }))}
+                                            options={users
+                                                .filter(u => u.status !== 'SUSPENDED')
+                                                .map(u => ({
+                                                    value: u.id,
+                                                    label: `${u.name} (${u.role})`
+                                                }))}
                                         />
                                     )}
 

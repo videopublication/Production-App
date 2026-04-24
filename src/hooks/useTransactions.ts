@@ -117,6 +117,36 @@ export function useCheckOut() {
                 departmentId
             });
 
+            // 4. Notify the user
+            if (userId !== performerId) {
+                const title = 'Equipment Checked Out';
+                const message = `Admin has checked out ${items.length} items to you for ${project}.`;
+                
+                await storage.addNotification({
+                    userId,
+                    title,
+                    message,
+                    link: '/transactions',
+                    departmentId
+                });
+
+                // Fetch user to get FCM token
+                const users = await storage.getUsers(departmentId);
+                const assignedUser = users.find(u => u.id === userId);
+                if (assignedUser?.fcmToken) {
+                    fetch('/api/send-notification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            token: assignedUser.fcmToken,
+                            title,
+                            message,
+                            link: '/transactions'
+                        })
+                    }).catch(e => console.error('Push notification failed', e));
+                }
+            }
+
             return transaction;
         },
         onSuccess: () => {
@@ -203,6 +233,35 @@ export function useCheckIn() {
                     details: `Returned item ${item.name} ` + (notes ? `(Notes: ${notes})` : ''),
                     departmentId: item.departmentId
                 });
+            }
+
+            // Notify User
+            if (userId && items.length > 0) {
+                const title = 'Equipment Verified & Checked In';
+                const message = `Admin has successfully checked in ${items.length} items returned by you.`;
+                
+                await storage.addNotification({
+                    userId,
+                    title,
+                    message,
+                    link: '/transactions',
+                    departmentId: activeDepartmentId || undefined
+                });
+
+                const users = await storage.getUsers(activeDepartmentId);
+                const userObj = users.find(u => u.id === userId);
+                if (userObj?.fcmToken) {
+                    fetch('/api/send-notification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            token: userObj.fcmToken,
+                            title,
+                            message,
+                            link: '/transactions'
+                        })
+                    }).catch(e => console.error('Push notification failed', e));
+                }
             }
         },
         onSuccess: () => {

@@ -70,6 +70,36 @@ export default function EditShootPage() {
             }));
             if (newAssignments.length > 0) {
                 await storage.saveAssignments(newAssignments);
+
+                // Notify newly added crew
+                await Promise.all(newAssignments.map(async (assignment) => {
+                    if (assignment.userId === user?.id) return;
+                    
+                    const title = 'New Shoot Assignment';
+                    const message = `You have been added to shoot "${updatedShoot.title}" as ${assignment.role}.`;
+                    
+                    await storage.addNotification({
+                        userId: assignment.userId,
+                        title,
+                        message,
+                        link: `/shoots/${shoot.id}`,
+                        departmentId: shoot.departmentId
+                    });
+
+                    const assignedUser = allUsers.find(u => u.id === assignment.userId);
+                    if (assignedUser?.fcmToken) {
+                        fetch('/api/send-notification', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                token: assignedUser.fcmToken,
+                                title,
+                                message,
+                                link: `/shoots/${shoot.id}`
+                            })
+                        }).catch(e => console.error('Push notification failed', e));
+                    }
+                }));
             }
 
             // 3. Update existing roles if needed (e.g. if someone became incharge)
@@ -90,6 +120,36 @@ export default function EditShootPage() {
 
             if (assignmentsToUpdate.length > 0) {
                 await storage.saveAssignments(assignmentsToUpdate);
+
+                // Notify crew of role changes
+                await Promise.all(assignmentsToUpdate.map(async (assignment) => {
+                    if (assignment.userId === user?.id) return;
+                    
+                    const title = 'Shoot Role Updated';
+                    const message = `Your role in shoot "${updatedShoot.title}" has been updated to ${assignment.role}.`;
+                    
+                    await storage.addNotification({
+                        userId: assignment.userId,
+                        title,
+                        message,
+                        link: `/shoots/${shoot.id}`,
+                        departmentId: shoot.departmentId
+                    });
+
+                    const assignedUser = allUsers.find(u => u.id === assignment.userId);
+                    if (assignedUser?.fcmToken) {
+                        fetch('/api/send-notification', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                token: assignedUser.fcmToken,
+                                title,
+                                message,
+                                link: `/shoots/${shoot.id}`
+                            })
+                        }).catch(e => console.error('Push notification failed', e));
+                    }
+                }));
             }
 
             try {

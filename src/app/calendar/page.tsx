@@ -53,6 +53,7 @@ const areIntervalsOverlapping = (start1: Date, end1: Date, start2: Date, end2: D
 import { useShoots } from '@/hooks/useShoots';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useUsers } from '@/hooks/useUsers';
+import { useLeaves } from '@/hooks/useLeaves';
 
 export default function CalendarPage() {
     const { user } = useAuth();
@@ -61,15 +62,17 @@ export default function CalendarPage() {
     const { data: shoots = [], isLoading: shootsLoading, refetch: refetchShoots } = useShoots();
     const { data: assignments = [], isLoading: assignmentsLoading, refetch: refetchAssignments } = useAssignments();
     const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useUsers();
+    const { leaves = [], isLoading: leavesLoading, refetch: refetchLeaves } = useLeaves();
 
-    const loading = shootsLoading || assignmentsLoading || usersLoading;
+    const loading = shootsLoading || assignmentsLoading || usersLoading || leavesLoading;
 
     // Refresh handler
     const handleRefresh = async () => {
         await Promise.all([
             refetchShoots(),
             refetchAssignments(),
-            refetchUsers()
+            refetchUsers(),
+            refetchLeaves()
         ]);
     };
 
@@ -104,6 +107,16 @@ export default function CalendarPage() {
     }, [isFilterOpen]);
 
 
+    // Get leaves based on crew filter or user role
+    const filteredLeaves = useMemo(() => {
+        const targetUserId = user?.role === 'CREW' ? user.id : crewFilter;
+        const shouldShowLeaves = user?.role === 'CREW' || crewFilter !== 'ALL';
+        
+        if (!shouldShowLeaves || !targetUserId) return [];
+        
+        return leaves.filter(leave => leave.status === 'APPROVED' && leave.userId === targetUserId);
+    }, [leaves, crewFilter, user]);
+
     // Filter shoots based on crew selection and user role
     const filteredShoots = useMemo(() => {
         // If user is just CREW (not ADMIN/MANAGER), they can ONLY see their own shoots
@@ -118,6 +131,17 @@ export default function CalendarPage() {
             return assignments.some(a => a.shootId === shoot.id && a.userId === crewFilter);
         });
     }, [shoots, assignments, crewFilter, user]);
+
+    // Get leaves for a specific date
+    const getLeavesForDate = (date: Date) => {
+        return filteredLeaves.filter(leave => {
+            if (!leave.startDate || !leave.endDate) return false;
+            const leaveStart = startOfDay(parseISO(leave.startDate));
+            const leaveEnd = startOfDay(parseISO(leave.endDate));
+            const checkDate = startOfDay(date);
+            return isWithinInterval(checkDate, { start: leaveStart, end: leaveEnd });
+        });
+    };
 
     // Get shoots for a specific date (including multi-day shoots that span this date)
     const getShootsForDate = (date: Date) => {
@@ -161,6 +185,7 @@ export default function CalendarPage() {
 
     // Shoots for selected date
     const shootsForSelectedDate = selectedDate ? getShootsForDate(selectedDate) : [];
+    const leavesForSelectedDate = selectedDate ? getLeavesForDate(selectedDate) : [];
 
     // Count total shoots this month
     const shootsThisMonth = useMemo(() => {
@@ -368,7 +393,7 @@ export default function CalendarPage() {
                                     const daysInWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
                                     // Process events for this week
-                                    const weekEvents = filteredShoots.filter(shoot => {
+                                    const weekShoots = filteredShoots.filter(shoot => {
                                         if (!shoot.startTime) return false;
                                         const shootStart = startOfDay(parseISO(shoot.startTime));
                                         const shootEnd = shoot.endTime ? startOfDay(parseISO(shoot.endTime)) : shootStart;
@@ -394,6 +419,7 @@ export default function CalendarPage() {
                                         }
 
                                         return {
+                                            type: 'SHOOT' as const,
                                             shoot,
                                             colStart: startIndex + 1, // Grid columns are 1-based
                                             colSpan: duration,
@@ -401,6 +427,39 @@ export default function CalendarPage() {
                                             isEnd: (startIndex + duration) < 7 // Simplify
                                         };
                                     });
+
+                                    const weekLeaves = filteredLeaves.filter(leave => {
+                                        if (!leave.startDate || !leave.endDate) return false;
+                                        const leaveStart = startOfDay(parseISO(leave.startDate));
+                                        const leaveEnd = startOfDay(parseISO(leave.endDate));
+                                        return areIntervalsOverlapping(leaveStart, leaveEnd, weekStart, weekEnd);
+                                    }).map(leave => {
+                                        const leaveStart = startOfDay(parseISO(leave.startDate));
+                                        const leaveEnd = startOfDay(parseISO(leave.endDate));
+
+                                        let startIndex = differenceInCalendarDays(leaveStart, weekStart);
+                                        let duration = differenceInCalendarDays(leaveEnd, leaveStart) + 1;
+
+                                        if (startIndex < 0) {
+                                            duration += startIndex;
+                                            startIndex = 0;
+                                        }
+                                        const endIndex = startIndex + duration;
+                                        if (endIndex > 7) {
+                                            duration = 7 - startIndex;
+                                        }
+
+                                        return {
+                                            type: 'LEAVE' as const,
+                                            leave,
+                                            colStart: startIndex + 1,
+                                            colSpan: duration,
+                                            isStart: startIndex >= differenceInCalendarDays(leaveStart, weekStart),
+                                            isEnd: (startIndex + duration) < 7
+                                        };
+                                    });
+
+                                    const weekEvents = [...weekShoots, ...weekLeaves];
 
                                     // Packing Algorithm to determine vertical rows
                                     const sortedEvents = weekEvents.sort((a, b) => {
@@ -485,7 +544,7 @@ export default function CalendarPage() {
                                                                     .filter(e => (dayIndex + 1) >= e.colStart && (dayIndex + 1) < (e.colStart + e.colSpan))
                                                                     .slice(0, 3)
                                                                     .map((e, i) => (
-                                                                        <div key={i} className={`w-1.5 h-1.5 rounded-full ${e.shoot.status === 'CANCELLED' ? 'bg-red-400' : 'bg-blue-400'}`} />
+                                                                        <div key={i} className={`w-1.5 h-1.5 rounded-full ${e.type === 'LEAVE' ? 'bg-red-800' : e.shoot.status === 'CANCELLED' ? 'bg-red-400' : 'bg-blue-400'}`} />
                                                                     ))
                                                                 }
                                                             </div>
@@ -502,6 +561,41 @@ export default function CalendarPage() {
                                                 }}
                                             >
                                                 {placedEvents.map((event) => {
+                                                    if (event.type === 'LEAVE') {
+                                                        const userObj = users.find(u => u.id === event.leave.userId);
+                                                        const title = `Leave: ${userObj?.name || 'User'}`;
+                                                        return (
+                                                            <div
+                                                                key={`leave-${event.leave.id}-${weekIndex}`}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const sStart = parseISO(event.leave.startDate);
+                                                                    const diff = differenceInCalendarDays(sStart, weekStart);
+                                                                    const targetDate = addDays(weekStart, Math.max(0, diff));
+                                                                    setSelectedDate(targetDate);
+                                                                    setSelectedShoot(null);
+                                                                }}
+                                                                style={{
+                                                                    gridColumnStart: event.colStart,
+                                                                    gridColumnEnd: `span ${event.colSpan}`,
+                                                                    gridRowStart: (event.rowIndex ?? 0) + 1,
+                                                                    backgroundColor: '#7f1d1d',
+                                                                    color: '#ffffff',
+                                                                    borderLeft: `3px solid #ef4444`,
+                                                                }}
+                                                                className={`
+                                                                    pointer-events-auto
+                                                                    mx-1 mb-1 h-6
+                                                                    rounded px-2 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all shadow-sm flex items-center
+                                                                    relative z-10
+                                                                `}
+                                                                title={`${title} - ${event.leave.reason}`}
+                                                            >
+                                                                <span className="truncate w-full text-left">{title}</span>
+                                                            </div>
+                                                        );
+                                                    }
+
                                                     const style = getStatusStyle(event.shoot.status, event.shoot.id);
 
                                                     return (
@@ -583,7 +677,8 @@ export default function CalendarPage() {
                                     </h3>
                                     {selectedDate && (
                                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            {shootsForSelectedDate.length} shoot{shootsForSelectedDate.length !== 1 ? 's' : ''} scheduled
+                                            {shootsForSelectedDate.length} shoot{shootsForSelectedDate.length !== 1 ? 's' : ''}
+                                            {leavesForSelectedDate.length > 0 && ` • ${leavesForSelectedDate.length} leave${leavesForSelectedDate.length !== 1 ? 's' : ''}`} scheduled
                                         </p>
                                     )}
                                 </div>
@@ -606,12 +701,12 @@ export default function CalendarPage() {
                                         <CalendarIcon size={40} className="mx-auto mb-3 text-gray-300 dark:text-gray-600" />
                                         <p className="text-sm text-gray-500 dark:text-gray-400">Click on a date to see shoots</p>
                                     </div>
-                                ) : shootsForSelectedDate.length === 0 ? (
+                                ) : shootsForSelectedDate.length === 0 && leavesForSelectedDate.length === 0 ? (
                                     <div className="text-center py-8">
                                         <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-gray-100 dark:bg-gray-800">
                                             <CalendarIcon size={24} className="text-gray-400 dark:text-gray-500" />
                                         </div>
-                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No shoots on this day</p>
+                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No events on this day</p>
                                         {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                                             <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`} className="mt-3 inline-block">
                                                 <Button size="sm" variant="secondary">Schedule Shoot</Button>
@@ -620,6 +715,28 @@ export default function CalendarPage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
+                                        {leavesForSelectedDate.map(leave => {
+                                            const userObj = users.find(u => u.id === leave.userId);
+                                            return (
+                                                <div
+                                                    key={`leave-${leave.id}`}
+                                                    style={{ borderLeft: `4px solid #ef4444` }}
+                                                    className="rounded-xl overflow-hidden transition-all border border-gray-200 dark:border-gray-800 p-4 bg-red-50 dark:bg-red-900/10"
+                                                >
+                                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                                        <h4 className="font-bold text-[15px] text-gray-900 dark:text-white">
+                                                            Leave: {userObj?.name || 'User'}
+                                                        </h4>
+                                                        <span
+                                                            className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 bg-red-800 text-white dark:bg-red-800 dark:text-white"
+                                                        >
+                                                            APPROVED
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-300">{leave.reason}</p>
+                                                </div>
+                                            );
+                                        })}
                                         {shootsForSelectedDate.map(shoot => {
                                             const statusStyle = getStatusStyle(shoot.status, shoot.id);
                                             const crew = getCrewForShoot(shoot.id);

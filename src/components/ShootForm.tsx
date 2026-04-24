@@ -355,7 +355,9 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         setTimeout(() => { isSubmittingRef.current = false; }, 2000);
     };
 
-    const crewOptions = users.map(u => ({ label: u.name, value: u.id }));
+    const crewOptions = users
+        .filter(u => u.status !== 'SUSPENDED')
+        .map(u => ({ label: u.name, value: u.id }));
     const inchargeOptions = selectedCrewIds.map(id => {
         const user = users.find(u => u.id === id);
         return { label: user?.name || user?.email || 'Unknown', value: id };

@@ -65,6 +65,37 @@ export default function NewShootPage() {
 
             if (assignments.length > 0) {
                 await storage.saveAssignments(assignments);
+
+                // Send notifications to assigned crew
+                await Promise.all(assignments.map(async (assignment) => {
+                    // Don't notify the person creating the shoot about their own assignment
+                    if (assignment.userId === user?.id) return;
+                    
+                    const title = 'New Shoot Assignment';
+                    const message = `You have been assigned to shoot "${newShoot.title}" as ${assignment.role}.`;
+                    
+                    await storage.addNotification({
+                        userId: assignment.userId,
+                        title,
+                        message,
+                        link: `/shoots/${shootId}`,
+                        departmentId: activeDepartmentId || undefined
+                    });
+
+                    const assignedUser = users.find(u => u.id === assignment.userId);
+                    if (assignedUser?.fcmToken) {
+                        fetch('/api/send-notification', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                token: assignedUser.fcmToken,
+                                title,
+                                message,
+                                link: `/shoots/${shootId}`
+                            })
+                        }).catch(e => console.error('Push notification failed', e));
+                    }
+                }));
             }
 
             try {

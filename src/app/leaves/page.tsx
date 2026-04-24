@@ -135,15 +135,33 @@ export default function LeavesPage() {
             );
 
             // OPTIMIZATION: Fire notifications off in parallel
-            await Promise.all(admins.map(admin => 
-                storage.addNotification({
+            await Promise.all(admins.map(async (admin) => {
+                const title = 'New Leave Request';
+                const message = `${user?.name} has requested leave from ${format(parseISO(startDate), 'MMM d')} to ${format(parseISO(endDate), 'MMM d')}.`;
+                
+                // 1. In-app notification
+                await storage.addNotification({
                     userId: admin.id,
                     departmentId: activeDepartmentId,
-                    title: 'New Leave Request',
-                    message: `${user?.name} has requested leave from ${format(parseISO(startDate), 'MMM d')} to ${format(parseISO(endDate), 'MMM d')}.`,
+                    title,
+                    message,
                     link: '/leaves'
-                })
-            ));
+                });
+
+                // 2. Push notification
+                if (admin.fcmToken) {
+                    fetch('/api/send-notification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            token: admin.fcmToken,
+                            title,
+                            message,
+                            link: '/leaves'
+                        })
+                    }).catch(e => console.error('Failed to send push notification to admin', e));
+                }
+            }));
 
             // Send Email notification in the background (fire and forget) - do not await
             fetch('/api/send-leave-email', {
@@ -178,6 +196,23 @@ export default function LeavesPage() {
             const applicant = users.find(u => u.id === applicantId);
             const applicantName = applicant?.name || applicant?.email || 'Unknown User';
 
+            const notifTitle = `Leave Request ${status.charAt(0) + status.slice(1).toLowerCase()}`;
+            const notifMessage = `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`;
+
+            // Push notification logic
+            if (applicant?.fcmToken) {
+                fetch('/api/send-notification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: applicant.fcmToken,
+                        title: notifTitle,
+                        message: notifMessage,
+                        link: '/leaves'
+                    })
+                }).catch(e => console.error('Failed to send push notification to applicant', e));
+            }
+
             // OPTIMIZATION: Fire side effects in parallel without blocking the UI
             Promise.all([
                 // Log the approval/rejection
@@ -194,8 +229,8 @@ export default function LeavesPage() {
                 storage.addNotification({
                     userId: applicantId,
                     departmentId: activeDepartmentId,
-                    title: `Leave Request ${status.charAt(0) + status.slice(1).toLowerCase()}`,
-                    message: `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`,
+                    title: notifTitle,
+                    message: notifMessage,
                     link: '/leaves'
                 })
             ]).catch(e => console.error("Failed to add log/notification", e));
