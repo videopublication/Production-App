@@ -22,7 +22,9 @@ export default function LeavesPage() {
     const { showToast } = useToast();
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
-    const [statusFilter, setStatusFilter] = useState<LeaveStatus>('ALL');
+    const [statusFilter, setStatusFilter] = useState<LeaveStatus>(
+        ['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '') ? 'PENDING' : 'ALL'
+    );
     const [isApplying, setIsApplying] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);

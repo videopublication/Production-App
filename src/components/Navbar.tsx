@@ -86,18 +86,18 @@ export const Navbar = () => {
                 </>
             )}
             {(user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                <>
-                    <Link href="/verification" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button variant={isActive('/verification') ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start md:w-auto">
-                            Verification
-                        </Button>
-                    </Link>
-                    <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button variant={isActive('/dashboard') ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start md:w-auto">
-                            Dashboard
-                        </Button>
-                    </Link>
-                </>
+                <Link href="/verification" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button variant={isActive('/verification') ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start md:w-auto">
+                        Verification
+                    </Button>
+                </Link>
+            )}
+            {(user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'FINANCE_MANAGER') && (
+                <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button variant={isActive('/dashboard') ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start md:w-auto">
+                        Dashboard
+                    </Button>
+                </Link>
             )}
         </>
     );
