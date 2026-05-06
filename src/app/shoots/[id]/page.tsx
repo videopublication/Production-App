@@ -15,6 +15,7 @@ import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt } from 'lu
 import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { useConfirm } from '@/lib/dialog-context';
+import { useToast } from '@/lib/toast-context';
 
 import { useShoot, useSaveShoot } from '@/hooks/useShoots';
 import { useAssignments } from '@/hooks/useAssignments';
@@ -28,6 +29,7 @@ import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 export default function ShootDetailsPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { showToast } = useToast();
     const params = useParams();
     const confirm = useConfirm();
     const id = params?.id as string;
@@ -44,9 +46,37 @@ export default function ShootDetailsPage() {
 
     const loading = shootLoading || assignmentsLoading || usersLoading;
     const [isSyncing, setIsSyncing] = useState(false);
-    const [pendingExpenses, setPendingExpenses] = useState<{id: string, type: string, amount: string}[]>([]);
+    
+    const FIXED_EXPENSE_TYPES = ['Boarding', 'Travel', 'Equipment', 'Manpower', 'Other'] as const;
+    const [expenseAmounts, setExpenseAmounts] = useState<Record<string, string>>({});
     const [isSavingExpense, setIsSavingExpense] = useState(false);
-    const [showExpenseForm, setShowExpenseForm] = useState(false);
+    const [selectedCampaign, setSelectedCampaign] = useState<string>('');
+
+    // Initialize selected campaign from existing expenses if any
+    useEffect(() => {
+        if (shoot?.expenses && shoot.expenses.length > 0 && !selectedCampaign) {
+            const existingCampaign = shoot.expenses.find(e => e.campaign)?.campaign;
+            if (existingCampaign) {
+                setSelectedCampaign(existingCampaign);
+            }
+        }
+    }, [shoot?.expenses]);
+
+    // Initialize amounts from shoot expenses
+    useEffect(() => {
+        if (shoot?.expenses) {
+            const amounts: Record<string, string> = {};
+            FIXED_EXPENSE_TYPES.forEach(type => {
+                const existing = shoot.expenses!.find(e => e.type === type);
+                amounts[type] = existing ? String(existing.amount) : '0';
+            });
+            setExpenseAmounts(amounts);
+        } else {
+            const amounts: Record<string, string> = {};
+            FIXED_EXPENSE_TYPES.forEach(type => amounts[type] = '0');
+            setExpenseAmounts(amounts);
+        }
+    }, [shoot?.expenses]);
 
     // Derived State
     const assignments = shoot ? allAssignments.filter(a => a.shootId === shoot.id) : [];
@@ -58,29 +88,21 @@ export default function ShootDetailsPage() {
         }
     }, [shoot?.id]);
 
-    const handleSaveMultipleExpenses = async () => {
+    const handleSaveFixedExpenses = async () => {
         if (!shoot) return;
-        
-        const validExpenses = pendingExpenses.filter(e => e.type.trim() !== '' && e.amount.trim() !== '' && !isNaN(Number(e.amount)));
-        
-        if (validExpenses.length === 0) {
-            setShowExpenseForm(false);
-            setPendingExpenses([]);
-            return;
-        }
-
         setIsSavingExpense(true);
         try {
-            const newExpenses = validExpenses.map(e => ({
-                id: crypto.randomUUID(),
-                type: e.type.trim(),
-                amount: Number(e.amount)
-            }));
+            const newExpenses = FIXED_EXPENSE_TYPES.map(type => {
+                const existing = shoot.expenses?.find(e => e.type === type);
+                return {
+                    id: existing?.id || crypto.randomUUID(),
+                    type,
+                    amount: Number(expenseAmounts[type]) || 0,
+                    campaign: selectedCampaign || undefined
+                };
+            });
 
-            const updatedShoot = {
-                ...shoot,
-                expenses: [...(shoot.expenses || []), ...newExpenses]
-            };
+            const updatedShoot = { ...shoot, expenses: newExpenses };
             
             const res = await fetch(`/api/shoots/${shoot.id}/expenses`, {
                 method: 'PUT',
@@ -93,67 +115,41 @@ export default function ShootDetailsPage() {
                 throw new Error(data.error || 'Failed to update expenses in DB');
             }
 
-            // Still saveShoot to update local indexedDB cache if app uses it
-            // Although since we're online, invalidateQueries is enough, but storage.saveShoot also does IDB caching
-            // let's do a fast update the local cache
-            await queryClient.invalidateQueries({ queryKey: [['shoots', id], ['shoots'], ['shoots', shoot.id]] });
-            setPendingExpenses([]);
-            setShowExpenseForm(false);
+            queryClient.setQueryData(['shoots', id], updatedShoot);
+            await queryClient.invalidateQueries({ queryKey: ['shoots'] });
         } catch (error) {
             console.error('Failed to save expenses:', error);
-            alert('Failed to save expenses');
+            showToast('Failed to save expenses', 'error');
         } finally {
             setIsSavingExpense(false);
         }
     };
 
-    const addPendingExpenseRow = () => {
-        setPendingExpenses([...pendingExpenses, { id: crypto.randomUUID(), type: '', amount: '' }]);
-    };
-
-    const updatePendingExpense = (id: string, field: 'type' | 'amount', value: string) => {
-        setPendingExpenses(pendingExpenses.map(e => e.id === id ? { ...e, [field]: value } : e));
-    };
-
-    const removePendingExpenseRow = (id: string) => {
-        setPendingExpenses(pendingExpenses.filter(e => e.id !== id));
-    };
-
-    const handleRemoveExpense = async (expenseId: string) => {
+    const handleCampaignChange = async (newCampaign: string) => {
+        setSelectedCampaign(newCampaign);
         if (!shoot) return;
         
-        const isConfirmed = await confirm({
-            title: 'Remove Expense?',
-            message: 'Are you sure you want to remove this?',
-            confirmLabel: 'Yes, Remove',
-            variant: 'danger'
-        });
-
-        if (!isConfirmed) return;
-
-        try {
-            const updatedShoot = {
-                ...shoot,
-                expenses: (shoot.expenses || []).filter(e => e.id !== expenseId)
-            };
-            
-            const res = await fetch(`/api/shoots/${shoot.id}/expenses`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ expenses: updatedShoot.expenses })
-            });
-
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                throw new Error(data.error || 'Failed to update expenses in DB');
+        // Auto-update all existing expenses
+        const currentExpenses = shoot.expenses || [];
+        if (currentExpenses.length > 0) {
+            const updatedExpenses = currentExpenses.map(e => ({ ...e, campaign: newCampaign }));
+            try {
+                const res = await fetch(`/api/shoots/${shoot.id}/expenses`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expenses: updatedExpenses })
+                });
+                if (res.ok) {
+                    queryClient.setQueryData(['shoots', id], { ...shoot, expenses: updatedExpenses });
+                    await queryClient.invalidateQueries({ queryKey: ['shoots'] });
+                    showToast('Campaign updated for all expenses', 'success');
+                }
+            } catch (error) {
+                console.error('Failed to update campaign:', error);
             }
-
-            await queryClient.invalidateQueries({ queryKey: [['shoots', id], ['shoots'], ['shoots', shoot.id]] });
-        } catch (error) {
-            console.error('Failed to remove expense:', error);
-            alert('Failed to remove expense');
         }
     };
+
 
     const handleCancelShoot = async () => {
         if (!shoot) return;
@@ -673,129 +669,68 @@ export default function ShootDetailsPage() {
                     {/* Expenses Section */}
                     {((user?.role && ['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) || user?.canManageExpenses) && (
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center px-1 mb-4">
-                            <div>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-1 mb-4 gap-3">
+                            <div className="flex items-center gap-4 flex-wrap">
                                 <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                     <Receipt className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                                     Project Expenses
                                 </h2>
+                                <select
+                                    className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm text-gray-700 dark:text-gray-200"
+                                    value={selectedCampaign}
+                                    onChange={(e) => handleCampaignChange(e.target.value)}
+                                >
+                                    <option value="" disabled>Select Campaign</option>
+                                    <option value="SGEx">SGEx</option>
+                                    <option value="Isha Tamil">Isha Tamil</option>
+                                    <option value="SG Reach">SG Reach</option>
+                                    <option value="Events">Events</option>
+                                    <option value="Others">Others</option>
+                                </select>
+                                {selectedCampaign && (
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                        selectedCampaign === 'SGEx' ? 'bg-[#c95434] text-white' :
+                                        selectedCampaign === 'Isha Tamil' ? 'bg-amber-500 text-white' :
+                                        selectedCampaign === 'SG Reach' ? 'bg-blue-500 text-white' :
+                                        selectedCampaign === 'Events' ? 'bg-purple-500 text-white' :
+                                        'bg-gray-500 text-white'
+                                    }`}>
+                                        {selectedCampaign}
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center gap-3">
-                                {shoot?.expenses?.length ? (
-                                    <Badge variant="default" className="bg-primary/10 text-primary hover:bg-primary/20">
-                                        Total: ₹{shoot.expenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString('en-IN')}
-                                    </Badge>
-                                ) : null}
-                                { !showExpenseForm && (
-                                    <Button size="sm" onClick={() => {
-                                        setPendingExpenses([{ id: crypto.randomUUID(), type: '', amount: '' }]);
-                                        setShowExpenseForm(true);
-                                    }} className="gap-1">
-                                        <Plus className="w-4 h-4" /> Add
-                                    </Button>
-                                )}
+                                <Badge variant="default" className="bg-primary/10 text-primary hover:bg-primary/20">
+                                    Total: ₹{FIXED_EXPENSE_TYPES.reduce((sum, type) => sum + (Number(expenseAmounts[type]) || 0), 0).toLocaleString('en-IN')}
+                                </Badge>
+                                {isSavingExpense && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
                             </div>
                         </div>
 
-                        {showExpenseForm && (
-                            <Card className="p-4 border-2 border-primary/20 bg-primary/5 shadow-inner">
-                                <h4 className="text-sm font-bold mb-3 text-gray-900 dark:text-white">Add New Expenses</h4>
-                                <div className="space-y-3">
-                                    {pendingExpenses.map((exp, index) => (
-                                        <div key={exp.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 relative group">
-                                            <div className="md:col-span-5">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Expense Type (e.g. Travel, Food)"
-                                                    className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                                                    value={exp.type}
-                                                    onChange={(e) => updatePendingExpense(exp.id, 'type', e.target.value)}
-                                                    autoFocus={index === pendingExpenses.length - 1}
-                                                />
-                                            </div>
-                                            <div className="md:col-span-6 relative">
-                                                <span className="absolute left-3 top-2 text-gray-500 font-medium">₹</span>
-                                                <input
-                                                    type="number"
-                                                    placeholder="Amount"
-                                                    className="w-full pl-7 pr-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                                                    value={exp.amount}
-                                                    onChange={(e) => updatePendingExpense(exp.id, 'amount', e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            addPendingExpenseRow();
-                                                        }
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="md:col-span-1 flex justify-end">
-                                                <Button 
-                                                    variant="secondary" 
-                                                    className="px-2 border-gray-300 dark:border-gray-700 text-gray-500 hover:text-red-500 w-full" 
-                                                    onClick={() => removePendingExpenseRow(exp.id)}
-                                                    disabled={pendingExpenses.length === 1}
-                                                >
-                                                    <XCircle className="w-4 h-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-4 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                    <Button variant="outline" size="sm" onClick={addPendingExpenseRow} className="w-full sm:w-auto text-xs bg-white dark:bg-gray-800">
-                                        <Plus className="w-3 h-3 mr-1" /> Add Another Row
-                                    </Button>
-                                    <div className="flex gap-2 w-full sm:w-auto">
-                                        <Button 
-                                            variant="secondary" 
-                                            className="flex-1 sm:flex-none px-4 border-gray-300 dark:border-gray-700" 
-                                            onClick={() => {
-                                                setShowExpenseForm(false);
-                                                setPendingExpenses([]);
-                                            }}
-                                        >
-                                            Cancel
-                                        </Button>
-                                        <Button 
-                                            className="flex-1 sm:flex-none px-6" 
-                                            onClick={handleSaveMultipleExpenses} 
-                                            disabled={isSavingExpense || pendingExpenses.every(e => !e.type && !e.amount)}
-                                        >
-                                            {isSavingExpense ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save All'}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </Card>
-                        )}
-
                         <div className="space-y-3">
-                            {!shoot?.expenses || shoot.expenses.length === 0 ? (
-                                <div className="text-center py-6 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-700">
-                                    <p className="font-medium text-gray-700 dark:text-gray-300">No expenses recorded</p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Track shoot-related costs like travel or equipment rentals here.</p>
-                                </div>
-                            ) : (
-                                shoot.expenses.map((expense) => (
-                                    <div key={expense.id} className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] shadow-sm hover:border-primary/30 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-                                                <IndianRupee className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-900 dark:text-white text-[15px]">{expense.type}</h4>
-                                                <p className="text-xs sm:text-sm font-semibold text-gray-500 dark:text-gray-400 mt-0.5">₹{expense.amount.toLocaleString('en-IN')}</p>
-                                            </div>
+                            {FIXED_EXPENSE_TYPES.map((type) => (
+                                <div key={type} className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] shadow-sm hover:border-primary/30 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                                            <IndianRupee className="w-5 h-5" />
                                         </div>
-                                        <button 
-                                            onClick={() => handleRemoveExpense(expense.id)}
-                                            className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors group"
-                                            title="Remove expense"
-                                        >
-                                            <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                                        </button>
+                                        <div>
+                                            <h4 className="font-bold text-gray-900 dark:text-white text-[15px]">{type}</h4>
+                                        </div>
                                     </div>
-                                ))
-                            )}
+                                    <div className="relative max-w-[150px]">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+                                        <input
+                                            type="number"
+                                            value={expenseAmounts[type]}
+                                            onChange={(e) => setExpenseAmounts(prev => ({ ...prev, [type]: e.target.value }))}
+                                            onBlur={handleSaveFixedExpenses}
+                                            className="w-full pl-7 pr-3 py-1.5 bg-gray-50 dark:bg-[#1c1c1e] border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm font-semibold text-right"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                     )}

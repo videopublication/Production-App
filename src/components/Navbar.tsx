@@ -64,7 +64,7 @@ export const Navbar = () => {
 
     const NavLinks = () => (
         <>
-            {user && (
+            {(user?.role === 'CREW' || user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                 <Link href="/inventory" onClick={() => setIsMobileMenuOpen(false)}>
                     <Button variant={isActive('/inventory') ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start md:w-auto">
                         Inventory

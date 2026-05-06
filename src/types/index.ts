@@ -118,6 +118,7 @@ export interface ShootExpense {
     id: string;
     type: string;
     amount: number;
+    campaign?: string;
 }
 
 export interface Shoot {
