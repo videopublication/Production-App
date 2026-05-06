@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage'; // Still used for type referencing if valid, or remove if unused, but kept for safety. Ideally hooks replace it but types might be needed. Alternatively just imports.
-import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X } from 'lucide-react';
+import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X, IndianRupee } from 'lucide-react';
 import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
@@ -18,7 +18,14 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'CONFIRMED' | 'CANCELLED';
 type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST' | 'CUSTOM';
-type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber';
+type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber' | 'expenses';
+
+import { Shoot, ShootExpense } from '@/types';
+
+const getShootTotalExpense = (shoot: Shoot) => {
+    if (!shoot.expenses || shoot.expenses.length === 0) return 0;
+    return shoot.expenses.reduce((sum: number, exp: ShootExpense) => sum + (Number(exp.amount) || 0), 0);
+};
 type SortDirection = 'asc' | 'desc';
 
 export default function ShootList() {
@@ -159,6 +166,9 @@ export default function ShootList() {
                     // Sort by shoot number safely handle nulls
                     comparison = (a.shootNumber || 0) - (b.shootNumber || 0);
                     break;
+                case 'expenses':
+                    comparison = getShootTotalExpense(a) - getShootTotalExpense(b);
+                    break;
             }
 
             return sortDirection === 'asc' ? comparison : -comparison;
@@ -234,12 +244,13 @@ export default function ShootList() {
                             <Button
                                 variant="outline"
                                 onClick={() => {
-                                    const headers = ['Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 'Crew Count', 'Crew Names', 'Description'];
+                                    const headers = ['Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 'Crew Count', 'Crew Names', 'Total Expenses', 'Description'];
                                     const rows = filteredShoots.map(shoot => {
                                         const crew = getShootCrew(shoot.id);
                                         const date = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
                                         const time = shoot.startTime ? format(parseISO(shoot.startTime), 'HH:mm') : '';
                                         const crewNames = crew.map(c => c.name).join(', ');
+                                        const totalExpenses = getShootTotalExpense(shoot);
 
                                         return [
                                             shoot.shootNumber || '',
@@ -250,6 +261,7 @@ export default function ShootList() {
                                             shoot.status,
                                             crew.length,
                                             `"${crewNames}"`,
+                                            totalExpenses,
                                             `"${(shoot.description || '').replace(/"/g, '""')}"`
                                         ].join(',');
                                     });
@@ -348,6 +360,7 @@ export default function ShootList() {
                             <option value="shootNumber">Shoot ID</option>
                             <option value="title">Shoot Name</option>
                             <option value="status">Status</option>
+                            <option value="expenses">Expenses</option>
                         </select>
                         <button
                             onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
@@ -435,6 +448,7 @@ export default function ShootList() {
                                         <option value="shootNumber">Shoot ID</option>
                                         <option value="title">Shoot Name</option>
                                         <option value="status">Status</option>
+                                        <option value="expenses">Expenses</option>
                                     </select>
                                     <button
                                         onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
@@ -649,11 +663,21 @@ export default function ShootList() {
 
                                         {/* Footer */}
                                         <div className="pt-4 flex items-center justify-between mt-auto border-t border-gray-100 dark:border-gray-800">
-                                            <div className="flex items-center gap-1.5">
-                                                <Users size={14} className="text-gray-400 dark:text-gray-500" />
-                                                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                                                    {crewCount} crew
-                                                </span>
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Users size={14} className="text-gray-400 dark:text-gray-500" />
+                                                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                        {crewCount} crew
+                                                    </span>
+                                                </div>
+                                                {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && getShootTotalExpense(shoot) > 0 && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <IndianRupee size={14} className="text-gray-400 dark:text-gray-500" />
+                                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                            {getShootTotalExpense(shoot).toLocaleString('en-IN')}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="flex items-center gap-2">
@@ -758,7 +782,7 @@ export default function ShootList() {
                         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 text-xs font-semibold uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">
                             <button
                                 onClick={() => handleSort('title')}
-                                className={`col-span-4 flex items-center gap-1.5 transition-colors text-left ${sortField === 'title' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`col-span-3 flex items-center gap-1.5 transition-colors text-left ${sortField === 'title' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                             >
                                 Shoot <SortIndicator field="title" />
                             </button>
@@ -780,9 +804,17 @@ export default function ShootList() {
                             >
                                 Crew <SortIndicator field="crew" />
                             </button>
+                            {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
+                                <button
+                                    onClick={() => handleSort('expenses')}
+                                    className={`col-span-1 flex items-center gap-1.5 transition-colors text-left ${sortField === 'expenses' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                >
+                                    Expenses <SortIndicator field="expenses" />
+                                </button>
+                            )}
                             <button
                                 onClick={() => handleSort('status')}
-                                className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'status' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-2' : 'col-span-3'} flex items-center gap-1.5 transition-colors text-left ${sortField === 'status' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                             >
                                 Status <SortIndicator field="status" />
                             </button>
@@ -810,7 +842,7 @@ export default function ShootList() {
                                             }`}
                                     >
                                         {/* Shoot Info */}
-                                        <div className="col-span-4 min-w-0 pr-4">
+                                        <div className="col-span-3 min-w-0 pr-4">
                                             <div className="flex items-start gap-2">
                                                 {shoot.shootNumber && (
                                                     <span className="mt-0.5 text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded tracking-wide shrink-0">
@@ -883,8 +915,21 @@ export default function ShootList() {
                                             </div>
                                         </div>
 
+                                        {/* Expenses (Admin/Finance only) */}
+                                        {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
+                                            <div className="col-span-1 flex items-center">
+                                                {getShootTotalExpense(shoot) > 0 ? (
+                                                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                        ₹{getShootTotalExpense(shoot).toLocaleString('en-IN')}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-sm text-gray-400 dark:text-gray-600">-</span>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* Status */}
-                                        <div className="col-span-2 flex items-center">
+                                        <div className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-2' : 'col-span-3'} flex items-center`}>
                                             <span
                                                 style={{ backgroundColor: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.border}` }}
                                                 className="text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide"
