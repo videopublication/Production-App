@@ -11,7 +11,7 @@ import { Button } from '@/components/Button';
 import { APP_CONFIG } from '@/lib/config';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
-import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt } from 'lucide-react';
+import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { useConfirm } from '@/lib/dialog-context';
@@ -68,12 +68,12 @@ export default function ShootDetailsPage() {
             const amounts: Record<string, string> = {};
             FIXED_EXPENSE_TYPES.forEach(type => {
                 const existing = shoot.expenses!.find(e => e.type === type);
-                amounts[type] = existing ? String(existing.amount) : '0';
+                amounts[type] = existing && existing.amount !== 0 ? String(existing.amount) : '';
             });
             setExpenseAmounts(amounts);
         } else {
             const amounts: Record<string, string> = {};
-            FIXED_EXPENSE_TYPES.forEach(type => amounts[type] = '0');
+            FIXED_EXPENSE_TYPES.forEach(type => amounts[type] = '');
             setExpenseAmounts(amounts);
         }
     }, [shoot?.expenses]);
@@ -90,6 +90,27 @@ export default function ShootDetailsPage() {
 
     const handleSaveFixedExpenses = async () => {
         if (!shoot) return;
+
+        // Check if anything actually changed before making API calls or logging
+        const changedDetails: string[] = [];
+        const hasChanges = FIXED_EXPENSE_TYPES.some(type => {
+            const existing = shoot.expenses?.find(e => e.type === type);
+            const oldVal = existing?.amount || 0;
+            const newVal = Number(expenseAmounts[type]) || 0;
+            const oldCampaign = existing?.campaign || '';
+            const newCampaign = selectedCampaign || '';
+            
+            if (oldVal !== newVal) {
+                changedDetails.push(`${type}: ₹${oldVal} ➔ ₹${newVal}`);
+            }
+
+            // If the expense was never recorded, and new amount is 0, it's not a change
+            if (!existing && newVal === 0 && newCampaign === '') return false;
+            return oldVal !== newVal || oldCampaign !== newCampaign;
+        });
+
+        if (!hasChanges) return;
+
         setIsSavingExpense(true);
         try {
             const newExpenses = FIXED_EXPENSE_TYPES.map(type => {
@@ -115,6 +136,23 @@ export default function ShootDetailsPage() {
                 throw new Error(data.error || 'Failed to update expenses in DB');
             }
 
+            if (user) {
+                const detailsText = changedDetails.length > 0 
+                    ? `Updated amounts: ${changedDetails.join(', ')}` 
+                    : 'Updated shoot expenses';
+                await storage.addLog({
+                    id: crypto.randomUUID(),
+                    action: 'EDIT',
+                    entityId: shoot.id,
+                    userId: user.id,
+                    timestamp: new Date().toISOString(),
+                    details: detailsText,
+                    oldValue: shoot.expenses || [],
+                    newValue: newExpenses
+                });
+                storage.getLogsByEntity(shoot.id).then(setLogs);
+            }
+
             queryClient.setQueryData(['shoots', id], updatedShoot);
             await queryClient.invalidateQueries({ queryKey: ['shoots'] });
         } catch (error) {
@@ -132,6 +170,9 @@ export default function ShootDetailsPage() {
         // Auto-update all existing expenses
         const currentExpenses = shoot.expenses || [];
         if (currentExpenses.length > 0) {
+            const hasChanges = currentExpenses.some(e => (e.campaign || '') !== newCampaign);
+            if (!hasChanges) return;
+
             const updatedExpenses = currentExpenses.map(e => ({ ...e, campaign: newCampaign }));
             try {
                 const res = await fetch(`/api/shoots/${shoot.id}/expenses`, {
@@ -140,6 +181,19 @@ export default function ShootDetailsPage() {
                     body: JSON.stringify({ expenses: updatedExpenses })
                 });
                 if (res.ok) {
+                    if (user) {
+                        await storage.addLog({
+                            id: crypto.randomUUID(),
+                            action: 'EDIT',
+                            entityId: shoot.id,
+                            userId: user.id,
+                            timestamp: new Date().toISOString(),
+                            details: `Updated expense category to ${newCampaign || 'None'}`,
+                            oldValue: currentExpenses,
+                            newValue: updatedExpenses
+                        });
+                        storage.getLogsByEntity(shoot.id).then(setLogs);
+                    }
                     queryClient.setQueryData(['shoots', id], { ...shoot, expenses: updatedExpenses });
                     await queryClient.invalidateQueries({ queryKey: ['shoots'] });
                     showToast('Campaign updated for all expenses', 'success');
@@ -675,32 +729,44 @@ export default function ShootDetailsPage() {
                                     <Receipt className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                                     Project Expenses
                                 </h2>
-                                <select
-                                    className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm text-gray-700 dark:text-gray-200"
-                                    value={selectedCampaign}
-                                    onChange={(e) => handleCampaignChange(e.target.value)}
-                                >
-                                    <option value="" disabled>Select Campaign</option>
-                                    <option value="SGEx">SGEx</option>
-                                    <option value="Isha Tamil">Isha Tamil</option>
-                                    <option value="SG Reach">SG Reach</option>
-                                    <option value="Events">Events</option>
-                                    <option value="Others">Others</option>
-                                </select>
-                                {selectedCampaign && (
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                                        selectedCampaign === 'SGEx' ? 'bg-[#c95434] text-white' :
-                                        selectedCampaign === 'Isha Tamil' ? 'bg-amber-500 text-white' :
-                                        selectedCampaign === 'SG Reach' ? 'bg-blue-500 text-white' :
-                                        selectedCampaign === 'Events' ? 'bg-purple-500 text-white' :
-                                        'bg-gray-500 text-white'
+                                <div className="relative inline-flex items-center group">
+                                    {/* The visible custom Badge/Button */}
+                                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold tracking-wider shadow-sm transition-all group-hover:shadow-md ${
+                                        selectedCampaign === 'SGEx' ? 'bg-[#c95434] border-[#b04529] text-white' :
+                                        selectedCampaign === 'Isha Tamil' ? 'bg-amber-500 border-amber-600 text-white' :
+                                        selectedCampaign === 'SG Reach' ? 'bg-blue-500 border-blue-600 text-white' :
+                                        selectedCampaign === 'Events' ? 'bg-purple-500 border-purple-600 text-white' :
+                                        selectedCampaign === 'Campaign' ? 'bg-indigo-500 border-indigo-600 text-white' :
+                                        selectedCampaign ? 'bg-gray-500 border-gray-600 text-white' :
+                                        'bg-white dark:bg-[#1c1c1e] border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 group-hover:bg-gray-50 dark:group-hover:bg-gray-800'
                                     }`}>
-                                        {selectedCampaign}
-                                    </span>
-                                )}
+                                        <span className={selectedCampaign ? 'uppercase text-[10px]' : ''}>
+                                            {selectedCampaign || 'Select Category'}
+                                        </span>
+                                        <svg className="w-3.5 h-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                                        </svg>
+                                    </div>
+
+                                    {/* The invisible select that catches clicks */}
+                                    <select
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        value={selectedCampaign || ""}
+                                        onChange={(e) => handleCampaignChange(e.target.value)}
+                                        title="Select Category"
+                                    >
+                                        <option value="">None (Clear)</option>
+                                        <option value="SGEx">SGEx</option>
+                                        <option value="Isha Tamil">Isha Tamil</option>
+                                        <option value="SG Reach">SG Reach</option>
+                                        <option value="Events">Events</option>
+                                        <option value="Campaign">Campaign</option>
+                                        <option value="Others">Others</option>
+                                    </select>
+                                </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Badge variant="default" className="bg-primary/10 text-primary hover:bg-primary/20">
+                                <Badge variant="default" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50">
                                     Total: ₹{FIXED_EXPENSE_TYPES.reduce((sum, type) => sum + (Number(expenseAmounts[type]) || 0), 0).toLocaleString('en-IN')}
                                 </Badge>
                                 {isSavingExpense && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
@@ -711,8 +777,15 @@ export default function ShootDetailsPage() {
                             {FIXED_EXPENSE_TYPES.map((type) => (
                                 <div key={type} className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] shadow-sm hover:border-primary/30 transition-colors">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-                                            <IndianRupee className="w-5 h-5" />
+                                        <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 relative">
+                                            {type === 'Boarding' ? <Home className="w-5 h-5" /> : 
+                                             type === 'Travel' ? <Plane className="w-5 h-5" /> :
+                                             type === 'Equipment' ? <Video className="w-5 h-5" /> :
+                                             type === 'Manpower' ? <Users className="w-5 h-5" /> :
+                                             <MoreHorizontal className="w-5 h-5" />}
+                                            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center border-[1.5px] border-white dark:border-[#2c2c2e] text-white">
+                                                <IndianRupee className="w-2.5 h-2.5 stroke-[3]" />
+                                            </div>
                                         </div>
                                         <div>
                                             <h4 className="font-bold text-gray-900 dark:text-white text-[15px]">{type}</h4>
@@ -722,8 +795,18 @@ export default function ShootDetailsPage() {
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
                                         <input
                                             type="number"
-                                            value={expenseAmounts[type]}
-                                            onChange={(e) => setExpenseAmounts(prev => ({ ...prev, [type]: e.target.value }))}
+                                            min="0"
+                                            value={expenseAmounts[type] || ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (val && Number(val) < 0) return; // Prevent negative values
+                                                setExpenseAmounts(prev => ({ ...prev, [type]: val }));
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === '-') {
+                                                    e.preventDefault();
+                                                }
+                                            }}
                                             onBlur={handleSaveFixedExpenses}
                                             className="w-full pl-7 pr-3 py-1.5 bg-gray-50 dark:bg-[#1c1c1e] border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm font-semibold text-right"
                                             placeholder="0"
