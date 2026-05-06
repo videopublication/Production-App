@@ -244,7 +244,13 @@ export default function ShootList() {
                             <Button
                                 variant="outline"
                                 onClick={() => {
-                                    const headers = ['Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 'Crew Count', 'Crew Names', 'Total Expenses', 'Category', 'Description'];
+                                    const headers = [
+                                        'Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 
+                                        'Crew Count', 'Crew Names', 
+                                        'Total Expenses', 'Category', 
+                                        'Boarding', 'Travel', 'Equipment', 'Manpower', 'Other',
+                                        'Description'
+                                    ];
                                     const rows = filteredShoots.map(shoot => {
                                         const crew = getShootCrew(shoot.id);
                                         const date = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
@@ -252,6 +258,11 @@ export default function ShootList() {
                                         const crewNames = crew.map(c => c.name).join(', ');
                                         const totalExpenses = getShootTotalExpense(shoot);
                                         const category = shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || '';
+
+                                        const getExp = (type: string) => {
+                                            const exp = shoot.expenses?.find((e: ShootExpense) => e.type.toLowerCase() === type.toLowerCase());
+                                            return exp ? Number(exp.amount) || 0 : 0;
+                                        };
 
                                         return [
                                             shoot.shootNumber || '',
@@ -264,6 +275,11 @@ export default function ShootList() {
                                             `"${crewNames}"`,
                                             totalExpenses,
                                             `"${category}"`,
+                                            getExp('Boarding'),
+                                            getExp('Travel'),
+                                            getExp('Equipment'),
+                                            getExp('Manpower'),
+                                            getExp('Other'),
                                             `"${(shoot.description || '').replace(/"/g, '""')}"`
                                         ].join(',');
                                     });
