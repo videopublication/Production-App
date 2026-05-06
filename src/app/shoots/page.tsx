@@ -69,6 +69,8 @@ export default function ShootList() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const [isInitialized, setIsInitialized] = useState(false);
+
     // Load state from session storage on mount
     useEffect(() => {
         try {
@@ -88,10 +90,13 @@ export default function ShootList() {
         } catch (e) {
             console.error('Failed to parse session storage state', e);
         }
+        setIsInitialized(true);
     }, []);
 
     // Save state to session storage on change
     useEffect(() => {
+        if (!isInitialized) return;
+        
         const state = {
             viewMode,
             searchQuery,
@@ -104,7 +109,7 @@ export default function ShootList() {
             showFilters
         };
         sessionStorage.setItem('shootListState', JSON.stringify(state));
-    }, [viewMode, searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, sortField, sortDirection, showFilters]);
+    }, [isInitialized, viewMode, searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, sortField, sortDirection, showFilters]);
 
     // Get crew details
     const getShootCrew = (shootId: string) => {
