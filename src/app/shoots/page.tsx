@@ -673,7 +673,7 @@ export default function ShootList() {
                                                     </span>
                                                 </div>
                                                 {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && getShootTotalExpense(shoot) > 0 && (
-                                                    <div className="flex items-center gap-1.5">
+                                                    <div className="flex items-center gap-1.5 relative group cursor-pointer">
                                                         <IndianRupee size={14} className="text-gray-400 dark:text-gray-500" />
                                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                                                             {getShootTotalExpense(shoot).toLocaleString('en-IN')}
@@ -681,6 +681,23 @@ export default function ShootList() {
                                                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 ml-0.5 uppercase tracking-wider">
                                                             {shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}
                                                         </span>
+                                                        
+                                                        {/* Hover Tooltip for Expense Breakdown */}
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+                                                            <p className="text-xs font-bold text-gray-900 dark:text-white mb-2 border-b border-gray-100 dark:border-gray-700 pb-1">Expense Breakdown</p>
+                                                            <div className="space-y-1.5">
+                                                                {shoot.expenses?.filter(e => Number(e.amount) > 0).map((expense, idx) => (
+                                                                    <div key={idx} className="flex justify-between items-center text-xs">
+                                                                        <span className="text-gray-500 dark:text-gray-400 capitalize">{expense.type.toLowerCase()}</span>
+                                                                        <span className="font-medium text-gray-900 dark:text-white">₹{Number(expense.amount).toLocaleString('en-IN')}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <div className="mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center text-xs font-bold">
+                                                                <span className="text-gray-900 dark:text-white">Total</span>
+                                                                <span className="text-gray-900 dark:text-white">₹{getShootTotalExpense(shoot).toLocaleString('en-IN')}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -922,15 +939,34 @@ export default function ShootList() {
 
                                         {/* Expenses (Admin/Finance only) */}
                                         {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
-                                            <div className="col-span-2 flex flex-col justify-center">
+                                            <div className="col-span-2 flex flex-col justify-center relative group">
                                                 {getShootTotalExpense(shoot) > 0 ? (
                                                     <>
-                                                        <span className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
-                                                            ₹{getShootTotalExpense(shoot).toLocaleString('en-IN')}
-                                                        </span>
-                                                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-0.5 truncate pr-2" title={shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}>
-                                                            {shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}
-                                                        </span>
+                                                        <div className="cursor-pointer w-fit">
+                                                            <span className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
+                                                                ₹{getShootTotalExpense(shoot).toLocaleString('en-IN')}
+                                                            </span>
+                                                            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-0.5 truncate pr-2" title={shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}>
+                                                                {shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Hover Tooltip for Expense Breakdown */}
+                                                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+                                                            <p className="text-xs font-bold text-gray-900 dark:text-white mb-2 border-b border-gray-100 dark:border-gray-700 pb-1">Expense Breakdown</p>
+                                                            <div className="space-y-1.5">
+                                                                {shoot.expenses?.filter(e => Number(e.amount) > 0).map((expense, idx) => (
+                                                                    <div key={idx} className="flex justify-between items-center text-xs">
+                                                                        <span className="text-gray-500 dark:text-gray-400 capitalize">{expense.type.toLowerCase()}</span>
+                                                                        <span className="font-medium text-gray-900 dark:text-white">₹{Number(expense.amount).toLocaleString('en-IN')}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <div className="mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center text-xs font-bold">
+                                                                <span className="text-gray-900 dark:text-white">Total</span>
+                                                                <span className="text-gray-900 dark:text-white">₹{getShootTotalExpense(shoot).toLocaleString('en-IN')}</span>
+                                                            </div>
+                                                        </div>
                                                     </>
                                                 ) : (
                                                     <span className="text-sm text-gray-400 dark:text-gray-600">-</span>
