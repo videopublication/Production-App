@@ -52,6 +52,12 @@ export default function ShootList() {
     const [crewSearchQuery, setCrewSearchQuery] = useState('');
     const crewFilterRef = React.useRef<HTMLDivElement>(null);
 
+    // Sorting state (for list view)
+    const [sortField, setSortField] = useState<SortField>('shootNumber');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const [expandedCrewShootId, setExpandedCrewShootId] = useState<string | null>(null);
+
     // Close crew filter on outside click
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -63,11 +69,42 @@ export default function ShootList() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Sorting state (for list view)
-    const [sortField, setSortField] = useState<SortField>('shootNumber');
-    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+    // Load state from session storage on mount
+    useEffect(() => {
+        try {
+            const savedState = sessionStorage.getItem('shootListState');
+            if (savedState) {
+                const parsed = JSON.parse(savedState);
+                if (parsed.viewMode) setViewMode(parsed.viewMode);
+                if (parsed.searchQuery !== undefined) setSearchQuery(parsed.searchQuery);
+                if (parsed.statusFilter) setStatusFilter(parsed.statusFilter);
+                if (parsed.timeFilter) setTimeFilter(parsed.timeFilter);
+                if (parsed.customDateRange) setCustomDateRange(parsed.customDateRange);
+                if (parsed.crewFilter) setCrewFilter(parsed.crewFilter);
+                if (parsed.sortField) setSortField(parsed.sortField);
+                if (parsed.sortDirection) setSortDirection(parsed.sortDirection);
+                if (parsed.showFilters !== undefined) setShowFilters(parsed.showFilters);
+            }
+        } catch (e) {
+            console.error('Failed to parse session storage state', e);
+        }
+    }, []);
 
-    const [expandedCrewShootId, setExpandedCrewShootId] = useState<string | null>(null);
+    // Save state to session storage on change
+    useEffect(() => {
+        const state = {
+            viewMode,
+            searchQuery,
+            statusFilter,
+            timeFilter,
+            customDateRange,
+            crewFilter,
+            sortField,
+            sortDirection,
+            showFilters
+        };
+        sessionStorage.setItem('shootListState', JSON.stringify(state));
+    }, [viewMode, searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, sortField, sortDirection, showFilters]);
 
     // Get crew details
     const getShootCrew = (shootId: string) => {
