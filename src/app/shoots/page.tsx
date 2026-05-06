@@ -244,13 +244,14 @@ export default function ShootList() {
                             <Button
                                 variant="outline"
                                 onClick={() => {
-                                    const headers = ['Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 'Crew Count', 'Crew Names', 'Total Expenses', 'Description'];
+                                    const headers = ['Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 'Crew Count', 'Crew Names', 'Total Expenses', 'Category', 'Description'];
                                     const rows = filteredShoots.map(shoot => {
                                         const crew = getShootCrew(shoot.id);
                                         const date = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
                                         const time = shoot.startTime ? format(parseISO(shoot.startTime), 'HH:mm') : '';
                                         const crewNames = crew.map(c => c.name).join(', ');
                                         const totalExpenses = getShootTotalExpense(shoot);
+                                        const category = shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || '';
 
                                         return [
                                             shoot.shootNumber || '',
@@ -262,6 +263,7 @@ export default function ShootList() {
                                             crew.length,
                                             `"${crewNames}"`,
                                             totalExpenses,
+                                            `"${category}"`,
                                             `"${(shoot.description || '').replace(/"/g, '""')}"`
                                         ].join(',');
                                     });
@@ -676,6 +678,9 @@ export default function ShootList() {
                                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                                                             {getShootTotalExpense(shoot).toLocaleString('en-IN')}
                                                         </span>
+                                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 ml-0.5 uppercase tracking-wider">
+                                                            {shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
@@ -807,14 +812,14 @@ export default function ShootList() {
                             {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
                                 <button
                                     onClick={() => handleSort('expenses')}
-                                    className={`col-span-1 flex items-center gap-1.5 transition-colors text-left ${sortField === 'expenses' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                    className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'expenses' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                                 >
                                     Expenses <SortIndicator field="expenses" />
                                 </button>
                             )}
                             <button
                                 onClick={() => handleSort('status')}
-                                className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-2' : 'col-span-3'} flex items-center gap-1.5 transition-colors text-left ${sortField === 'status' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-1' : 'col-span-3'} flex items-center gap-1.5 transition-colors text-left ${sortField === 'status' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
                             >
                                 Status <SortIndicator field="status" />
                             </button>
@@ -917,11 +922,16 @@ export default function ShootList() {
 
                                         {/* Expenses (Admin/Finance only) */}
                                         {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
-                                            <div className="col-span-1 flex items-center">
+                                            <div className="col-span-2 flex flex-col justify-center">
                                                 {getShootTotalExpense(shoot) > 0 ? (
-                                                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                                        ₹{getShootTotalExpense(shoot).toLocaleString('en-IN')}
-                                                    </span>
+                                                    <>
+                                                        <span className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
+                                                            ₹{getShootTotalExpense(shoot).toLocaleString('en-IN')}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-0.5 truncate pr-2" title={shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}>
+                                                            {shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || 'No Category'}
+                                                        </span>
+                                                    </>
                                                 ) : (
                                                     <span className="text-sm text-gray-400 dark:text-gray-600">-</span>
                                                 )}
@@ -929,7 +939,7 @@ export default function ShootList() {
                                         )}
 
                                         {/* Status */}
-                                        <div className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-2' : 'col-span-3'} flex items-center`}>
+                                        <div className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-1' : 'col-span-3'} flex items-center`}>
                                             <span
                                                 style={{ backgroundColor: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.border}` }}
                                                 className="text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide"
