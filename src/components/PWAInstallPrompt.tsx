@@ -26,15 +26,10 @@ export const PWAInstallPrompt = () => {
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
         if (isStandalone) return;
 
-        // Check if dismissed previously and enforce a 12-hour "session" timeout
-        // (sessionStorage is unreliable on mobile browsers as tabs are frequently discarded)
-        const lastDismissedStr = localStorage.getItem('pwa-prompt-dismissed-time');
-        if (lastDismissedStr) {
-            const lastDismissed = parseInt(lastDismissedStr, 10);
-            const SESSION_DURATION = 12 * 60 * 60 * 1000; // 12 hours
-            if (Date.now() - lastDismissed < SESSION_DURATION) {
-                return;
-            }
+        // Check if dismissed previously in this session
+        const isDismissed = sessionStorage.getItem('pwa-prompt-dismissed');
+        if (isDismissed === 'true') {
+            return;
         }
 
         // 1. Listen for native install prompt (Android/Chrome)
@@ -67,7 +62,7 @@ export const PWAInstallPrompt = () => {
 
     const handleDismiss = () => {
         setShowPrompt(false);
-        localStorage.setItem('pwa-prompt-dismissed-time', Date.now().toString());
+        sessionStorage.setItem('pwa-prompt-dismissed', 'true');
     };
 
     const handleInstallClick = async () => {
@@ -86,7 +81,7 @@ export const PWAInstallPrompt = () => {
         }
 
         // Save dismissal to prevent immediate re-prompting if installation fails or is cancelled
-        localStorage.setItem('pwa-prompt-dismissed-time', Date.now().toString());
+        sessionStorage.setItem('pwa-prompt-dismissed', 'true');
 
         // We can't use the prompt again, discard it
         setDeferredPrompt(null);
@@ -111,11 +106,11 @@ export const PWAInstallPrompt = () => {
 
                 <div className="flex gap-4 items-start">
                     {/* App Icon / Graphic */}
-                    <div className="bg-blue-600/20 p-3 rounded-xl shrink-0 flex items-center justify-center">
+                    <div className="bg-primary/ p-3 rounded-xl shrink-0 flex items-center justify-center">
                         {isIOS ? (
-                            <Share className="w-8 h-8 text-blue-500" />
+                            <Share className="w-8 h-8 text-primary" />
                         ) : (
-                            <Download className="w-8 h-8 text-blue-500" />
+                            <Download className="w-8 h-8 text-primary" />
                         )}
                     </div>
 
@@ -145,7 +140,7 @@ export const PWAInstallPrompt = () => {
                         ) : (
                             <Button
                                 onClick={handleInstallClick}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 rounded-xl mt-1 transition-all"
+                                className="w-full bg-primary hover:bg-primary text-white font-semibold py-2 rounded-xl mt-1 transition-all"
                             >
                                 Install Now
                             </Button>

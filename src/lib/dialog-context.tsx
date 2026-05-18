@@ -60,7 +60,7 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                         <div className="flex flex-col border-t border-[#c6c6c8]/30">
                             <button
                                 onClick={handleConfirm}
-                                className={`w-full py-4 text-[17px] font-semibold active:bg-[#f2f2f7] transition-colors ${dialog.variant === 'danger' ? 'text-[#ff3b30]' : 'text-[#0071e3]'
+                                className={`w-full py-4 text-[17px] font-semibold active:bg-[#f2f2f7] transition-colors ${dialog.variant === 'danger' ? 'text-[#ff3b30]' : 'text-[var(--primary)]'
                                     }`}
                             >
                                 {dialog.confirmLabel || 'Confirm'}
@@ -68,7 +68,7 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                             <div className="h-[0.5px] bg-[#c6c6c8]/30" />
                             <button
                                 onClick={handleCancel}
-                                className="w-full py-4 text-[17px] font-medium text-[#0071e3] active:bg-[#f2f2f7] transition-colors"
+                                className="w-full py-4 text-[17px] font-medium text-[var(--primary)] active:bg-[#f2f2f7] transition-colors"
                             >
                                 {dialog.cancelLabel || 'Cancel'}
                             </button>

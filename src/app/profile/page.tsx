@@ -84,7 +84,7 @@ User Agent: ${navigator.userAgent}
                         className="list-item-native w-full flex items-center justify-between"
                     >
                         <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center">
+                            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
                                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                                 </svg>
@@ -129,7 +129,7 @@ User Agent: ${navigator.userAgent}
                                 onClick={() => router.push(item.path)}
                                 className="list-item-native w-full flex items-center gap-3"
                             >
-                                <span className="text-[#0071e3]">{item.icon}</span>
+                                <span className="text-[var(--primary)]">{item.icon}</span>
                                 <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100 flex-1 text-left">{item.label}</span>
                                 <svg className="w-4 h-4 text-[#c7c7cc]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

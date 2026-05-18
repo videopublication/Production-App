@@ -14,8 +14,8 @@ const ALL_QUICK_ACTIONS = [
         id: 'checkout',
         label: 'Checkout',
         route: '/checkout',
-        gradient: 'from-blue-500 to-blue-600',
-        shadow: 'shadow-blue-500/25',
+        gradient: 'from-primary to-primary',
+        shadow: 'shadow-primary/',
         icon: 'M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
         roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'] as UserRole[],
     },
@@ -393,18 +393,18 @@ export default function DashboardPage() {
 
                         {/* Checked Out */}
                         <div 
-                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-200/50 dark:border-blue-900/30 cursor-pointer hover:border-blue-300 transition-colors"
+                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/30 dark:from-primary/20 dark:to-primary/10 border border-primary/50 dark:border-primary/30 cursor-pointer hover:border-primary transition-colors"
                             onClick={() => router.push('/inventory?status=CHECKED_OUT')}
                         >
                             <div className="flex items-center justify-between mb-3">
-                                <div className="w-10 h-10 rounded-xl bg-blue-500 shadow-lg shadow-blue-500/30 flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-xl bg-primary shadow-lg shadow-primary/ flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </div>
                             </div>
-                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-blue-50">{stats.checkedOut}</p>
-                            <p className="text-sm text-[#86868b] dark:text-blue-400/80 mt-1">Checked Out</p>
+                            <p className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] dark:text-primary-foreground">{stats.checkedOut}</p>
+                            <p className="text-sm text-[#86868b] dark:text-primary/80 mt-1">Checked Out</p>
                         </div>
 
                         {/* Pending Verification */}
@@ -481,7 +481,7 @@ export default function DashboardPage() {
                         <button
                             onClick={() => setIsEditMode(!isEditMode)}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isEditMode
-                                ? 'bg-[#007aff] text-white'
+                                ? 'bg-primary text-primary-foreground'
                                 : 'bg-[#f5f5f7] dark:bg-gray-800 text-[#1d1d1f] dark:text-gray-200 hover:bg-[#e8e8ed] dark:hover:bg-gray-700'
                                 }`}
                         >
@@ -516,7 +516,7 @@ export default function DashboardPage() {
                             <div className="flex justify-end mb-2">
                                 <button
                                     onClick={resetToDefaults}
-                                    className="text-sm text-[#007aff] hover:underline"
+                                    className="text-sm text-primary hover:underline"
                                 >
                                     Reset to Defaults
                                 </button>
@@ -546,7 +546,7 @@ export default function DashboardPage() {
                                                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                                                     key={action.id}
                                                     className={`flex items-center gap-3 p-3 rounded-2xl border-2 ${isSelected
-                                                        ? 'border-[#007aff] bg-[#007aff]/5 dark:bg-[#007aff]/10'
+                                                        ? 'border-primary bg-primary/5 dark:bg-primary/10'
                                                         : 'border-[#e5e5ea] dark:border-gray-800 bg-[#f5f5f7]/50 dark:bg-gray-800/50'
                                                         }`}
                                                 >

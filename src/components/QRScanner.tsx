@@ -382,7 +382,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             {isScanning && (
                 <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px]">
-                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-[#0071e3] to-transparent animate-scan-line rounded-full shadow-[0_0_15px_rgba(0,113,227,0.8)]" />
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-[var(--primary)] to-transparent animate-scan-line rounded-full shadow-[0_0_15px_rgba(0,113,227,0.8)]" />
                     </div>
                     {/* Darker backdrop outside scan area */}
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" style={{
@@ -441,7 +441,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             {!isScanning && !error && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/90">
                     <div className="text-center">
-                        <div className="w-14 h-14 border-4 border-white/20 border-t-[#0071e3] rounded-full animate-spin mx-auto mb-5" />
+                        <div className="w-14 h-14 border-4 border-white/20 border-t-[var(--primary)] rounded-full animate-spin mx-auto mb-5" />
                         <p className="text-white/90 text-[17px] font-semibold tracking-wide">Starting camera...</p>
                     </div>
                 </div>
@@ -460,7 +460,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
                         <p className="text-white/60 text-[15px] mb-8 leading-relaxed">{error}</p>
                         <button
                             onClick={startScanning}
-                            className="w-full px-8 py-4 bg-[#0071e3] text-white rounded-2xl text-[17px] font-bold active:scale-95 transition-all shadow-lg hover:bg-[#0077ED]"
+                            className="w-full px-8 py-4 bg-[var(--primary)] text-white rounded-2xl text-[17px] font-bold active:scale-95 transition-all shadow-lg hover:brightness-110"
                         >
                             Try Again
                         </button>

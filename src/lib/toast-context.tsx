@@ -51,7 +51,7 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
     const variants = {
         success: 'bg-[#34c759] text-white shadow-[#34c759]/20',
         error: 'bg-[#ff3b30] text-white shadow-[#ff3b30]/20',
-        info: 'bg-[#0071e3] text-white shadow-[#0071e3]/20',
+        info: 'bg-[var(--primary)] text-white shadow-[var(--primary)]/20',
         warning: 'bg-[#ff9f0a] text-white shadow-[#ff9f0a]/20',
     };
 

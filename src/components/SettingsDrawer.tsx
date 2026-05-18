@@ -95,7 +95,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
                                     <button
                                         onClick={() => setTheme('light')}
                                         className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${theme === 'light'
-                                            ? 'border-blue-500 bg-blue-50/50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                                            ? 'border-primary bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary'
                                             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                                             }`}
                                     >
@@ -110,7 +110,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
                                     <button
                                         onClick={() => setTheme('dark')}
                                         className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${theme === 'dark'
-                                            ? 'border-blue-500 bg-blue-50/50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                                            ? 'border-primary bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary'
                                             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                                             }`}
                                     >
@@ -125,7 +125,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
                                     <button
                                         onClick={() => setTheme('system')}
                                         className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${theme === 'system'
-                                            ? 'border-blue-500 bg-blue-50/50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                                            ? 'border-primary bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary'
                                             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                                             }`}
                                     >

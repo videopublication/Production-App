@@ -761,7 +761,7 @@ export default function ItemDetailsPage() {
                                 const getActionIcon = (action: string) => {
                                     switch (action) {
                                         case 'CHECKOUT': return { icon: '\u2197', bg: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' };
-                                        case 'RETURN': return { icon: '\u2199', bg: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' };
+                                        case 'RETURN': return { icon: '\u2199', bg: 'bg-primary dark:bg-primary/20 text-primary dark:text-primary' };
                                         case 'VERIFY': return { icon: '\u2713', bg: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' };
                                         case 'EDIT': return { icon: '\u270e', bg: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' };
                                         case 'CREATE': return { icon: '+', bg: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' };

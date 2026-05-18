@@ -175,7 +175,7 @@ export default function DepartmentManagementPage() {
             <PullToRefresh onRefresh={fetchDepartments}>
                 <div className="grid gap-4 sm:grid-cols-2">
                     {departments.map(dept => (
-                        <Card key={dept.id} className="p-5 hover:border-blue-500/50 transition-colors">
+                        <Card key={dept.id} className="p-5 hover:border-primary/50 transition-colors">
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">{dept.name}</h3>
@@ -183,7 +183,7 @@ export default function DepartmentManagementPage() {
                                 </div>
                                 <button
                                     onClick={() => openEditModal(dept)}
-                                    className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
+                                    className="p-2 text-gray-400 hover:text-primary transition-colors"
                                 >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -195,7 +195,7 @@ export default function DepartmentManagementPage() {
                                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Enabled Features</h4>
                                 <div className="flex flex-wrap gap-2">
                                     {dept.enabledFeatures?.filter(f => AVAILABLE_FEATURES.some(af => af.id === f)).map(f => (
-                                        <span key={f} className="px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs rounded-md font-medium border border-blue-100 dark:border-blue-800">
+                                        <span key={f} className="px-2 py-1 bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary text-xs rounded-md font-medium border border-primary dark:border-primary">
                                             {AVAILABLE_FEATURES.find(af => af.id === f)?.label}
                                         </span>
                                     ))}
@@ -241,7 +241,7 @@ export default function DepartmentManagementPage() {
                                         <label key={feature.id} className="flex items-start gap-3 cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded transition-colors">
                                             <input
                                                 type="checkbox"
-                                                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
                                                 checked={formData.enabledFeatures.includes(feature.id)}
                                                 onChange={() => toggleFeature(feature.id)}
                                             />

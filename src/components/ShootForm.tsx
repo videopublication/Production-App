@@ -369,10 +369,10 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
                 {/* Shoot Details Card */}
                 <Card className="xl:col-span-2 space-y-4 dark:bg-[#1c1c1e] border-0">
-                    <div className="flex items-center justify-between bg-blue-50/50 dark:bg-[#0071e3]/10 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-blue-100/30 dark:border-[#0071e3]/20 rounded-t-3xl">
+                    <div className="flex items-center justify-between bg-primary/10 dark:bg-[var(--primary)]/10 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-primary/30 dark:border-[var(--primary)]/20 rounded-t-3xl">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-[#0071e3]/20 flex items-center justify-center">
-                                <FileText size={16} className="text-blue-600 dark:text-[#0071e3]" />
+                            <div className="w-8 h-8 rounded-lg bg-primary dark:bg-[var(--primary)]/20 flex items-center justify-center">
+                                <FileText size={16} className="text-primary dark:text-[var(--primary)]" />
                             </div>
                             <h3 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white">Shoot Details</h3>
                         </div>
@@ -381,7 +381,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                             variant="ghost"
                             size="sm"
                             onClick={() => setShowDescription(!showDescription)}
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-100/50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                            className="text-primary hover:text-primary hover:bg-primary/50 dark:text-primary dark:hover:bg-primary/20"
                         >
                             {showDescription ? 'Hide Description' : 'Add Description'}
                         </Button>
@@ -389,8 +389,8 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
                     <div className="space-y-5 pt-1">
                         {/* Jira Ticket Section - High Priority */}
-                        <div className="relative bg-blue-50/50 dark:bg-blue-900/10 p-4 rounded-3xl border border-blue-100/50 dark:border-blue-800/20">
-                            <label className="block text-sm font-semibold text-blue-700 dark:text-blue-300 mb-2">
+                        <div className="relative bg-primary/10 dark:bg-primary/20 p-4 rounded-3xl border border-primary/50 dark:border-primary/20">
+                            <label className="block text-sm font-semibold text-primary dark:text-primary mb-2">
                                 Import from Jira
                             </label>
                             <div className="relative">
@@ -398,7 +398,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                     value={formData.jiraTicketId || ''}
                                     onChange={e => setFormData({ ...formData, jiraTicketId: e.target.value })}
                                     placeholder="Enter Ticket ID (e.g. VP-51638)"
-                                    className="flex h-12 w-full rounded-2xl border-0 bg-white dark:bg-gray-800 px-4 py-2 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 pr-24 shadow-sm"
+                                    className="flex h-12 w-full rounded-2xl border-0 bg-white dark:bg-gray-800 px-4 py-2 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-24 shadow-sm"
                                 />
                                 <div className="absolute top-1.5 right-1.5">
                                     <Button
@@ -407,7 +407,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                         onClick={handleFetchJira}
                                         isLoading={isFetchingJira}
                                         disabled={!formData.jiraTicketId}
-                                        className="h-9 px-4 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium shadow-sm transition-all"
+                                        className="h-9 px-4 text-xs bg-primary hover:bg-primary text-white rounded-xl font-medium shadow-sm transition-all"
                                     >
                                         Fetch
                                     </Button>

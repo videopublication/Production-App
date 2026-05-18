@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { Shoot, Assignment, User } from '@/types';
@@ -20,7 +21,8 @@ import {
     Phone,
     MessageCircle,
     Mail,
-    Search
+    Search,
+    UserX
 } from 'lucide-react';
 import {
     format,
@@ -44,6 +46,8 @@ import {
 } from 'date-fns';
 import { Button } from '@/components/Button';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { AdminLeaveModal } from '@/components/AdminLeaveModal';
+import { useToast } from '@/lib/toast-context';
 
 // Helper to check if two intervals overlap
 const areIntervalsOverlapping = (start1: Date, end1: Date, start2: Date, end2: Date) => {
@@ -57,12 +61,15 @@ import { useLeaves } from '@/hooks/useLeaves';
 
 export default function CalendarPage() {
     const { user } = useAuth();
+    const searchParams = useSearchParams();
 
     // React Query Hooks
     const { data: shoots = [], isLoading: shootsLoading, refetch: refetchShoots } = useShoots();
     const { data: assignments = [], isLoading: assignmentsLoading, refetch: refetchAssignments } = useAssignments();
     const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useUsers();
-    const { leaves = [], isLoading: leavesLoading, refetch: refetchLeaves } = useLeaves();
+    const { leaves = [], isLoading: leavesLoading, refetch: refetchLeaves, addLeave } = useLeaves();
+    const { showToast } = useToast();
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? null : user?.departmentId;
 
     const loading = shootsLoading || assignmentsLoading || usersLoading || leavesLoading;
 
@@ -76,14 +83,37 @@ export default function CalendarPage() {
         ]);
     };
 
+    // Pre-select crew filter from ?user= URL param (deep-linked from leaves page)
+    const preselectedUserId = searchParams.get('user');
+
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
     const [selectedShoot, setSelectedShoot] = useState<Shoot | null>(null);
-    const [crewFilter, setCrewFilter] = useState<string>('ALL');
+    const [crewFilter, setCrewFilter] = useState<string>(preselectedUserId || 'ALL');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     const filterRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+
+    const handleAdminLeaveSubmit = async (data: { userId: string, startDate: string, endDate: string, reason: string }) => {
+        try {
+            await addLeave({
+                userId: data.userId,
+                departmentId: activeDepartmentId || undefined,
+                startDate: data.startDate,
+                endDate: data.endDate,
+                reason: data.reason,
+                status: 'APPROVED',
+                approverId: user?.id
+            });
+            showToast('Absence recorded successfully', 'success');
+            handleRefresh();
+        } catch (error) {
+            console.error('Failed to record absence:', error);
+            showToast('Failed to record absence', 'error');
+        }
+    };
 
     // Close dropdown on click outside
     useEffect(() => {
@@ -195,18 +225,17 @@ export default function CalendarPage() {
         }).length;
     }, [filteredShoots, currentMonth]);
 
-    // Color palette for different shoots (vibrant, distinct colors)
     const shootColorPalette = [
-        { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },  // Blue
-        { bg: '#dcfce7', text: '#166534', border: '#22c55e' },  // Green
-        { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' },  // Amber
-        { bg: '#fce7f3', text: '#9d174d', border: '#ec4899' },  // Pink
-        { bg: '#e0e7ff', text: '#3730a3', border: '#6366f1' },  // Indigo
-        { bg: '#ccfbf1', text: '#115e59', border: '#14b8a6' },  // Teal
-        { bg: '#fef9c3', text: '#854d0e', border: '#eab308' },  // Yellow
-        { bg: '#ede9fe', text: '#5b21b6', border: '#8b5cf6' },  // Violet
-        { bg: '#ffedd5', text: '#9a3412', border: '#f97316' },  // Orange
-        { bg: '#cffafe', text: '#155e75', border: '#06b6d4' },  // Cyan
+        { bg: '#3b82f6', text: '#ffffff', border: '#1d4ed8' }, // Blue
+        { bg: '#8b5cf6', text: '#ffffff', border: '#6d28d9' }, // Violet
+        { bg: '#ec4899', text: '#ffffff', border: '#be185d' }, // Pink
+        { bg: '#f97316', text: '#ffffff', border: '#c2410c' }, // Orange
+        { bg: '#10b981', text: '#ffffff', border: '#047857' }, // Emerald
+        { bg: '#f59e0b', text: '#ffffff', border: '#b45309' }, // Amber
+        { bg: '#06b6d4', text: '#ffffff', border: '#0e7490' }, // Cyan
+        { bg: '#6366f1', text: '#ffffff', border: '#4338ca' }, // Indigo
+        { bg: '#f43f5e', text: '#ffffff', border: '#be123c' }, // Rose
+        { bg: '#14b8a6', text: '#ffffff', border: '#0f766e' }, // Teal
     ];
 
     // Get color for a specific shoot based on its index in the shoots array
@@ -219,9 +248,7 @@ export default function CalendarPage() {
     // Get status-specific styling (for cancelled shoots)
     const getStatusStyle = (status: string, shootId: string) => {
         if (status === 'CANCELLED') {
-            // Using RGBA for background allows it to adapt to dark/light mode (pale red on light, dark red on dark)
-            // Text is brighter red to be visible on both
-            return { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', border: '#f87171' };
+            return { bg: '#ef4444', text: '#ffffff', border: '#b91c1c' };
         }
         return getShootColor(shootId);
     };
@@ -249,13 +276,14 @@ export default function CalendarPage() {
     }
 
     return (
+        <>
         <PullToRefresh onRefresh={handleRefresh}>
             <div className="p-2 sm:p-6 space-y-6 w-full max-w-[1800px] mx-auto min-h-[calc(100vh-80px)]">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2 sm:px-0">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3 text-gray-900 dark:text-white">
-                            <CalendarIcon size={28} className="text-blue-500 dark:text-blue-400" />
+                            <CalendarIcon size={28} className="text-primary dark:text-primary" />
                             Calendar
                         </h1>
                         <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">
@@ -271,11 +299,11 @@ export default function CalendarPage() {
                                     setIsFilterOpen(!isFilterOpen);
                                     if (!isFilterOpen) setSearchQuery('');
                                 }}
-                                className="flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl border shadow-sm transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700 min-w-[180px] justify-between group"
+                                className="flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl border shadow-sm transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 hover:border-primary dark:hover:border-primary min-w-[180px] justify-between group"
                             >
                                 <div className="flex items-center gap-2 overflow-hidden">
-                                    <Users size={16} className="text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors shrink-0" />
-                                    <span className={`text-sm font-medium truncate ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-blue-600 dark:text-blue-400'}`}>
+                                    <Users size={16} className="text-gray-400 dark:text-gray-500 group-hover:text-primary dark:group-hover:text-primary transition-colors shrink-0" />
+                                    <span className={`text-sm font-medium truncate ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-primary dark:text-primary'}`}>
                                         {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
                                     </span>
                                 </div>
@@ -298,7 +326,7 @@ export default function CalendarPage() {
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder="Search crew..."
-                                            className="w-full text-xs pl-8 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-lg focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500"
+                                            className="w-full text-xs pl-8 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-lg focus:ring-1 focus:ring-primary text-gray-900 dark:text-white placeholder-gray-500"
                                             onClick={(e) => e.stopPropagation()}
                                         />
                                     </div>
@@ -308,7 +336,7 @@ export default function CalendarPage() {
                                     <button
                                         onClick={() => { setCrewFilter('ALL'); setIsFilterOpen(false); }}
                                         className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2 ${crewFilter === 'ALL'
-                                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                                            ? 'bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary font-medium'
                                             : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                                             } ${searchQuery ? 'hidden' : ''}`}
                                     >
@@ -322,7 +350,7 @@ export default function CalendarPage() {
                                                 key={u.id}
                                                 onClick={() => { setCrewFilter(u.id); setIsFilterOpen(false); }}
                                                 className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2 ${crewFilter === u.id
-                                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                                                    ? 'bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary font-medium'
                                                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                                                     }`}
                                             >
@@ -368,7 +396,7 @@ export default function CalendarPage() {
                                 </div>
                                 <button
                                     onClick={goToToday}
-                                    className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors shrink-0 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                                    className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors shrink-0 bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary border border-primary dark:border-primary hover:bg-primary dark:hover:bg-primary/20"
                                 >
                                     Today
                                 </button>
@@ -379,7 +407,7 @@ export default function CalendarPage() {
                                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                                     <div
                                         key={day}
-                                        className="py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800"
+                                        className="py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300 bg-gray-50 dark:bg-gray-800"
                                     >
                                         {day}
                                     </div>
@@ -522,17 +550,17 @@ export default function CalendarPage() {
                                                         className={`
                                                         h-full p-2 pb-8 transition-colors relative z-0
                                                         ${dayIndex < 6 ? 'border-r border-gray-100 dark:border-gray-800' : ''}
-                                                        ${isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}
+                                                        ${isSelected ? 'bg-primary/10 dark:bg-primary/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}
                                                         ${!isCurrentMonth ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}
                                                     `}
                                                     >
                                                         <div className="flex justify-between items-start">
                                                             <span
                                                                 className={`text-xs sm:text-sm font-semibold w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full ${isTodayDate
-                                                                    ? 'bg-blue-600 text-white'
+                                                                    ? 'bg-primary text-white'
                                                                     : isSelected
-                                                                        ? 'text-blue-600 dark:text-blue-400'
-                                                                        : 'text-gray-700 dark:text-gray-300'
+                                                                        ? 'text-primary dark:text-primary'
+                                                                        : 'text-gray-900 dark:text-gray-100'
                                                                     } ${!isCurrentMonth ? 'opacity-40' : ''}`}
                                                             >
                                                                 {format(day, 'd')}
@@ -544,7 +572,7 @@ export default function CalendarPage() {
                                                                     .filter(e => (dayIndex + 1) >= e.colStart && (dayIndex + 1) < (e.colStart + e.colSpan))
                                                                     .slice(0, 3)
                                                                     .map((e, i) => (
-                                                                        <div key={i} className={`w-1.5 h-1.5 rounded-full ${e.type === 'LEAVE' ? 'bg-red-800' : e.shoot.status === 'CANCELLED' ? 'bg-red-400' : 'bg-blue-400'}`} />
+                                                                        <div key={i} className={`w-1.5 h-1.5 rounded-full ${e.type === 'LEAVE' ? 'bg-red-800' : e.shoot.status === 'CANCELLED' ? 'bg-red-400' : 'bg-primary'}`} />
                                                                     ))
                                                                 }
                                                             </div>
@@ -586,7 +614,7 @@ export default function CalendarPage() {
                                                                 className={`
                                                                     pointer-events-auto
                                                                     mx-1 mb-1 h-6
-                                                                    rounded px-2 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all shadow-sm flex items-center
+                                                                    rounded px-2 text-xs font-semibold truncate cursor-pointer hover:brightness-95 transition-all shadow-sm flex items-center
                                                                     relative z-10
                                                                 `}
                                                                 title={`${title} - ${event.leave.reason}`}
@@ -622,13 +650,13 @@ export default function CalendarPage() {
                                                             className={`
                                                             pointer-events-auto
                                                             mx-1 mb-1 h-6
-                                                            rounded px-2 text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all shadow-sm flex items-center
+                                                            rounded px-2 text-xs font-semibold truncate cursor-pointer hover:brightness-95 transition-all shadow-sm flex items-center
                                                             relative z-10
                                                         `}
                                                             title={event.shoot.title}
                                                         >
                                                             {event.colSpan > 1 && (
-                                                                <span className={`truncate w-full text-left ${event.shoot.status === 'CANCELLED' ? 'line-through decoration-red-500' : ''}`}>
+                                                                <span className={`truncate w-full text-left ${event.shoot.status === 'CANCELLED' ? 'line-through opacity-80' : ''}`}>
                                                                     {event.shoot.title}
                                                                 </span>
                                                             )}
@@ -636,9 +664,9 @@ export default function CalendarPage() {
                                                             {event.colSpan === 1 && (
                                                                 <>
                                                                     {event.shoot.status === 'CANCELLED' && (
-                                                                        <div className="w-1.5 h-1.5 rounded-full bg-red-600 shrink-0 mr-1.5" />
+                                                                        <div className="w-1.5 h-1.5 rounded-full bg-white shrink-0 mr-1.5 opacity-80" />
                                                                     )}
-                                                                    <span className={`truncate ${event.shoot.status === 'CANCELLED' ? 'line-through decoration-red-500' : ''}`}>
+                                                                    <span className={`truncate ${event.shoot.status === 'CANCELLED' ? 'line-through opacity-80' : ''}`}>
                                                                         {event.shoot.title}
                                                                     </span>
                                                                 </>
@@ -683,14 +711,25 @@ export default function CalendarPage() {
                                     )}
                                 </div>
                                 {selectedDate && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
-                                    <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
-                                        <button
-                                            className="p-2 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                                            title="Schedule another shoot"
-                                        >
-                                            <Plus size={20} />
-                                        </button>
-                                    </Link>
+                                    <div className="flex items-center gap-2">
+                                        {crewFilter !== 'ALL' && (
+                                            <button
+                                                onClick={() => setIsAdminModalOpen(true)}
+                                                className="p-2 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                                                title="Mark Crew Absent"
+                                            >
+                                                <UserX size={20} />
+                                            </button>
+                                        )}
+                                        <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
+                                            <button
+                                                className="p-2 rounded-full bg-primary text-primary dark:bg-primary/20 dark:text-primary hover:bg-primary dark:hover:bg-primary/20 transition-colors"
+                                                title="Schedule another shoot"
+                                            >
+                                                <Plus size={20} />
+                                            </button>
+                                        </Link>
+                                    </div>
                                 )}
                             </div>
 
@@ -749,7 +788,7 @@ export default function CalendarPage() {
                                                         borderLeft: `4px solid ${statusStyle.border || statusStyle.text}`
                                                     }}
                                                     className={`rounded-xl overflow-hidden transition-all border ${isExpanded
-                                                        ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500'
+                                                        ? 'border-primary dark:border-primary ring-1 ring-primary'
                                                         : 'border-gray-200 dark:border-gray-800'
                                                         }`}
                                                 >
@@ -837,7 +876,7 @@ export default function CalendarPage() {
                                                                                     <a
                                                                                         href={`mailto:${shoot.pocContact}`}
                                                                                         onClick={(e) => e.stopPropagation()}
-                                                                                        className="p-1.5 rounded-full hover:bg-blue-50 text-blue-500 transition-colors"
+                                                                                        className="p-1.5 rounded-full hover:bg-primary/10 text-primary transition-colors"
                                                                                         title="Send Email"
                                                                                     >
                                                                                         <Mail size={14} />
@@ -847,7 +886,7 @@ export default function CalendarPage() {
                                                                                         <a
                                                                                             href={`tel:${shoot.pocContact}`}
                                                                                             onClick={(e) => e.stopPropagation()}
-                                                                                            className="p-1.5 rounded-full hover:bg-blue-50 text-blue-500 transition-colors"
+                                                                                            className="p-1.5 rounded-full hover:bg-primary/10 text-primary transition-colors"
                                                                                             title="Call"
                                                                                         >
                                                                                             <Phone size={14} />
@@ -886,7 +925,7 @@ export default function CalendarPage() {
                                                                             <div
                                                                                 style={{
                                                                                     background: member.role === 'Incharge'
-                                                                                        ? 'linear-gradient(135deg, #6366f1, #3b82f6)'
+                                                                                        ? 'linear-gradient(135deg, color-mix(in srgb, var(--primary) 80%, white), var(--primary))'
                                                                                         : undefined
                                                                                 }}
                                                                                 className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${member.role === 'Incharge'
@@ -930,5 +969,14 @@ export default function CalendarPage() {
                 </div>
             </div>
         </PullToRefresh>
+            <AdminLeaveModal
+                isOpen={isAdminModalOpen}
+                onClose={() => setIsAdminModalOpen(false)}
+                onSubmit={handleAdminLeaveSubmit}
+                users={users}
+                prefilledUserId={crewFilter !== 'ALL' ? crewFilter : undefined}
+                prefilledDate={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : undefined}
+            />
+        </>
     );
 }

@@ -58,7 +58,7 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
             const user = users.find(u => u.id === assignment.userId);
             if (user) {
                 const role = assignment.role === 'Incharge' ? '(Incharge)' : '';
-                message += `- ${user.name} ${role}\n`;
+                message += `- @${user.name} ${role}\n`;
             }
         });
     }

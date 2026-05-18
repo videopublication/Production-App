@@ -61,7 +61,7 @@ function InactiveContent() {
                         Return to Login
                     </Button>
                     <p className="mt-6 text-sm text-[#86868b]">
-                        Need help? <a href="mailto:admin@example.com" className="text-[#0071e3] hover:underline">Contact Support</a>
+                        Need help? <a href="mailto:admin@example.com" className="text-[var(--primary)] hover:underline">Contact Support</a>
                     </p>
                 </div>
             </div>

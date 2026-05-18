@@ -144,7 +144,7 @@ export default function LoginPage() {
                                     </label>
                                     <select
                                         required
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                                         value={formData.departmentId}
                                         onChange={e => setFormData({ ...formData, departmentId: e.target.value })}
                                     >

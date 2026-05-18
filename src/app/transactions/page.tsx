@@ -218,8 +218,8 @@ ${formattedItems.join('\n')}${txn.notes ? `\n\n*Notes / Other Items:*\n${txn.not
             <div className="space-y-3 sm:space-y-5 animate-fade-in pb-12">
                 {/* Stats at top - Compact on mobile */}
                 <div className="grid grid-cols-4 gap-2 sm:gap-4">
-                    <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20">
-                        <p className="text-[10px] sm:text-sm font-medium text-blue-600">Total</p>
+                    <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+                        <p className="text-[10px] sm:text-sm font-medium text-primary">Total</p>
                         <p className="text-lg sm:text-2xl font-bold">{stats.total}</p>
                     </div>
                     <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20">
@@ -369,7 +369,7 @@ ${formattedItems.join('\n')}${txn.notes ? `\n\n*Notes / Other Items:*\n${txn.not
                                         <div className="flex gap-2.5 flex-1">
                                             <Button
                                                 size="sm"
-                                                className="bg-[#0071e3] hover:bg-[#0077ED] text-white border-0 rounded-full px-3 sm:px-4 h-8 text-[11px] sm:text-xs font-semibold shadow-sm shadow-blue-200"
+                                                className="bg-[#25D366] hover:bg-[#128C7E] text-white border-0 rounded-full px-3 sm:px-4 h-8 text-[11px] sm:text-xs font-semibold shadow-sm shadow-green-200"
                                                 onClick={(e) => handleShareWhatsApp(e, txn)}
                                             >
                                                 <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 24 24">

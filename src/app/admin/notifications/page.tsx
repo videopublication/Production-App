@@ -105,7 +105,7 @@ export default function SendNotificationPage() {
                         <input
                             type="text"
                             required
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none"
+                            className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 outline-none"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             placeholder="e.g. Urgent Meeting"
@@ -116,7 +116,7 @@ export default function SendNotificationPage() {
                         <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">Message</label>
                         <textarea
                             required
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none min-h-[120px] resize-y"
+                            className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 outline-none min-h-[120px] resize-y"
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
                             placeholder="Enter your message here..."
@@ -127,7 +127,7 @@ export default function SendNotificationPage() {
                         <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">Target Audience</label>
                         <div className="relative">
                             <select
-                                className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none appearance-none"
+                                className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 outline-none appearance-none"
                                 value={targetRole}
                                 onChange={(e: any) => setTargetRole(e.target.value)}
                             >
@@ -149,7 +149,7 @@ export default function SendNotificationPage() {
                             <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">Select User</label>
                             <div className="relative">
                                 <select
-                                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none appearance-none"
+                                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 outline-none appearance-none"
                                     value={specificUserId}
                                     onChange={(e) => setSpecificUserId(e.target.value)}
                                     required
@@ -171,7 +171,7 @@ export default function SendNotificationPage() {
                     )}
 
                     <div className="pt-2">
-                        <Button type="submit" isLoading={isLoading} className="w-full sm:w-auto px-8 py-2.5 rounded-xl shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all font-medium">
+                        <Button type="submit" isLoading={isLoading} className="w-full sm:w-auto px-8 py-2.5 rounded-xl shadow-lg shadow-primary/ hover:shadow-primary/ transition-all font-medium">
                             Send Notification
                         </Button>
                     </div>

@@ -571,7 +571,7 @@ export default function CheckoutPage() {
                     ) : (
                         <button
                             onClick={toggleScanner}
-                            className={`h-10 px-3 shrink-0 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-white text-[#1d1d1f] border border-[#e5e5ea]' : 'bg-[#0071e3] text-white shadow-[#0071e3]/30'}`}
+                            className={`h-10 px-3 shrink-0 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${showScanner ? 'bg-white text-[#1d1d1f] border border-[#e5e5ea]' : 'bg-[var(--primary)] text-white shadow-[var(--primary)]/30'}`}
                         >
                             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M4 6h2v2H4V6zm3 0h2v2H7V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm3 0h2v2h-2V6zm-18 3h2v2H4V9zm3 0h2v2H7V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm3 0h2v2h-2V9zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-18 3h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zM4 18h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2z" />
@@ -1039,7 +1039,7 @@ export default function CheckoutPage() {
                         <button
                             onClick={handleCheckout}
                             disabled={cart.length === 0 || isLoading}
-                            className="flex-1 h-[48px] bg-[#0071e3] text-white rounded-xl text-[16px] font-bold shadow-xl shadow-[#0071e3]/20 disabled:opacity-40 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+                            className="flex-1 h-[48px] bg-[var(--primary)] text-white rounded-xl text-[16px] font-bold shadow-xl shadow-[var(--primary)]/20 disabled:opacity-40 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
                         >
                             {isLoading ? (
                                 <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>

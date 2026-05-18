@@ -22,10 +22,8 @@ type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumbe
 
 import { Shoot, ShootExpense } from '@/types';
 
-const getShootTotalExpense = (shoot: Shoot) => {
-    if (!shoot.expenses || shoot.expenses.length === 0) return 0;
-    return shoot.expenses.reduce((sum: number, exp: ShootExpense) => sum + (Number(exp.amount) || 0), 0);
-};
+import { getShootTotalExpense, generateShootsCSV, downloadCSV } from '@/lib/finance-utils';
+
 type SortDirection = 'asc' | 'desc';
 
 export default function ShootList() {
@@ -259,11 +257,11 @@ export default function ShootList() {
     // Sort indicator component
     const SortIndicator = ({ field }: { field: SortField }) => {
         if (sortField !== field) {
-            return <ArrowUpDown size={12} style={{ color: '#9ca3af' }} />;
+            return <ArrowUpDown size={12} className="text-gray-400" />;
         }
         return sortDirection === 'asc'
-            ? <ArrowUp size={12} style={{ color: '#3b82f6' }} />
-            : <ArrowDown size={12} style={{ color: '#3b82f6' }} />;
+            ? <ArrowUp size={12} className="text-primary" />
+            : <ArrowDown size={12} className="text-primary" />;
     };
 
     const getStatusStyle = (status: string) => {
@@ -395,7 +393,7 @@ export default function ShootList() {
                                 placeholder="Search title, location, ID..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-11 sm:pl-12 pr-4 py-2 sm:py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                                className="w-full pl-11 sm:pl-12 pr-4 py-2 sm:py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                             />
                         </div>
 
@@ -427,7 +425,7 @@ export default function ShootList() {
                             <button
                                 onClick={() => setShowFilters(!showFilters)}
                                 className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${showFilters
-                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                                    ? 'bg-primary/10 text-primary border border-primary/20'
                                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-transparent'
                                     }`}
                             >
@@ -443,7 +441,7 @@ export default function ShootList() {
                         <select
                             value={sortField}
                             onChange={(e) => setSortField(e.target.value as SortField)}
-                            className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-blue-500"
+                            className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-primary"
                         >
                             <option value="date">Date</option>
                             <option value="shootNumber">Shoot ID</option>
@@ -472,7 +470,7 @@ export default function ShootList() {
                                             key={status}
                                             onClick={() => setStatusFilter(status)}
                                             className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${statusFilter === status
-                                                ? 'bg-blue-500 text-white'
+                                                ? 'bg-primary text-primary-foreground'
                                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                                 }`}
                                         >
@@ -492,7 +490,7 @@ export default function ShootList() {
                                                 key={time}
                                                 onClick={() => setTimeFilter(time)}
                                                 className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${timeFilter === time
-                                                    ? 'bg-blue-500 text-white'
+                                                    ? 'bg-primary text-primary-foreground'
                                                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                                     }`}
                                             >
@@ -531,7 +529,7 @@ export default function ShootList() {
                                     <select
                                         value={sortField}
                                         onChange={(e) => setSortField(e.target.value as SortField)}
-                                        className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-xs sm:text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-sm hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                                        className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-xs sm:text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shadow-sm hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                                     >
                                         <option value="date">Date</option>
                                         <option value="shootNumber">Shoot ID</option>
@@ -561,7 +559,7 @@ export default function ShootList() {
                                             }}
                                             className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-md border text-sm transition-all cursor-pointer bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 min-w-[140px] justify-between group"
                                         >
-                                            <span className={`truncate max-w-[100px] ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-blue-600 dark:text-blue-400 font-medium'}`}>
+                                            <span className={`truncate max-w-[100px] ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-primary font-medium'}`}>
                                                 {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
                                             </span>
                                             <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isCrewFilterOpen ? 'rotate-180' : ''}`} />
@@ -578,7 +576,7 @@ export default function ShootList() {
                                                             value={crewSearchQuery}
                                                             onChange={(e) => setCrewSearchQuery(e.target.value)}
                                                             placeholder="Search..."
-                                                            className="w-full text-xs pl-8 pr-2 py-1.5 bg-gray-50 dark:bg-gray-900 border-none rounded-md focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500"
+                                                            className="w-full text-xs pl-8 pr-2 py-1.5 bg-gray-50 dark:bg-gray-900 border-none rounded-md focus:ring-1 focus:ring-primary text-gray-900 dark:text-white placeholder-gray-500"
                                                             autoFocus
                                                         />
                                                     </div>
@@ -587,7 +585,7 @@ export default function ShootList() {
                                                     <button
                                                         onClick={() => { setCrewFilter('ALL'); setIsCrewFilterOpen(false); }}
                                                         className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${crewFilter === 'ALL'
-                                                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                                                            ? 'bg-primary/10 text-primary font-medium'
                                                             : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                                                             } ${crewSearchQuery ? 'hidden' : ''}`}
                                                     >
@@ -601,7 +599,7 @@ export default function ShootList() {
                                                                 key={u.id}
                                                                 onClick={() => { setCrewFilter(u.id); setIsCrewFilterOpen(false); }}
                                                                 className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${crewFilter === u.id
-                                                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
+                                                                    ? 'bg-primary/10 text-primary font-medium'
                                                                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                                                                     }`}
                                                             >
@@ -629,7 +627,7 @@ export default function ShootList() {
                                 <select
                                     value={categoryFilter}
                                     onChange={(e) => setCategoryFilter(e.target.value)}
-                                    className="px-2 py-1.5 rounded-md text-[10px] sm:text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                    className="px-2 py-1.5 rounded-md text-[10px] sm:text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-none focus:ring-1 focus:ring-primary cursor-pointer"
                                 >
                                     <option value="ALL">All Categories</option>
                                     {availableCategories.map(cat => (
@@ -653,7 +651,7 @@ export default function ShootList() {
                                                 key={exp.value}
                                                 onClick={() => setExpenseFilter(exp.value)}
                                                 className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${expenseFilter === exp.value
-                                                    ? 'bg-blue-500 text-white'
+                                                    ? 'bg-primary text-primary-foreground'
                                                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                                     }`}
                                             >
@@ -738,7 +736,7 @@ export default function ShootList() {
                                                 )}
                                                 {/* Category Badge */}
                                                 {shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign && (
-                                                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md uppercase tracking-wider">
+                                                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-md uppercase tracking-wider">
                                                         {shoot.expenses.find((e: ShootExpense) => e.campaign)!.campaign}
                                                     </span>
                                                 )}
@@ -763,7 +761,7 @@ export default function ShootList() {
 
                                         {/* Title & Description */}
                                         <div className="mb-4">
-                                            <h3 className="font-bold text-lg text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1 mb-1">
+                                            <h3 className="font-bold text-lg text-gray-900 dark:text-white group-hover:text-primary transition-colors line-clamp-1 mb-1">
                                                 {shoot.title}
                                             </h3>
                                             {shoot.description && (
@@ -933,7 +931,7 @@ export default function ShootList() {
                                                             document.body.removeChild(textArea);
                                                         }
                                                     }}
-                                                    className="p-1.5 rounded-md text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors relative z-10"
+                                                    className="p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors relative z-10"
                                                     title="Copy to Clipboard"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -954,39 +952,39 @@ export default function ShootList() {
                         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 text-xs font-semibold uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800">
                             <button
                                 onClick={() => handleSort('title')}
-                                className={`col-span-3 flex items-center gap-1.5 transition-colors text-left ${sortField === 'title' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`col-span-3 flex items-center gap-1.5 transition-colors text-left ${sortField === 'title' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                             >
                                 Shoot <SortIndicator field="title" />
                             </button>
                             <button
                                 onClick={() => handleSort('date')}
-                                className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'date' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'date' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                             >
                                 Date & Time <SortIndicator field="date" />
                             </button>
                             <button
                                 onClick={() => handleSort('location')}
-                                className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'location' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'location' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                             >
                                 Location <SortIndicator field="location" />
                             </button>
                             <button
                                 onClick={() => handleSort('crew')}
-                                className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'crew' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'crew' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                             >
                                 Crew <SortIndicator field="crew" />
                             </button>
                             {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
                                 <button
                                     onClick={() => handleSort('expenses')}
-                                    className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'expenses' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                    className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'expenses' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                                 >
                                     Expenses <SortIndicator field="expenses" />
                                 </button>
                             )}
                             <button
                                 onClick={() => handleSort('status')}
-                                className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-1' : 'col-span-3'} flex items-center gap-1.5 transition-colors text-left ${sortField === 'status' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                                className={`${['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') ? 'col-span-1' : 'col-span-3'} flex items-center gap-1.5 transition-colors text-left ${sortField === 'status' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                             >
                                 Status <SortIndicator field="status" />
                             </button>
@@ -1017,7 +1015,7 @@ export default function ShootList() {
                                                         #{shoot.shootNumber}
                                                     </span>
                                                 )}
-                                                <h4 className="font-semibold line-clamp-2 hover:text-blue-600 dark:hover:text-blue-400 text-gray-900 dark:text-white leading-snug">
+                                                <h4 className="font-semibold line-clamp-2 hover:text-primary text-gray-900 dark:text-white leading-snug">
                                                     {shoot.title}
                                                 </h4>
                                                 {shoot.googleEventId && (

@@ -103,11 +103,11 @@ export default function NotificationsPage() {
     return (
         <div className="max-w-2xl mx-auto animate-fade-in">
             {/* Header Card with Light Gradient */}
-            <div className="mb-4 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 border border-blue-100/50 dark:border-blue-900/30 shadow-sm">
+            <div className="mb-4 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent dark:from-primary/20 dark:via-primary/10 dark:to-transparent border border-primary/50 dark:border-primary/30 shadow-sm">
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-indigo-500 flex items-center justify-center text-white">
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                 </svg>
@@ -116,7 +116,7 @@ export default function NotificationsPage() {
                         </h1>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 ml-10">
                             {unreadCount > 0 ? (
-                                <span className="font-medium text-blue-600 dark:text-blue-400">{unreadCount} new</span>
+                                <span className="font-medium text-primary dark:text-primary">{unreadCount} new</span>
                             ) : (
                                 "You're all caught up!"
                             )}
@@ -212,8 +212,8 @@ export default function NotificationsPage() {
                     </Card>
                 ) : filteredNotifications.length === 0 ? (
                     <Card className="p-10 text-center">
-                        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-                            <svg className="w-8 h-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/20 flex items-center justify-center">
+                            <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                             </svg>
                         </div>
@@ -235,7 +235,7 @@ export default function NotificationsPage() {
                                 >
                                     <div className={`
                                     p-4 transition-all hover:bg-muted/50 dark:hover:bg-gray-800/50 relative
-                                    ${!notification.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}
+                                    ${!notification.read ? 'bg-primary/10 dark:bg-primary/20' : ''}
                                 `}>
                                         <div className="flex items-start gap-3">
                                             {/* Icon */}
@@ -243,7 +243,7 @@ export default function NotificationsPage() {
                                                 <div className={`
                                                 w-11 h-11 rounded-xl flex items-center justify-center
                                                 ${!notification.read
-                                                        ? 'bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 text-blue-600 dark:text-blue-400'
+                                                        ? 'bg-gradient-to-br from-primary to-indigo-100 dark:from-primary/30 dark:to-indigo-900/30 text-primary dark:text-primary'
                                                         : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
                                                     }
                                             `}>
@@ -252,7 +252,7 @@ export default function NotificationsPage() {
                                                     </svg>
                                                 </div>
                                                 {!notification.read && (
-                                                    <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-blue-500 border-2 border-white" />
+                                                    <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-white" />
                                                 )}
                                             </div>
 

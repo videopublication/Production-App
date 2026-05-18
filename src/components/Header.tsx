@@ -119,7 +119,7 @@ export const Header = () => {
                             <div className="px-4 py-3 border-b border-gray-100 dark:border-[#3a3a3c] flex justify-between items-center">
                                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
                                 {unreadCount > 0 && (
-                                    <button onClick={markAllRead} className="text-xs text-blue-600 hover:text-blue-500 font-medium">Mark all read</button>
+                                    <button onClick={markAllRead} className="text-xs text-primary hover:text-primary font-medium">Mark all read</button>
                                 )}
                             </div>
                             <div className="max-h-80 overflow-y-auto">
@@ -130,11 +130,11 @@ export const Header = () => {
                                         {notifications.slice(0, 5).map((n, i) => (
                                             <div
                                                 key={n.id}
-                                                className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer dark:hover:bg-[#3a3a3c] ${i !== Math.min(4, notifications.length - 1) ? 'border-b border-gray-100 dark:border-[#3a3a3c]' : ''} ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
+                                                className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer dark:hover:bg-[#3a3a3c] ${i !== Math.min(4, notifications.length - 1) ? 'border-b border-gray-100 dark:border-[#3a3a3c]' : ''} ${!n.read ? 'bg-primary/10 dark:bg-primary/20' : ''}`}
                                                 onClick={() => handleNotificationClick(n)}
                                             >
                                                 <div className="flex gap-2">
-                                                    <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-blue-500'}`} />
+                                                    <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-primary'}`} />
                                                     <div className="flex-1 min-w-0">
                                                         <p className={`text-sm leading-snug truncate ${!n.read ? 'font-semibold text-gray-900 dark:text-gray-100' : 'font-medium text-gray-700 dark:text-gray-300'}`}>{n.title}</p>
                                                         <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{n.message}</p>
@@ -146,7 +146,7 @@ export const Header = () => {
                                 )}
                             </div>
                             <div className="px-4 py-2.5 border-t border-gray-100 dark:border-[#3a3a3c] text-center">
-                                <Link href="/notifications" onClick={() => setShowNotifications(false)} className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                                <Link href="/notifications" onClick={() => setShowNotifications(false)} className="text-sm font-medium text-primary hover:text-primary">
                                     View all
                                 </Link>
                             </div>

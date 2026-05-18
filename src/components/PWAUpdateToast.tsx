@@ -117,7 +117,7 @@ export const PWAUpdateToast = () => {
         <div className="fixed bottom-24 left-4 right-4 z-[100] animate-in slide-in-from-bottom-5 duration-500 flex justify-center pointer-events-none">
             <div className="bg-[#1c1c1e] text-white border border-white/10 shadow-2xl rounded-2xl p-5 w-full max-w-sm relative overflow-hidden pointer-events-auto">
                 {/* Visual Flair */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-purple-500 to-pink-500" />
 
                 <button
                     onClick={handleDismiss}
@@ -128,14 +128,14 @@ export const PWAUpdateToast = () => {
                 </button>
 
                 <div className="flex gap-4 items-start pt-2">
-                    <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-3 rounded-xl shrink-0 flex items-center justify-center shadow-lg shadow-blue-900/20">
+                    <div className="bg-gradient-to-br from-primary to-indigo-600 p-3 rounded-xl shrink-0 flex items-center justify-center shadow-lg shadow-primary/20">
                         <RefreshCw className={`w-6 h-6 text-white ${isUpdating ? 'animate-spin' : 'animate-spin-slow'}`} />
                     </div>
 
                     <div className="space-y-2 flex-1">
                         <h3 className="font-bold text-white text-lg leading-tight flex items-center gap-2">
                             Update Available
-                            <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30 uppercase tracking-wide">
+                            <span className="text-[10px] bg-primary/ text-primary px-2 py-0.5 rounded-full border border-primary/30 uppercase tracking-wide">
                                 New
                             </span>
                         </h3>

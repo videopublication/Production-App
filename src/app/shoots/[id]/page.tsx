@@ -407,7 +407,7 @@ export default function ShootDetailsPage() {
                                 href={`https://calendar.google.com/calendar/event?eid=${shoot.googleEventId}&ctz=Asia/Kolkata`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full transition-colors border border-blue-100 shrink-0"
+                                className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-medium text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2.5 py-0.5 rounded-full transition-colors border border-primary/20 shrink-0"
                             >
                                 <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
                                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -510,10 +510,10 @@ export default function ShootDetailsPage() {
 
             {/* Calendar Banner - Moved below header */}
             {!shoot.googleEventId && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && shoot.status !== 'CANCELLED' && (
-                <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
+                <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
-                            <AlertCircle size={20} className="text-blue-600 dark:text-blue-400" />
+                        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+                            <AlertCircle size={20} className="text-primary" />
                         </div>
                         <div>
                             <p className="text-sm font-semibold text-gray-900 dark:text-white">Sync with Google Calendar</p>
@@ -524,7 +524,7 @@ export default function ShootDetailsPage() {
                         size="sm"
                         onClick={handleSyncToCalendar}
                         disabled={isSyncing}
-                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white gap-2 h-9 px-4 rounded-xl shadow-lg shadow-blue-500/20"
+                        className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground gap-2 h-9 px-4 rounded-xl shadow-lg shadow-primary/20"
                     >
                         {isSyncing ? (
                             <Loader2 size={16} className="animate-spin" />
@@ -543,7 +543,7 @@ export default function ShootDetailsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Date & Time */}
                 <Card className="border-none rounded-[24px] shadow-sm hover:shadow-lg transition-all duration-300 bg-white dark:bg-[#1c1c1e] group relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity opacity-0 group-hover:opacity-100"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity opacity-0 group-hover:opacity-100"></div>
                     <div className="flex items-start sm:items-center justify-between p-4 sm:p-5 relative z-10 gap-3">
                         <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold text-[#86868b] dark:text-gray-500 uppercase tracking-widest mb-1.5">Date & Time</p>
@@ -568,7 +568,7 @@ export default function ShootDetailsPage() {
                             </p>
                         </div>
                         <div className="shrink-0">
-                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-500 dark:text-blue-400">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                                 <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
@@ -670,7 +670,7 @@ export default function ShootDetailsPage() {
                                         switch (role) {
                                             case 'ADMIN': return 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700';
                                             case 'SUPER_ADMIN': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 border-red-300 dark:border-red-700';
-                                            case 'MANAGER': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-700';
+                                            case 'MANAGER': return 'bg-primary/20 text-primary border-primary/30';
                                             default: return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700';
                                         }
                                     };
@@ -688,7 +688,7 @@ export default function ShootDetailsPage() {
                                                 <div className="relative">
                                                     <div
                                                         className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shadow-sm ${isIncharge
-                                                            ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white'
+                                                            ? 'bg-gradient-to-br from-primary to-primary/80 text-white'
                                                             : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                                                             }`}
                                                     >
@@ -734,7 +734,7 @@ export default function ShootDetailsPage() {
                                     <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold tracking-wider shadow-sm transition-all group-hover:shadow-md ${
                                         selectedCampaign === 'SGEx' ? 'bg-[#c95434] border-[#b04529] text-white' :
                                         selectedCampaign === 'Isha Tamil' ? 'bg-amber-500 border-amber-600 text-white' :
-                                        selectedCampaign === 'SG Reach' ? 'bg-blue-500 border-blue-600 text-white' :
+                                        selectedCampaign === 'SG Reach' ? 'bg-primary border-primary text-primary-foreground' :
                                         selectedCampaign === 'Events' ? 'bg-purple-500 border-purple-600 text-white' :
                                         selectedCampaign === 'Campaign' ? 'bg-indigo-500 border-indigo-600 text-white' :
                                         selectedCampaign ? 'bg-gray-500 border-gray-600 text-white' :
@@ -840,7 +840,7 @@ export default function ShootDetailsPage() {
                                                 className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] group hover:border-primary/50 gap-3 sm:gap-4"
                                             >
                                                 <div className="flex items-start gap-3 sm:gap-4 w-full sm:w-auto">
-                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
                                                         <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                                         </svg>

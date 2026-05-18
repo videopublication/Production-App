@@ -85,7 +85,7 @@ export default function SelectDepartmentPage() {
                                 {user.avatarUrl ? (
                                     <img src={user.avatarUrl} alt="" className="w-10 h-10 rounded-full" />
                                 ) : (
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-white font-bold text-lg">
                                         {user.name?.charAt(0)?.toUpperCase() || '?'}
                                     </div>
                                 )}
@@ -103,7 +103,7 @@ export default function SelectDepartmentPage() {
                             </label>
                             <select
                                 required
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                                 value={selectedDeptId}
                                 onChange={e => setSelectedDeptId(e.target.value)}
                             >

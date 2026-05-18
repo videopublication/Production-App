@@ -84,7 +84,7 @@ export const ActiveSessions = () => {
     if (loading) {
         return (
             <div className="p-8 text-center">
-                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                 <p className="text-sm text-gray-500">Loading sessions...</p>
             </div>
         );
@@ -94,7 +94,7 @@ export const ActiveSessions = () => {
         <div className="space-y-3 mt-8">
             <div className="px-4 flex items-center justify-between">
                 <p className="section-header-ios !p-0">Active Sessions</p>
-                <span className="text-[11px] font-bold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-primary bg-primary/ px-2 py-0.5 rounded-full uppercase tracking-wider">
                     {sessions.length} {sessions.length === 1 ? 'Device' : 'Devices'}
                 </span>
             </div>

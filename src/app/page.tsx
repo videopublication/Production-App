@@ -53,7 +53,7 @@ export default function Home() {
 
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-semibold tracking-tight text-foreground animate-slide-up opacity-0 px-2" style={{ animationDelay: '0.2s', letterSpacing: '-0.02em', lineHeight: '1.1' }}>
               Equipment management. <br />
-              <span className="text-gradient-blue">Reimagined.</span>
+              <span className="text-gradient-primary">Reimagined.</span>
             </h1>
 
             <p className="mt-6 sm:mt-8 text-base sm:text-lg md:text-xl font-normal text-muted-foreground max-w-2xl animate-slide-up opacity-0 px-4" style={{ animationDelay: '0.4s', lineHeight: '1.6' }}>
@@ -62,14 +62,14 @@ export default function Home() {
 
             <div className="mt-8 sm:mt-12 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-x-6 w-full sm:w-auto animate-slide-up opacity-0 px-4" style={{ animationDelay: '0.6s' }}>
               <Link href="/login" className="w-full sm:w-auto">
-                <div className="inline-flex items-center justify-center rounded-full font-medium transition-all duration-200 active:scale-[0.98] w-full sm:w-auto h-12 px-8 sm:px-10 text-base sm:text-[17px] shadow-lg hover:shadow-xl bg-[#0071e3] hover:bg-[#0077ed] text-white cursor-pointer">
+                <div className="inline-flex items-center justify-center rounded-full font-medium transition-all duration-200 active:scale-[0.98] w-full sm:w-auto h-12 px-8 sm:px-10 text-base sm:text-[17px] shadow-lg hover:shadow-xl bg-[var(--primary)] hover:brightness-110 text-white cursor-pointer">
                   Get Started
                 </div>
               </Link>
             </div>
 
             {/* Floating Elements for Visual Interest - Hidden on mobile for cleaner look */}
-            <div className="hidden sm:block absolute top-1/2 left-10 w-24 h-24 bg-blue-400/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '0s' }} />
+            <div className="hidden sm:block absolute top-1/2 left-10 w-24 h-24 bg-primary/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '0s' }} />
             <div className="hidden sm:block absolute bottom-10 right-10 w-32 h-32 bg-purple-400/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '2s' }} />
           </div>
         </div>

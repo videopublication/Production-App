@@ -175,7 +175,7 @@ export const Navbar = () => {
                                             <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white/50 dark:bg-gray-800/50">
                                                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
                                                 {unreadCount > 0 && (
-                                                    <button onClick={markAllRead} className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 font-medium">Mark all read</button>
+                                                    <button onClick={markAllRead} className="text-xs text-primary dark:text-primary hover:text-primary font-medium">Mark all read</button>
                                                 )}
                                             </div>
                                             <div className="max-h-96 overflow-y-auto overflow-x-hidden">
@@ -186,11 +186,11 @@ export const Navbar = () => {
                                                         {notifications.map(n => (
                                                             <div
                                                                 key={n.id}
-                                                                className={`p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer ${n.read ? 'opacity-60 bg-transparent' : 'bg-blue-50/50 dark:bg-blue-900/10'}`}
+                                                                className={`p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer ${n.read ? 'opacity-60 bg-transparent' : 'bg-primary/10 dark:bg-primary/20'}`}
                                                                 onClick={() => handleNotificationClick(n)}
                                                             >
                                                                 <div className="flex gap-3">
-                                                                    <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-blue-500'}`} />
+                                                                    <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-primary'}`} />
                                                                     <div>
                                                                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-tight mb-1">{n.title}</p>
                                                                         <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{n.message}</p>
