@@ -414,7 +414,7 @@ export default function UserManagementPage() {
         const confirmed = await confirm({
             title: 'Confirm Merge',
             message: `Are you absolutely sure you want to merge ${mergeDuplicateEmail} into ${mergePrimaryEmail}? This will move all data and CANNOT be undone.`,
-            confirmText: 'Merge Data',
+            confirmLabel: 'Merge Data',
             variant: 'danger'
         });
 
