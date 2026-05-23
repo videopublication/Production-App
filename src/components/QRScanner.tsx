@@ -67,16 +67,15 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
                 fps: 10,
                 qrbox: { width: 250, height: 250 },
                 aspectRatio: 1.0,
+                videoConstraints: {
+                    facingMode: 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
             };
 
             await scanner.start(
-                { 
-                    facingMode: 'environment',
-                    // Force a higher resolution so the code remains sharp from further away,
-                    // allowing the camera to autofocus perfectly without getting too close (which causes blur).
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
+                { facingMode: 'environment' },
                 config,
                 (decodedText) => {
                     const now = Date.now();
@@ -286,16 +285,15 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
                 fps: 15,
                 qrbox: { width: 280, height: 280 },
                 aspectRatio: 1.0,
+                videoConstraints: {
+                    facingMode: 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
             };
 
             await scanner.start(
-                { 
-                    facingMode: 'environment',
-                    // Requesting 1280x720 ideal resolution keeps small QR codes ultra-sharp at a distance.
-                    // This prevents users from needing to bring the phone too close and causing blur.
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
+                { facingMode: 'environment' },
                 config,
                 async (decodedText) => {
                     const now = Date.now();
