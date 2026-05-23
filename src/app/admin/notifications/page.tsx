@@ -8,6 +8,7 @@ import { Card } from '@/components/Card';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { User } from '@/types';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export default function SendNotificationPage() {
     const router = useRouter();
@@ -45,6 +46,8 @@ export default function SendNotificationPage() {
                 targets = users.filter(u => u.role === targetRole);
             }
 
+            let pushFailures = 0;
+
             const notifications = targets.map(async (target) => {
                 // 1. Save to Database
                 if (user) {
@@ -60,17 +63,14 @@ export default function SendNotificationPage() {
                 // 2. Send Push Notification (if token exists)
                 if (target.fcmToken) {
                     try {
-                        await fetch('/api/send-notification', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token: target.fcmToken,
-                                title,
-                                message,
-                                link: '/'
-                            })
+                        await sendPushNotification({
+                            token: target.fcmToken,
+                            title,
+                            message,
+                            link: '/'
                         });
                     } catch (err) {
+                        pushFailures += 1;
                         console.error(`Failed to send push to ${target.name}`, err);
                     }
                 }
@@ -78,7 +78,12 @@ export default function SendNotificationPage() {
 
             await Promise.all(notifications);
 
-            showToast(`Sent ${notifications.length} notifications`, 'success');
+            showToast(
+                pushFailures > 0
+                    ? `Sent ${notifications.length} notifications (${pushFailures} push failed)`
+                    : `Sent ${notifications.length} notifications`,
+                pushFailures > 0 ? 'error' : 'success'
+            );
             setTitle('');
             setMessage('');
             setTargetRole('ALL');
@@ -129,7 +134,7 @@ export default function SendNotificationPage() {
                             <select
                                 className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 outline-none appearance-none"
                                 value={targetRole}
-                                onChange={(e: any) => setTargetRole(e.target.value)}
+                                onChange={(e) => setTargetRole(e.target.value as typeof targetRole)}
                             >
                                 <option value="ALL">All Users</option>
                                 <option value="MANAGER">Managers</option>

@@ -13,6 +13,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export default function ReturnsPage() {
     const router = useRouter();
@@ -138,20 +139,14 @@ export default function ReturnsPage() {
                 );
 
                 if (managers.length > 0) {
-                    const tokens = managers.map(m => m.fcmToken).filter(Boolean) as string[];
-
                     // 1. Send Push Notifications
-                    const pushPromises = tokens.map(token =>
-                        fetch('/api/send-notification', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token,
-                                title: 'Items Returned',
-                                message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
-                                link: '/verification'
-                            })
-                        })
+                    const pushPromises = managers.map(manager =>
+                        sendPushNotification({
+                            token: manager.fcmToken!,
+                            title: 'Items Returned',
+                            message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
+                            link: '/verification'
+                        }).catch(e => console.error(`Failed to send push to ${manager.name}`, e))
                     );
 
                     // 2. Save to Database for each manager

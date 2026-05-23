@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { storage } from '@/lib/storage';
 import { Equipment, Transaction } from '@/types';
 import { generateTransactionId } from '@/lib/id';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export const TRANSACTION_KEYS = {
     all: ['transactions'] as const,
@@ -81,7 +82,7 @@ export function useCheckOut() {
                 project,
                 shootId,
                 notes,
-                preCheckoutConditions: items.reduce((acc, item) => ({ ...acc, [item.id]: item.condition }), {} as Record<string, any>),
+                preCheckoutConditions: items.reduce((acc, item) => ({ ...acc, [item.id]: item.condition }), {} as Record<string, Equipment['condition']>),
                 status: 'OPEN',
                 departmentId
             };
@@ -134,15 +135,11 @@ export function useCheckOut() {
                 const users = await storage.getUsers(departmentId);
                 const assignedUser = users.find(u => u.id === userId);
                 if (assignedUser?.fcmToken) {
-                    fetch('/api/send-notification', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            token: assignedUser.fcmToken,
-                            title,
-                            message,
-                            link: '/transactions'
-                        })
+                    sendPushNotification({
+                        token: assignedUser.fcmToken,
+                        title,
+                        message,
+                        link: '/transactions'
                     }).catch(e => console.error('Push notification failed', e));
                 }
             }
@@ -218,7 +215,7 @@ export function useCheckIn() {
                 // Update Equipment Status
                 await storage.updateEquipment(item.id, {
                     status: 'AVAILABLE',
-                    assignedTo: null as any, // Unassign
+                    assignedTo: null as unknown as string, // Unassign
                     location: location || item.location,
                     condition: condition || item.condition,
                 });
@@ -251,15 +248,11 @@ export function useCheckIn() {
                 const users = await storage.getUsers(activeDepartmentId);
                 const userObj = users.find(u => u.id === userId);
                 if (userObj?.fcmToken) {
-                    fetch('/api/send-notification', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            token: userObj.fcmToken,
-                            title,
-                            message,
-                            link: '/transactions'
-                        })
+                    sendPushNotification({
+                        token: userObj.fcmToken,
+                        title,
+                        message,
+                        link: '/transactions'
                     }).catch(e => console.error('Push notification failed', e));
                 }
             }

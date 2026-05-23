@@ -22,18 +22,18 @@ export const Navbar = () => {
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
 
-    const loadNotifications = async () => {
+    const loadNotifications = React.useCallback(async () => {
         if (!user) return;
         try {
             console.log("Fetching notifications for user:", user.id);
             const data = await storage.getNotifications(user.id);
             console.log("Fetched notifications:", data);
             setNotifications(data);
-            setUnreadCount(data.filter((n: any) => !n.read).length);
+            setUnreadCount(data.filter((n: AppNotification) => !n.read).length);
         } catch (error) {
             console.error("Error loading notifications:", error);
         }
-    };
+    }, [user]);
 
     React.useEffect(() => {
         if (user) {
@@ -41,7 +41,7 @@ export const Navbar = () => {
             const interval = setInterval(loadNotifications, 30000);
             return () => clearInterval(interval);
         }
-    }, [user]);
+    }, [user, loadNotifications]);
 
     const handleNotificationClick = async (notif: AppNotification) => {
         if (!notif.read) {
@@ -62,7 +62,7 @@ export const Navbar = () => {
 
     const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
 
-    const NavLinks = () => (
+    const renderNavLinks = () => (
         <>
             {(user?.role === 'CREW' || user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                 <Link href="/inventory" onClick={() => setIsMobileMenuOpen(false)}>
@@ -119,7 +119,7 @@ export const Navbar = () => {
                         </Link>
 
                         <div className="hidden md:flex ml-10 space-x-2">
-                            <NavLinks />
+                            {renderNavLinks()}
                         </div>
                     </div>
 
@@ -154,11 +154,15 @@ export const Navbar = () => {
                                     <button
                                         className={`relative p-2 rounded-full transition-colors ${notificationPermission === 'granted' ? 'text-primary bg-primary/10' : 'text-gray-400 hover:text-gray-600'}`}
                                         onClick={() => {
-                                            if (notificationPermission !== 'granted') {
+                                            if (
+                                                notificationPermission !== 'granted' &&
+                                                typeof window !== 'undefined' &&
+                                                'Notification' in window
+                                            ) {
                                                 Notification.requestPermission();
-                                            } else {
-                                                setShowNotifications(!showNotifications);
+                                                return;
                                             }
+                                            setShowNotifications(!showNotifications);
                                         }}
                                     >
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -246,7 +250,7 @@ export const Navbar = () => {
             {isMobileMenuOpen && (
                 <div className="md:hidden border-t border-border/40 bg-background/95 backdrop-blur-xl animate-accordion-down overflow-hidden">
                     <div className="px-4 pt-2 pb-4 space-y-1 flex flex-col">
-                        <NavLinks />
+                        {renderNavLinks()}
                         <div className="pt-4 mt-4 border-t border-border/40">
                             {/* Department Switcher Mobile */}
                             {user?.role === 'SUPER_ADMIN' && switchDepartment && (

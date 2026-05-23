@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
-import { storage } from '@/lib/storage';
 import { useDepartment } from '@/lib/department-context';
 import { Notification as AppNotification } from '@/types';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -98,7 +97,12 @@ export const Header = () => {
                 <div className="relative">
                     <button
                         onClick={() => {
-                            if (notificationPermission !== 'granted' && Notification.permission !== 'denied') {
+                            if (
+                                notificationPermission !== 'granted' &&
+                                typeof window !== 'undefined' &&
+                                'Notification' in window &&
+                                Notification.permission !== 'denied'
+                            ) {
                                 Notification.requestPermission();
                             }
                             setShowNotifications(!showNotifications);

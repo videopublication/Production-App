@@ -12,6 +12,7 @@ import { useAssignments } from '@/hooks/useAssignments';
 import { Shoot, Assignment } from '@/types';
 import { generateUUID } from '@/lib/id';
 import { format, parseISO } from 'date-fns';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export default function EditShootPage() {
     const router = useRouter();
@@ -88,15 +89,11 @@ export default function EditShootPage() {
 
                     const assignedUser = allUsers.find(u => u.id === assignment.userId);
                     if (assignedUser?.fcmToken) {
-                        fetch('/api/send-notification', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token: assignedUser.fcmToken,
-                                title,
-                                message,
-                                link: `/shoots/${shoot.id}`
-                            })
+                        sendPushNotification({
+                            token: assignedUser.fcmToken,
+                            title,
+                            message,
+                            link: `/shoots/${shoot.id}`
                         }).catch(e => console.error('Push notification failed', e));
                     }
                 }));
@@ -138,15 +135,11 @@ export default function EditShootPage() {
 
                     const assignedUser = allUsers.find(u => u.id === assignment.userId);
                     if (assignedUser?.fcmToken) {
-                        fetch('/api/send-notification', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token: assignedUser.fcmToken,
-                                title,
-                                message,
-                                link: `/shoots/${shoot.id}`
-                            })
+                        sendPushNotification({
+                            token: assignedUser.fcmToken,
+                            title,
+                            message,
+                            link: `/shoots/${shoot.id}`
                         }).catch(e => console.error('Push notification failed', e));
                     }
                 }));

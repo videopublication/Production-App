@@ -9,6 +9,7 @@ import { useUsers } from '@/hooks/useUsers';
 import { Shoot, Assignment } from '@/types';
 import { generateUUID } from '@/lib/id';
 import { useDepartment } from '@/lib/department-context';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export default function NewShootPage() {
     const router = useRouter();
@@ -84,15 +85,11 @@ export default function NewShootPage() {
 
                     const assignedUser = users.find(u => u.id === assignment.userId);
                     if (assignedUser?.fcmToken) {
-                        fetch('/api/send-notification', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token: assignedUser.fcmToken,
-                                title,
-                                message,
-                                link: `/shoots/${shootId}`
-                            })
+                        sendPushNotification({
+                            token: assignedUser.fcmToken,
+                            title,
+                            message,
+                            link: `/shoots/${shootId}`
                         }).catch(e => console.error('Push notification failed', e));
                     }
                 }));

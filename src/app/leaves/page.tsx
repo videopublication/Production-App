@@ -21,6 +21,7 @@ import { Leave } from '@/types';
 import { storage } from '@/lib/storage';
 import { useToast } from '@/lib/toast-context';
 import { AdminLeaveModal } from '@/components/AdminLeaveModal';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 type LeaveStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -266,11 +267,8 @@ export default function LeavesPage() {
                 const message = `${user?.name} has requested leave from ${format(parseISO(startDate), 'MMM d')} to ${format(parseISO(endDate), 'MMM d')}.`;
                 await storage.addNotification({ userId: admin.id, departmentId: activeDepartmentId, title, message, link: '/leaves' });
                 if (admin.fcmToken) {
-                    fetch('/api/send-notification', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ token: admin.fcmToken, title, message, link: '/leaves' }),
-                    }).catch(e => console.error('Failed to send push notification to admin', e));
+                    sendPushNotification({ token: admin.fcmToken, title, message, link: '/leaves' })
+                        .catch(e => console.error('Failed to send push notification to admin', e));
                 }
             }));
 
@@ -371,11 +369,8 @@ export default function LeavesPage() {
             const notifMessage = `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`;
 
             if (applicant?.fcmToken) {
-                fetch('/api/send-notification', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: applicant.fcmToken, title: notifTitle, message: notifMessage, link: '/leaves' }),
-                }).catch(e => console.error('Failed to send push notification to applicant', e));
+                sendPushNotification({ token: applicant.fcmToken, title: notifTitle, message: notifMessage, link: '/leaves' })
+                    .catch(e => console.error('Failed to send push notification to applicant', e));
             }
 
             Promise.all([
