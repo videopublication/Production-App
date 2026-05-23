@@ -48,6 +48,17 @@ export async function POST(request: Request) {
         }
 
         const admin = getSupabaseAdmin();
+        const { error: clearDuplicateError } = await admin
+            .from('users')
+            .update({ fcm_token: null })
+            .eq('fcm_token', result.data.token)
+            .neq('id', user.id);
+
+        if (clearDuplicateError) {
+            console.error('[register-token] Failed to clear duplicate token owners:', clearDuplicateError);
+            return NextResponse.json({ error: clearDuplicateError.message }, { status: 500 });
+        }
+
         const { error } = await admin
             .from('users')
             .update({ fcm_token: result.data.token })

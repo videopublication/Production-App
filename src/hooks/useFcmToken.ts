@@ -24,7 +24,7 @@ function getNotificationPermission(): NotificationPermissionState {
 }
 
 function getCachedToken() {
-    if (cachedToken) return cachedToken;
+    if (cachedToken || typeof window === 'undefined') return cachedToken;
 
     try {
         cachedToken = window.localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
@@ -79,9 +79,6 @@ async function getMessagingServiceWorkerRegistration() {
 }
 
 async function requestFcmToken() {
-    const existingToken = getCachedToken();
-    if (existingToken) return existingToken;
-
     if (tokenRequestPromise) return tokenRequestPromise;
 
     tokenRequestPromise = (async () => {
@@ -173,7 +170,7 @@ async function saveTokenForUser(userId: string, token: string) {
 export default function useFcmToken() {
     const { user } = useAuth();
     const { showToast } = useToast();
-    const [token, setToken] = useState<string | null>(cachedToken);
+    const [token, setToken] = useState<string | null>(() => getCachedToken());
     const [notificationPermission, setNotificationPermission] =
         useState<NotificationPermissionState>(getNotificationPermission());
 
@@ -218,27 +215,26 @@ export default function useFcmToken() {
 
             onMessage(messaging, (payload) => {
                 console.log('[FCM] Foreground Message:', payload);
-                if (!payload.notification) return;
 
-                showToast(`${payload.notification.title}: ${payload.notification.body}`, 'success');
+                const title = payload.notification?.title || payload.data?.title || 'New Notification';
+                const body = payload.notification?.body || payload.data?.message || payload.data?.body || '';
+                const link = payload.data?.link || '/notifications';
+
+                showToast(`${title}: ${body}`, 'success');
 
                 if (Notification.permission !== 'granted') return;
 
-                try {
-                    const notification = new Notification(payload.notification.title || 'New Notification', {
-                        body: payload.notification.body || '',
+                navigator.serviceWorker.ready
+                    .then((registration) => registration.showNotification(title, {
+                        body,
                         icon: '/icon-192.png',
                         badge: '/icon-192.png',
+                        tag: `notification-${Date.now()}`,
+                        data: { link },
+                    }))
+                    .catch((e) => {
+                        console.error('[FCM] Failed to show foreground notification:', e);
                     });
-
-                    notification.onclick = () => {
-                        window.focus();
-                        window.location.href = payload.data?.link || '/notifications';
-                        notification.close();
-                    };
-                } catch (e) {
-                    console.error('[FCM] Failed to create notification:', e);
-                }
             });
         };
 

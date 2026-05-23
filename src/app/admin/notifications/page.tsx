@@ -49,8 +49,11 @@ export default function SendNotificationPage() {
                 targets = latestUsers.filter(u => u.role === targetRole);
             }
 
+            let inAppSaved = 0;
+            let pushSuccesses = 0;
             let pushFailures = 0;
             let staleTokens = 0;
+            let missingPushTokens = 0;
 
             const notifications = targets.map(async (target) => {
                 // 1. Save to Database
@@ -62,6 +65,7 @@ export default function SendNotificationPage() {
                         link: '/',
                         departmentId: user.departmentId
                     });
+                    inAppSaved += 1;
                 }
 
                 // 2. Send Push Notification (if token exists)
@@ -73,6 +77,7 @@ export default function SendNotificationPage() {
                             message,
                             link: '/'
                         });
+                        pushSuccesses += 1;
                     } catch (err) {
                         pushFailures += 1;
                         if (err instanceof PushNotificationError && err.code === 'FCM_TOKEN_UNREGISTERED') {
@@ -80,18 +85,19 @@ export default function SendNotificationPage() {
                         }
                         console.error(`Failed to send push to ${target.name}`, err);
                     }
+                } else {
+                    missingPushTokens += 1;
                 }
             });
 
             await Promise.all(notifications);
 
+            const pushSummary = `${pushSuccesses} push sent, ${missingPushTokens} no token, ${pushFailures} failed`;
             showToast(
                 staleTokens > 0
-                    ? `Sent ${notifications.length} notifications (${staleTokens} stale push token removed)`
-                    : pushFailures > 0
-                    ? `Sent ${notifications.length} notifications (${pushFailures} push failed)`
-                    : `Sent ${notifications.length} notifications`,
-                pushFailures > 0 ? 'error' : 'success'
+                    ? `Saved ${inAppSaved} in-app; ${pushSummary} (${staleTokens} stale removed)`
+                    : `Saved ${inAppSaved} in-app; ${pushSummary}`,
+                pushFailures > 0 || pushSuccesses === 0 ? 'error' : 'success'
             );
             setTitle('');
             setMessage('');

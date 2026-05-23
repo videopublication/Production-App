@@ -426,7 +426,6 @@ textarea:focus {
 
   .app-main-scroll {
     height: calc(var(--app-viewport-height) - var(--mobile-header-height));
-    margin-top: var(--mobile-header-height);
     padding-top: 1rem;
     padding-bottom: calc(var(--mobile-tab-height) + 1rem);
     min-height: 0;
@@ -436,7 +435,13 @@ textarea:focus {
   }
 
   .mobile-header {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
     height: var(--mobile-header-height);
+    width: 100%;
+    flex-shrink: 0;
     transform: translateZ(0);
   }
 

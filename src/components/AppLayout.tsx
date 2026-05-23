@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -21,6 +21,12 @@ type LockableScreenOrientation = ScreenOrientation & {
 const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; isPublicPage: boolean }) => {
     const { user } = useAuth();
     const { isCollapsed } = useSidebar();
+    const pathname = usePathname();
+    const mainRef = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        mainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }, [pathname]);
 
     return (
         <div className={`app-content-shell flex-1 flex flex-col min-h-screen min-w-0 transition-all duration-300 ${user && !isPublicPage
@@ -34,7 +40,7 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
             {/* Mobile Header */}
             {!isPublicPage && <MobileHeader />}
 
-            <main className={`app-main-scroll flex-1 px-4 py-4 sm:p-6 lg:p-8 ${user && !isPublicPage ? 'md:mt-[44px] md:pb-6' : ''} w-full mx-auto overflow-x-hidden`}>
+            <main ref={mainRef} className={`app-main-scroll flex-1 px-4 py-4 sm:p-6 lg:p-8 ${user && !isPublicPage ? 'md:mt-[44px] md:pb-6' : ''} w-full mx-auto overflow-x-hidden`}>
                 {children}
             </main>
 

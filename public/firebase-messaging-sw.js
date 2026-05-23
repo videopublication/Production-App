@@ -55,13 +55,17 @@ if (firebase.messaging.isSupported()) {
     messaging.onBackgroundMessage(function (payload) {
         console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
-        const notificationTitle = payload.notification?.title || 'New Notification';
+        const notificationTitle = payload.notification?.title || payload.data?.title || 'New Notification';
+        const notificationBody = payload.notification?.body || payload.data?.message || payload.data?.body || '';
         const notificationOptions = {
-            body: payload.notification?.body || '',
+            body: notificationBody,
             icon: '/icon-192.png',
             badge: '/icon-192.png',
             tag: 'notification-' + Date.now(),
-            data: payload.data || {},
+            data: {
+                ...(payload.data || {}),
+                link: payload.data?.link || '/notifications',
+            },
             requireInteraction: false,
             silent: false
         };

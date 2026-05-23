@@ -145,8 +145,14 @@ export async function POST(request: Request) {
             },
             data: {
                 link: notificationLink,
+                title,
+                message,
+                body: message,
             },
             webpush: {
+                headers: {
+                    Urgency: 'high',
+                },
                 fcmOptions: {
                     link: notificationLink,
                 },
