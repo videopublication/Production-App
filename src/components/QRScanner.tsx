@@ -70,7 +70,13 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
             };
 
             await scanner.start(
-                { facingMode: 'environment' },
+                { 
+                    facingMode: 'environment',
+                    // Force a higher resolution so the code remains sharp from further away,
+                    // allowing the camera to autofocus perfectly without getting too close (which causes blur).
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
                 config,
                 (decodedText) => {
                     const now = Date.now();
@@ -283,7 +289,13 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             };
 
             await scanner.start(
-                { facingMode: 'environment' },
+                { 
+                    facingMode: 'environment',
+                    // Requesting 1280x720 ideal resolution keeps small QR codes ultra-sharp at a distance.
+                    // This prevents users from needing to bring the phone too close and causing blur.
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
                 config,
                 async (decodedText) => {
                     const now = Date.now();
@@ -469,10 +481,15 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             )}
 
             {/* Bottom hint */}
-            <div className="bg-gradient-to-t from-black via-black/90 to-transparent absolute bottom-0 left-0 right-0 px-6 pb-12 pt-16 text-center pointer-events-none">
-                <p className="text-white/90 text-[16px] font-medium tracking-wide drop-shadow-md">
+            <div className="bg-gradient-to-t from-black via-black/90 to-transparent absolute bottom-0 left-0 right-0 px-6 pb-10 pt-16 text-center pointer-events-none z-50">
+                <p className="text-white/90 text-[16px] font-semibold tracking-wide drop-shadow-md">
                     {isScanning ? 'Align QR code within the frame' : 'Initializing...'}
                 </p>
+                {isScanning && (
+                    <p className="text-white/60 text-[12px] mt-2 font-medium tracking-wide drop-shadow-md animate-pulse">
+                        Tip: Keep camera 6–10 inches away for perfect auto-focus
+                    </p>
+                )}
             </div>
 
             <style jsx global>{`
