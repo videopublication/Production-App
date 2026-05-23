@@ -17,6 +17,8 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
     const [isScanning, setIsScanning] = useState(false);
     const [error, setError] = useState<string>('');
     const [torchOn, setTorchOn] = useState(false);
+    const [zoomCapabilities, setZoomCapabilities] = useState<{ min: number; max: number; step: number } | null>(null);
+    const [zoomVal, setZoomVal] = useState<number>(1);
     // Use any for the scanner instance since we are dynamically importing
     const scannerRef = useRef<any>(null);
     const isInitialized = useRef(false);
@@ -64,13 +66,24 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
             scannerRef.current = scanner;
 
             const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0,
+                fps: 20,
+                qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                    const size = Math.floor(minEdge * 0.7);
+                    return { width: size, height: size };
+                },
                 videoConstraints: {
                     facingMode: 'environment',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    focusMode: 'continuous' as any,
+                    advanced: [
+                        { focusMode: 'continuous' } as any
+                    ]
+                },
+                useBarCodeDetectorIfSupported: true,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
                 }
             };
 
@@ -97,6 +110,24 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
                 }
             );
 
+            // Fetch zoom capabilities
+            try {
+                const capabilities = scanner.getRunningTrackCapabilities() as any;
+                if (capabilities.zoom) {
+                    setZoomCapabilities({
+                        min: capabilities.zoom.min || 1,
+                        max: capabilities.zoom.max || 5,
+                        step: capabilities.zoom.step || 0.1
+                    });
+                    setZoomVal(capabilities.zoom.min || 1);
+                } else {
+                    setZoomCapabilities(null);
+                }
+            } catch (zoomErr) {
+                console.warn("Failed to get zoom capabilities", zoomErr);
+                setZoomCapabilities(null);
+            }
+
             setIsScanning(true);
             isInitialized.current = true;
         } catch (err) {
@@ -121,6 +152,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
             }
         }
         setIsScanning(false);
+        setZoomCapabilities(null);
     };
 
     useEffect(() => {
@@ -172,6 +204,39 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
                         overflow: 'hidden'
                     }}
                 />
+
+                {isScanning && zoomCapabilities && (
+                    <div className="flex items-center gap-3 w-full max-w-sm mx-auto p-4 bg-muted/50 rounded-lg border border-border mt-2">
+                        <span className="text-sm font-semibold select-none">Zoom</span>
+                        <input
+                            type="range"
+                            min={zoomCapabilities.min}
+                            max={zoomCapabilities.max}
+                            step={zoomCapabilities.step}
+                            value={zoomVal}
+                            onChange={async (e) => {
+                                const val = parseFloat(e.target.value);
+                                setZoomVal(val);
+                                try {
+                                    await scannerRef.current?.applyVideoConstraints({
+                                        advanced: [{ zoom: val } as any]
+                                    });
+                                } catch (err) {
+                                    console.error("Failed to apply zoom", err);
+                                }
+                            }}
+                            className="flex-1 accent-primary h-1 bg-secondary rounded-lg appearance-none cursor-pointer"
+                        />
+                        <span className="text-xs font-mono w-8 text-right select-none">{zoomVal.toFixed(1)}x</span>
+                    </div>
+                )}
+
+                {isScanning && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                        Tip: If the camera is blurry, use the Zoom slider above or hold the camera 6-10 inches away.
+                    </p>
+                )}
+
                 <style jsx global>{`
                     #${scannerId} video {
                         width: 100% !important;
@@ -234,6 +299,8 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
     const [error, setError] = useState<string>('');
     const [scanCount, setScanCount] = useState(0);
     const [torchOn, setTorchOn] = useState(false);
+    const [zoomCapabilities, setZoomCapabilities] = useState<{ min: number; max: number; step: number } | null>(null);
+    const [zoomVal, setZoomVal] = useState<number>(1);
     const scannerRef = useRef<any>(null);
     const isInitialized = useRef(false);
     const [scannerId] = useState(() => `mobile-qr-${Date.now()}-${Math.floor(Math.random() * 10000)}`);
@@ -282,13 +349,24 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             scannerRef.current = scanner;
 
             const config = {
-                fps: 15,
-                qrbox: { width: 280, height: 280 },
-                aspectRatio: 1.0,
+                fps: 20,
+                qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                    const size = Math.floor(minEdge * 0.7);
+                    return { width: size, height: size };
+                },
                 videoConstraints: {
                     facingMode: 'environment',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    focusMode: 'continuous' as any,
+                    advanced: [
+                        { focusMode: 'continuous' } as any
+                    ]
+                },
+                useBarCodeDetectorIfSupported: true,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
                 }
             };
 
@@ -325,6 +403,24 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
                 () => { }
             );
 
+            // Fetch zoom capabilities
+            try {
+                const capabilities = scanner.getRunningTrackCapabilities() as any;
+                if (capabilities.zoom) {
+                    setZoomCapabilities({
+                        min: capabilities.zoom.min || 1,
+                        max: capabilities.zoom.max || 5,
+                        step: capabilities.zoom.step || 0.1
+                    });
+                    setZoomVal(capabilities.zoom.min || 1);
+                } else {
+                    setZoomCapabilities(null);
+                }
+            } catch (zoomErr) {
+                console.warn("Failed to get zoom capabilities", zoomErr);
+                setZoomCapabilities(null);
+            }
+
             setIsScanning(true);
             isInitialized.current = true;
         } catch (err) {
@@ -349,6 +445,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             }
         }
         setIsScanning(false);
+        setZoomCapabilities(null);
     };
 
     const refreshCamera = async () => {
@@ -406,6 +503,33 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             {scanCount > 0 && (
                 <div className="absolute top-0 left-3 mt-3 px-4 py-2 bg-[#34c759]/90 backdrop-blur-md rounded-full shadow-lg border border-white/10 z-50">
                     <span className="text-white text-[14px] font-bold tracking-wide">{scanCount} scanned</span>
+                </div>
+            )}
+
+            {/* Zoom Slider Overlay */}
+            {isScanning && zoomCapabilities && (
+                <div className="absolute bottom-[130px] left-1/2 -translate-x-1/2 w-full max-w-[280px] px-4 py-3 bg-black/50 backdrop-blur-md rounded-2xl border border-white/10 z-50 flex items-center gap-3">
+                    <span className="text-white text-xs font-semibold select-none">Zoom</span>
+                    <input
+                        type="range"
+                        min={zoomCapabilities.min}
+                        max={zoomCapabilities.max}
+                        step={zoomCapabilities.step}
+                        value={zoomVal}
+                        onChange={async (e) => {
+                            const val = parseFloat(e.target.value);
+                            setZoomVal(val);
+                            try {
+                                await scannerRef.current?.applyVideoConstraints({
+                                    advanced: [{ zoom: val } as any]
+                                });
+                            } catch (err) {
+                                console.error("Failed to apply zoom", err);
+                            }
+                        }}
+                        className="flex-1 accent-primary h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span className="text-white text-xs font-mono w-8 text-right select-none">{zoomVal.toFixed(1)}x</span>
                 </div>
             )}
 
