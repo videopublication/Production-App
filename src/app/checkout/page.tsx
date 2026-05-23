@@ -1030,7 +1030,10 @@ export default function CheckoutPage() {
 
             {/* Mobile Bottom Bar */}
             {!isSearchFocused && (
-                <div className="md:hidden fixed bottom-[calc(70px+env(safe-area-inset-bottom))] left-0 right-0 p-4 bg-background border-t border-border shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30">
+                <div 
+                    className="md:hidden fixed left-0 right-0 p-4 bg-background border-t border-border shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30"
+                    style={{ bottom: 'calc(70px + env(safe-area-inset-bottom))' }}
+                >
                     <div className="flex items-center gap-4">
                         <div>
                             <p className="text-[10px] font-bold text-muted-foreground uppercase">Total</p>
