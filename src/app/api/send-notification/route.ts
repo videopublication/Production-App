@@ -14,6 +14,23 @@ const notificationSchema = z.object({
     link: z.string().optional(),
 });
 
+function isUnregisteredTokenError(error: unknown) {
+    const err = error as {
+        code?: string;
+        message?: string;
+        errorInfo?: { code?: string; message?: string };
+    };
+
+    const code = err.code || err.errorInfo?.code || '';
+    const message = `${err.message || ''} ${err.errorInfo?.message || ''}`.toLowerCase();
+
+    return code === 'messaging/registration-token-not-registered'
+        || code === 'messaging/invalid-registration-token'
+        || message.includes('device unregistered')
+        || message.includes('registration-token-not-registered')
+        || message.includes('requested entity was not found');
+}
+
 function getSupabaseAdmin() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,6 +64,20 @@ function getFirebaseMessaging() {
     }
 
     return admin.messaging();
+}
+
+async function clearInvalidToken(token: string) {
+    const supabaseAdmin = getSupabaseAdmin();
+    const { error } = await supabaseAdmin
+        .from('users')
+        .update({ fcm_token: null })
+        .eq('fcm_token', token);
+
+    if (error) {
+        console.error('[send-notification] Failed to clear invalid token:', error);
+    } else {
+        console.warn('[send-notification] Cleared invalid FCM token from user profiles');
+    }
 }
 
 async function ensureCanSendNotifications() {
@@ -93,6 +124,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
+    let tokenForCleanup: string | null = null;
+
     try {
         const body = await request.json();
         const result = notificationSchema.safeParse(body);
@@ -101,6 +134,7 @@ export async function POST(request: Request) {
         }
 
         const { token, title, message, link } = result.data;
+        tokenForCleanup = token;
         const notificationLink = link || '/notifications';
 
         const payload: admin.messaging.Message = {
@@ -138,6 +172,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, messageId });
     } catch (error: unknown) {
         const err = error as Error;
+        if (tokenForCleanup && isUnregisteredTokenError(error)) {
+            await clearInvalidToken(tokenForCleanup);
+            return NextResponse.json(
+                { error: 'Device unregistered', code: 'FCM_TOKEN_UNREGISTERED' },
+                { status: 410 }
+            );
+        }
+
         console.error('[send-notification] Error:', err.message);
         return NextResponse.json({ error: 'Failed to send notification', details: err.message }, { status: 500 });
     }

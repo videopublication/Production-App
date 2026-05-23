@@ -8,7 +8,7 @@ import { Card } from '@/components/Card';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { User } from '@/types';
-import { sendPushNotification } from '@/lib/push-notifications';
+import { PushNotificationError, sendPushNotification } from '@/lib/push-notifications';
 
 export default function SendNotificationPage() {
     const router = useRouter();
@@ -36,17 +36,21 @@ export default function SendNotificationPage() {
         setIsLoading(true);
 
         try {
+            const latestUsers = user ? await storage.getUsers(user.departmentId) : users;
+            setUsers(latestUsers);
+
             // Filter target users
             let targets: User[] = [];
             if (targetRole === 'ALL') {
-                targets = users;
+                targets = latestUsers;
             } else if (targetRole === 'SPECIFIC') {
-                targets = users.filter(u => u.id === specificUserId);
+                targets = latestUsers.filter(u => u.id === specificUserId);
             } else {
-                targets = users.filter(u => u.role === targetRole);
+                targets = latestUsers.filter(u => u.role === targetRole);
             }
 
             let pushFailures = 0;
+            let staleTokens = 0;
 
             const notifications = targets.map(async (target) => {
                 // 1. Save to Database
@@ -71,6 +75,9 @@ export default function SendNotificationPage() {
                         });
                     } catch (err) {
                         pushFailures += 1;
+                        if (err instanceof PushNotificationError && err.code === 'FCM_TOKEN_UNREGISTERED') {
+                            staleTokens += 1;
+                        }
                         console.error(`Failed to send push to ${target.name}`, err);
                     }
                 }
@@ -79,7 +86,9 @@ export default function SendNotificationPage() {
             await Promise.all(notifications);
 
             showToast(
-                pushFailures > 0
+                staleTokens > 0
+                    ? `Sent ${notifications.length} notifications (${staleTokens} stale push token removed)`
+                    : pushFailures > 0
                     ? `Sent ${notifications.length} notifications (${pushFailures} push failed)`
                     : `Sent ${notifications.length} notifications`,
                 pushFailures > 0 ? 'error' : 'success'

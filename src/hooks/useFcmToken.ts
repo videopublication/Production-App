@@ -12,6 +12,7 @@ let hasSetupListener = false;
 let tokenRequestPromise: Promise<string | null> | null = null;
 let cachedToken: string | null = null;
 const savedTokenByUserId = new Map<string, string>();
+const saveTokenPromises = new Map<string, Promise<void>>();
 
 const FCM_TOKEN_STORAGE_KEY = 'fcm-token';
 
@@ -143,19 +144,30 @@ async function requestFcmToken() {
 async function saveTokenForUser(userId: string, token: string) {
     if (savedTokenByUserId.get(userId) === token) return;
 
-    const response = await fetch('/api/notifications/register-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+    const cacheKey = `${userId}:${token}`;
+    const existingSave = saveTokenPromises.get(cacheKey);
+    if (existingSave) return existingSave;
+
+    const savePromise = (async () => {
+        const response = await fetch('/api/notifications/register-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+        });
+
+        if (!response.ok) {
+            const details = await response.json().catch(() => null);
+            throw new Error(details?.error || `Token registration failed with status ${response.status}`);
+        }
+
+        savedTokenByUserId.set(userId, token);
+        console.log('[FCM] Token saved to database');
+    })().finally(() => {
+        saveTokenPromises.delete(cacheKey);
     });
 
-    if (!response.ok) {
-        const details = await response.json().catch(() => null);
-        throw new Error(details?.error || `Token registration failed with status ${response.status}`);
-    }
-
-    savedTokenByUserId.set(userId, token);
-    console.log('[FCM] Token saved to database');
+    saveTokenPromises.set(cacheKey, savePromise);
+    return savePromise;
 }
 
 export default function useFcmToken() {
