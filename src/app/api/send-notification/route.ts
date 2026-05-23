@@ -136,18 +136,16 @@ export async function POST(request: Request) {
         const { token, title, message, link } = result.data;
         tokenForCleanup = token;
         const notificationLink = link || '/notifications';
+        const timestamp = Date.now().toString();
 
         const payload: admin.messaging.Message = {
             token,
-            notification: {
-                title,
-                body: message,
-            },
             data: {
                 link: notificationLink,
                 title,
                 message,
                 body: message,
+                timestamp,
             },
             webpush: {
                 headers: {
@@ -155,13 +153,6 @@ export async function POST(request: Request) {
                 },
                 fcmOptions: {
                     link: notificationLink,
-                },
-                notification: {
-                    icon: '/icon-192.png',
-                    badge: '/icon-192.png',
-                    data: {
-                        link: notificationLink,
-                    },
                 },
             },
         };

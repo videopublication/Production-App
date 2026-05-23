@@ -49,15 +49,23 @@ try {
 
         const notificationTitle = payload.notification?.title || payload.data?.title || 'New Notification';
         const notificationBody = payload.notification?.body || payload.data?.message || payload.data?.body || '';
+        const notificationLink = payload.data?.link || '/notifications';
         const notificationOptions = {
             body: notificationBody,
             icon: '/icon-192.png',
             badge: '/icon-192.png',
-            tag: `notification-${Date.now()}`,
+            tag: payload.data?.tag || `vp-app-${notificationLink}`,
+            timestamp: Number(payload.data?.timestamp) || Date.now(),
             data: {
                 ...(payload.data || {}),
-                link: payload.data?.link || '/notifications',
+                link: notificationLink,
             },
+            actions: [
+                {
+                    action: 'open',
+                    title: 'Open',
+                },
+            ],
             requireInteraction: false,
             silent: false,
         };
