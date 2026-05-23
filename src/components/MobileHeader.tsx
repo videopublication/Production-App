@@ -56,12 +56,12 @@ export const MobileHeader = () => {
 
     return (
         <>
-            <header className="fixed top-0 left-0 right-0 z-[100] md:hidden">
+            <header className="mobile-header fixed top-0 left-0 right-0 z-[100] md:hidden">
                 {/* Glassmorphic background */}
                 <div className="absolute inset-0 bg-gray-200 dark:bg-[#2c2c2e] backdrop-blur-xl backdrop-saturate-150 border-b border-gray-300 dark:border-[#3a3a3c]" />
 
                 {/* Content */}
-                <div className="relative flex items-center justify-between h-11 px-4 pt-safe-top">
+                <div className="relative flex items-center justify-between h-full px-4 pt-safe-top">
                     {/* Left Action / Spacer */}
                     <div className="flex-none w-[110px] flex items-center justify-start">
                         {(pathname === '/profile' ||

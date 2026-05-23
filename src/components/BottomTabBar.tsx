@@ -198,7 +198,7 @@ export const BottomTabBar = () => {
     }, [pathname]);
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-[100] md:hidden pb-safe-bottom">
+        <nav className="mobile-tab-bar fixed bottom-0 left-0 right-0 z-[100] md:hidden">
             {/* Glassmorphic background */}
             <div className="absolute inset-0 bg-gray-200 dark:bg-[#2c2c2e] backdrop-blur-xl backdrop-saturate-150 border-t border-gray-300 dark:border-[#3a3a3c]" />
 
@@ -245,7 +245,7 @@ export const BottomTabBar = () => {
             )}
 
             {/* Tab container */}
-            <div className="relative flex items-center justify-around px-2 pb-3 pt-2">
+            <div className="relative flex h-full items-center justify-around px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-2">
                 {primaryTabs.map((tab) => {
                     const active = isActive(tab.path);
                     return (

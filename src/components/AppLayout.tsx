@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import { Sidebar } from './Sidebar';
@@ -14,12 +14,16 @@ import { PWAInstallPrompt } from './PWAInstallPrompt';
 
 import { OfflineIndicator } from './OfflineIndicator';
 
+type LockableScreenOrientation = ScreenOrientation & {
+    lock?: (orientation: 'portrait' | 'landscape' | 'portrait-primary' | 'portrait-secondary' | 'landscape-primary' | 'landscape-secondary' | 'any' | 'natural') => Promise<void>;
+};
+
 const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; isPublicPage: boolean }) => {
     const { user } = useAuth();
     const { isCollapsed } = useSidebar();
 
     return (
-        <div className={`flex-1 flex flex-col min-h-screen min-w-0 transition-all duration-300 ${user && !isPublicPage
+        <div className={`app-content-shell flex-1 flex flex-col min-h-screen min-w-0 transition-all duration-300 ${user && !isPublicPage
             ? isCollapsed
                 ? 'md:pl-[72px]'
                 : 'md:pl-[260px]'
@@ -30,7 +34,7 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
             {/* Mobile Header */}
             {!isPublicPage && <MobileHeader />}
 
-            <main className={`flex-1 px-4 py-4 sm:p-6 lg:p-8 ${user && !isPublicPage ? 'mt-[calc(44px+env(safe-area-inset-top))] md:mt-[44px] pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-6' : ''} w-full mx-auto overflow-x-hidden`}>
+            <main className={`app-main-scroll flex-1 px-4 py-4 sm:p-6 lg:p-8 ${user && !isPublicPage ? 'mt-[var(--mobile-header-height)] md:mt-[44px] pb-[var(--mobile-tab-height)] md:pb-6' : ''} w-full mx-auto overflow-x-hidden`}>
                 {children}
             </main>
 
@@ -43,17 +47,37 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
 
 export const AppLayout = ({ children }: { children: React.ReactNode }) => {
     const pathname = usePathname();
-    const router = useRouter();
 
     const isPublicPage = pathname === '/login' || pathname === '/' || pathname === '/inactive';
 
     // Wrap with SidebarProvider only for authenticated pages
     const { user, isLoading } = useAuth();
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const syncViewportHeight = () => {
+            const height = window.visualViewport?.height || window.innerHeight;
+            document.documentElement.style.setProperty('--app-viewport-height', `${height}px`);
+        };
+
+        syncViewportHeight();
+        window.addEventListener('resize', syncViewportHeight);
+        window.addEventListener('orientationchange', syncViewportHeight);
+        window.visualViewport?.addEventListener('resize', syncViewportHeight);
+
+        return () => {
+            window.removeEventListener('resize', syncViewportHeight);
+            window.removeEventListener('orientationchange', syncViewportHeight);
+            window.visualViewport?.removeEventListener('resize', syncViewportHeight);
+        };
+    }, []);
+
     // Lock orientation to portrait
     useEffect(() => {
-        if (typeof window !== 'undefined' && (window.screen as any)?.orientation?.lock) {
-            (window.screen.orientation as any).lock('portrait').catch(() => {
+        if (typeof window !== 'undefined') {
+            const orientation = window.screen.orientation as LockableScreenOrientation | undefined;
+            orientation?.lock?.('portrait').catch(() => {
                 // Silently fail if not supported or requires gesture
             });
         }
@@ -91,7 +115,7 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
         <ToastProvider>
             <DialogProvider>
                 <SidebarProvider>
-                    <div className="min-h-screen bg-background text-foreground flex overflow-x-hidden">
+                    <div className="app-shell min-h-screen bg-background text-foreground flex overflow-x-hidden">
                         <Sidebar />
                         <MainContent isPublicPage={isPublicPage}>
                             {children}
