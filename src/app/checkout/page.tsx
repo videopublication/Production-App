@@ -1032,7 +1032,7 @@ export default function CheckoutPage() {
             {!isSearchFocused && (
                 <div 
                     className="md:hidden fixed left-0 right-0 p-4 bg-background border-t border-border shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30"
-                    style={{ bottom: 'calc(70px + env(safe-area-inset-bottom))' }}
+                    style={{ bottom: 'var(--mobile-tab-height)' }}
                 >
                     <div className="flex items-center gap-4">
                         <div>
