@@ -139,6 +139,41 @@ export function useCheckOut() {
                 }).catch(e => console.error('Push notification failed', e));
             }
 
+            try {
+                const notificationDepartmentId = departmentId || items[0]?.departmentId;
+                const users = await storage.getUsers(notificationDepartmentId);
+                const managerRecipients = users.filter(u =>
+                    u.status === 'ACTIVE' &&
+                    ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role) &&
+                    u.id !== performerId
+                );
+
+                if (managerRecipients.length > 0) {
+                    const title = 'Items Checked Out';
+                    const message = `${items.length} items checked out for ${project}.`;
+                    const link = `/transactions/${transactionId}`;
+
+                    await Promise.all(managerRecipients.map(manager =>
+                        storage.addNotification({
+                            userId: manager.id,
+                            title,
+                            message,
+                            link,
+                            departmentId: notificationDepartmentId
+                        })
+                    ));
+
+                    sendPushNotification({
+                        userIds: managerRecipients.map(manager => manager.id),
+                        title,
+                        message,
+                        link
+                    }).catch(e => console.error('Manager checkout push notification failed', e));
+                }
+            } catch (error) {
+                console.error('Failed to notify managers about checkout', error);
+            }
+
             return transaction;
         },
         onSuccess: () => {
