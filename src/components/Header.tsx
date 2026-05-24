@@ -15,7 +15,7 @@ import { ArrowLeft } from 'lucide-react';
 export const Header = () => {
     const { user } = useAuth();
     const { isCollapsed } = useSidebar();
-    const { notificationPermission } = useFcmToken();
+    const { notificationPermission, enableNotifications } = useFcmToken();
     const { department, allDepartments, switchDepartment } = useDepartment();
     const router = useRouter();
     const pathname = usePathname();
@@ -96,14 +96,14 @@ export const Header = () => {
 
                 <div className="relative">
                     <button
-                        onClick={() => {
+                        onClick={async () => {
                             if (
                                 notificationPermission !== 'granted' &&
                                 typeof window !== 'undefined' &&
                                 'Notification' in window &&
                                 Notification.permission !== 'denied'
                             ) {
-                                Notification.requestPermission();
+                                await enableNotifications();
                             }
                             setShowNotifications(!showNotifications);
                         }}

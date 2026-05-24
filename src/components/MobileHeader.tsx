@@ -4,8 +4,6 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { storage } from '@/lib/storage';
-import { Notification as AppNotification } from '@/types';
 import useFcmToken from '@/hooks/useFcmToken';
 import { useNotifications } from '@/hooks/useNotifications';
 import { ChevronLeft } from 'lucide-react';
@@ -31,7 +29,7 @@ export const MobileHeader = () => {
     const { department, allDepartments, switchDepartment } = useDepartment();
     const pathname = usePathname();
     const router = useRouter();
-    const { notificationPermission } = useFcmToken();
+    const { notificationPermission, enableNotifications } = useFcmToken();
     const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
 
     // Notification Hook
@@ -111,14 +109,23 @@ export const MobileHeader = () => {
 
                     {/* Right icons */}
                     <div className="flex-none w-[110px] flex items-center justify-end gap-1">
-                        <Link href="/notifications" className="relative w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-gray-800 hover:text-[#1d1d1f] dark:hover:text-white transition-colors active:scale-95">
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (notificationPermission !== 'granted') {
+                                    await enableNotifications();
+                                }
+                                router.push('/notifications');
+                            }}
+                            className="relative w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-gray-800 hover:text-[#1d1d1f] dark:hover:text-white transition-colors active:scale-95"
+                        >
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                             </svg>
                             {user && unreadCount > 0 && (
                                 <span className="absolute top-2 right-2 w-2 h-2 bg-[#ff3b30] rounded-full"></span>
                             )}
-                        </Link>
+                        </button>
                         <button
                             onClick={() => setIsSettingsOpen(true)}
                             className="w-9 h-9 rounded-xl flex items-center justify-center text-[#86868b] dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-gray-800 hover:text-[#1d1d1f] dark:hover:text-white transition-colors active:scale-95"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getToken, onMessage } from 'firebase/messaging';
 import { initFirebase } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth';
@@ -78,18 +78,23 @@ async function getMessagingServiceWorkerRegistration() {
     return registration;
 }
 
-async function requestFcmToken() {
+async function requestFcmToken({ requestPermission = false } = {}) {
+    if (!('Notification' in window)) {
+        console.log('[FCM] Notifications not supported');
+        return null;
+    }
+
+    if (!requestPermission && Notification.permission !== 'granted') {
+        console.log('[FCM] Notification permission not granted yet');
+        return null;
+    }
+
     if (tokenRequestPromise) return tokenRequestPromise;
 
     tokenRequestPromise = (async () => {
         try {
             if (!('serviceWorker' in navigator)) {
                 console.log('[FCM] Service workers not supported');
-                return null;
-            }
-
-            if (!('Notification' in window)) {
-                console.log('[FCM] Notifications not supported');
                 return null;
             }
 
@@ -101,6 +106,7 @@ async function requestFcmToken() {
 
             let permission = Notification.permission;
             if (permission === 'default') {
+                if (!requestPermission) return null;
                 permission = await Notification.requestPermission();
             }
 
@@ -169,15 +175,39 @@ async function saveTokenForUser(userId: string, token: string) {
 
 export default function useFcmToken() {
     const { user } = useAuth();
+    const userId = user?.id;
     const { showToast } = useToast();
     const [token, setToken] = useState<string | null>(() => getCachedToken());
     const [notificationPermission, setNotificationPermission] =
         useState<NotificationPermissionState>(getNotificationPermission());
 
+    const setupToken = useCallback(async ({ requestPermission = false } = {}) => {
+        setNotificationPermission(getNotificationPermission());
+
+        const currentToken = await requestFcmToken({ requestPermission });
+
+        setNotificationPermission(getNotificationPermission());
+        setToken(currentToken);
+
+        if (currentToken && userId) {
+            try {
+                await saveTokenForUser(userId, currentToken);
+            } catch (error) {
+                console.error('[FCM] Failed to save FCM token', error);
+            }
+        }
+
+        return currentToken;
+    }, [userId]);
+
+    const enableNotifications = useCallback(() => {
+        return setupToken({ requestPermission: true });
+    }, [setupToken]);
+
     useEffect(() => {
         let isMounted = true;
 
-        const setupToken = async () => {
+        const setupExistingToken = async () => {
             setNotificationPermission(getNotificationPermission());
 
             const currentToken = await requestFcmToken();
@@ -186,21 +216,21 @@ export default function useFcmToken() {
             setNotificationPermission(getNotificationPermission());
             setToken(currentToken);
 
-            if (currentToken && user?.id) {
+            if (currentToken && userId) {
                 try {
-                    await saveTokenForUser(user.id, currentToken);
+                    await saveTokenForUser(userId, currentToken);
                 } catch (error) {
                     console.error('[FCM] Failed to save FCM token', error);
                 }
             }
         };
 
-        setupToken();
+        setupExistingToken();
 
         return () => {
             isMounted = false;
         };
-    }, [user?.id]);
+    }, [userId]);
 
     // Foreground Message Handler
     useEffect(() => {
@@ -241,5 +271,5 @@ export default function useFcmToken() {
         setupListener();
     }, [showToast]);
 
-    return { token, notificationPermission };
+    return { token, notificationPermission, enableNotifications };
 }

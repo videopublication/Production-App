@@ -13,7 +13,7 @@ import { useDepartment } from '@/lib/department-context';
 export const Navbar = () => {
     const pathname = usePathname();
     const { user, logout } = useAuth();
-    const { notificationPermission } = useFcmToken();
+    const { notificationPermission, enableNotifications } = useFcmToken();
     const { allDepartments, department, switchDepartment } = useDepartment();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -153,14 +153,13 @@ export const Navbar = () => {
                                 <div className="relative">
                                     <button
                                         className={`relative p-2 rounded-full transition-colors ${notificationPermission === 'granted' ? 'text-primary bg-primary/10' : 'text-gray-400 hover:text-gray-600'}`}
-                                        onClick={() => {
+                                        onClick={async () => {
                                             if (
                                                 notificationPermission !== 'granted' &&
                                                 typeof window !== 'undefined' &&
                                                 'Notification' in window
                                             ) {
-                                                Notification.requestPermission();
-                                                return;
+                                                await enableNotifications();
                                             }
                                             setShowNotifications(!showNotifications);
                                         }}
