@@ -13,6 +13,7 @@ import Image from 'next/image';
 import { useEquipmentItem, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
 import { useDepartment } from '@/lib/department-context';
+import { CONDITION_LABELS, getEquipmentIssue, isIssueCondition, withActiveIssue } from '@/lib/equipment-issues';
 
 export default function ItemDetailsPage() {
     const params = useParams();
@@ -47,6 +48,8 @@ export default function ItemDetailsPage() {
     const [editCategory, setEditCategory] = useState('');
     const [editBarcode, setEditBarcode] = useState('');
     const [editSerialNumber, setEditSerialNumber] = useState('');
+    const [editHasActiveIssue, setEditHasActiveIssue] = useState(false);
+    const [editIssueNote, setEditIssueNote] = useState('');
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
@@ -61,6 +64,9 @@ export default function ItemDetailsPage() {
             setEditCategory(item.category);
             setEditBarcode(item.barcode);
             setEditSerialNumber(item.serialNumber || '');
+            const activeIssue = getEquipmentIssue(item);
+            setEditHasActiveIssue(!!activeIssue);
+            setEditIssueNote(activeIssue?.note || '');
 
             // QR & Assigned User Logic
             const generateQR = async () => {
@@ -149,7 +155,7 @@ export default function ItemDetailsPage() {
             }
         };
         loadHistory();
-    }, [item?.id, item?.status, effectiveDeptId]);
+    }, [item, effectiveDeptId]);
 
     // Check if current user can manage equipment
     const canManage = user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
@@ -161,14 +167,46 @@ export default function ItemDetailsPage() {
     const handleSaveChanges = async () => {
         if (!item || !canManage) return;
 
+        if (editHasActiveIssue && !isIssueCondition(editCondition)) {
+            setSaveMessage('Choose a non-OK condition before saving a checkout warning');
+            setTimeout(() => setSaveMessage(''), 3000);
+            return;
+        }
+
+        if (editStatus === 'AVAILABLE' && isIssueCondition(editCondition) && !editHasActiveIssue) {
+            setSaveMessage('Available items with a non-OK condition need a checkout warning note');
+            setTimeout(() => setSaveMessage(''), 3000);
+            return;
+        }
+
+        if (editHasActiveIssue && !editIssueNote.trim()) {
+            setSaveMessage('Issue note is required for checkout warnings');
+            setTimeout(() => setSaveMessage(''), 3000);
+            return;
+        }
+
         setIsSaving(true);
         try {
+            const existingIssue = getEquipmentIssue(item);
+            const activeIssue = editHasActiveIssue
+                ? {
+                    condition: editCondition,
+                    note: editIssueNote.trim(),
+                    source: existingIssue?.source || ('manual' as const),
+                    reportedAt: existingIssue?.reportedAt || new Date().toISOString(),
+                    reportedBy: existingIssue?.reportedBy || user?.id,
+                    verifiedAt: existingIssue?.verifiedAt,
+                    verifiedBy: existingIssue?.verifiedBy,
+                }
+                : null;
+
             const updates: Partial<Equipment> = {
                 status: editStatus,
                 condition: editCondition,
                 location: editLocation,
                 // Clear assignedTo if status is AVAILABLE
-                assignedTo: editStatus === 'AVAILABLE' ? null as any : item.assignedTo,
+                assignedTo: editStatus === 'AVAILABLE' ? null as unknown as string : item.assignedTo,
+                metadata: withActiveIssue(item.metadata, activeIssue),
             };
 
             // Only add critical fields if user is ADMIN and they have changed
@@ -188,7 +226,7 @@ export default function ItemDetailsPage() {
                 entityId: item.id,
                 userId: user.id,
                 timestamp: new Date().toISOString(),
-                details: `Updated item "${item.name}" (${item.barcode}). Status: ${editStatus}, Condition: ${editCondition}`
+                details: `Updated item "${item.name}" (${item.barcode}). Status: ${editStatus}, Condition: ${editCondition}${activeIssue ? `, Checkout warning: ${activeIssue.note}` : ''}`
             });
 
             setIsEditing(false);
@@ -213,6 +251,9 @@ export default function ItemDetailsPage() {
             setEditCategory(item.category);
             setEditBarcode(item.barcode);
             setEditSerialNumber(item.serialNumber || '');
+            const activeIssue = getEquipmentIssue(item);
+            setEditHasActiveIssue(!!activeIssue);
+            setEditIssueNote(activeIssue?.note || '');
         }
         setIsEditing(false);
     };
@@ -247,7 +288,7 @@ export default function ItemDetailsPage() {
         }
     };
 
-    const getStatusVariant = (status: string) => {
+    const getStatusVariant = (status: string): 'default' | 'destructive' | 'success' | 'warning' | 'orange' => {
         switch (status) {
             case 'AVAILABLE': return 'success';
             case 'CHECKED_OUT': return 'orange';
@@ -257,6 +298,16 @@ export default function ItemDetailsPage() {
             case 'MAINTENANCE': return 'destructive';
             default: return 'default';
         }
+    };
+
+    const getDisplayStatus = (currentItem: Equipment) => {
+        if (currentItem.status === 'AVAILABLE' && getEquipmentIssue(currentItem)) return 'ISSUE';
+        return currentItem.status.replace('_', ' ');
+    };
+
+    const getDisplayStatusVariant = (currentItem: Equipment) => {
+        if (currentItem.status === 'AVAILABLE' && getEquipmentIssue(currentItem)) return 'warning';
+        return getStatusVariant(currentItem.status);
     };
 
     if (isLoading) return <div className="p-8 text-center">Loading...</div>;
@@ -341,12 +392,33 @@ export default function ItemDetailsPage() {
                                 </>
                             )}
                         </div>
-                        <Badge variant={getStatusVariant(item.status) as any} className="shrink-0 text-xs font-semibold px-2.5 py-1">
-                            {item.status.replace('_', ' ')}
+                        <Badge variant={getDisplayStatusVariant(item)} className="shrink-0 text-xs font-semibold px-2.5 py-1">
+                            {getDisplayStatus(item)}
                         </Badge>
                     </div>
                 </div>
             </div>
+
+            {getEquipmentIssue(item) && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                    <div className="flex items-start gap-3">
+                        <svg className="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        </svg>
+                        <div className="min-w-0">
+                            <p className="text-sm font-bold">Checkout warning active</p>
+                            <p className="mt-1 text-sm leading-relaxed">{getEquipmentIssue(item)?.note}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {!getEquipmentIssue(item) && item.status === 'AVAILABLE' && isIssueCondition(item.condition) && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                    <p className="text-sm font-bold">This item has a non-OK condition but no checkout warning note.</p>
+                    <p className="mt-1 text-sm">Click Edit and add a warning note so checkout users can see the issue before taking it.</p>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">
@@ -497,8 +569,8 @@ export default function ItemDetailsPage() {
                                             <option value="LOST">Lost</option>
                                         </select>
                                     ) : (
-                                        <Badge variant={getStatusVariant(item.status) as any}>
-                                            {item.status.replace('_', ' ')}
+                                        <Badge variant={getDisplayStatusVariant(item)}>
+                                            {getDisplayStatus(item)}
                                         </Badge>
                                     )}
                                 </div>
@@ -524,6 +596,46 @@ export default function ItemDetailsPage() {
                                     <dd className="text-sm font-medium">{item.location}</dd>
                                 )}
                             </div>
+
+                            {isEditing && canManage && (
+                                <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+                                    <label className="flex items-start gap-3 text-sm font-semibold text-amber-900 dark:text-amber-100">
+                                        <input
+                                            type="checkbox"
+                                            checked={editHasActiveIssue}
+                                            onChange={(e) => setEditHasActiveIssue(e.target.checked)}
+                                            className="mt-1 h-4 w-4 rounded border-amber-300 accent-amber-500"
+                                        />
+                                        <span>
+                                            Show checkout warning for this item
+                                            <span className="block text-xs font-medium text-amber-700 dark:text-amber-300">
+                                                Use this when the item is available but has an issue users must know before checkout.
+                                            </span>
+                                        </span>
+                                    </label>
+
+                                    {editHasActiveIssue && (
+                                        <textarea
+                                            value={editIssueNote}
+                                            onChange={(e) => setEditIssueNote(e.target.value)}
+                                            className="min-h-[92px] w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-700 dark:bg-background"
+                                            placeholder="Example: Camera works, but audio input is not working."
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            {!isEditing && getEquipmentIssue(item) && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-100">
+                                    <div className="mb-1 flex items-center gap-2 font-semibold">
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                        </svg>
+                                        Checkout Warning ({CONDITION_LABELS[getEquipmentIssue(item)!.condition]})
+                                    </div>
+                                    <p className="leading-relaxed">{getEquipmentIssue(item)?.note}</p>
+                                </div>
+                            )}
 
                             {/* Condition - Editable */}
                             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">

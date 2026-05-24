@@ -122,6 +122,7 @@ class StorageService {
             location: item.location,
             condition: item.condition,
             serial_number: item.serialNumber,
+            metadata: item.metadata,
             assigned_to: item.assignedTo,
             last_activity: item.lastActivity,
             department_id: item.departmentId || null
@@ -151,6 +152,7 @@ class StorageService {
             location: item.location,
             condition: item.condition,
             serial_number: item.serialNumber,
+            metadata: item.metadata,
             assigned_to: item.assignedTo,
             last_activity: item.lastActivity,
             department_id: item.departmentId

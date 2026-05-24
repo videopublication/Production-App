@@ -51,6 +51,15 @@ export interface Equipment {
         brand?: string;
         model?: string;
         serialNumber?: string;
+        activeIssue?: {
+            condition: Condition;
+            note: string;
+            source: 'return' | 'verification' | 'manual';
+            reportedAt?: string;
+            reportedBy?: string;
+            verifiedAt?: string;
+            verifiedBy?: string;
+        };
         [key: string]: unknown;
     };
     assignedTo?: string; // User ID

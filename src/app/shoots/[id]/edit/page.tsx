@@ -87,15 +87,12 @@ export default function EditShootPage() {
                         departmentId: shoot.departmentId
                     });
 
-                    const assignedUser = allUsers.find(u => u.id === assignment.userId);
-                    if (assignedUser?.fcmToken) {
-                        sendPushNotification({
-                            token: assignedUser.fcmToken,
-                            title,
-                            message,
-                            link: `/shoots/${shoot.id}`
-                        }).catch(e => console.error('Push notification failed', e));
-                    }
+                    sendPushNotification({
+                        userId: assignment.userId,
+                        title,
+                        message,
+                        link: `/shoots/${shoot.id}`
+                    }).catch(e => console.error('Push notification failed', e));
                 }));
             }
 
@@ -133,15 +130,12 @@ export default function EditShootPage() {
                         departmentId: shoot.departmentId
                     });
 
-                    const assignedUser = allUsers.find(u => u.id === assignment.userId);
-                    if (assignedUser?.fcmToken) {
-                        sendPushNotification({
-                            token: assignedUser.fcmToken,
-                            title,
-                            message,
-                            link: `/shoots/${shoot.id}`
-                        }).catch(e => console.error('Push notification failed', e));
-                    }
+                    sendPushNotification({
+                        userId: assignment.userId,
+                        title,
+                        message,
+                        link: `/shoots/${shoot.id}`
+                    }).catch(e => console.error('Push notification failed', e));
                 }));
             }
 

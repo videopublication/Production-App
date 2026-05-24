@@ -73,12 +73,17 @@ BEGIN
     SET user_id = primary_user_id::uuid 
     WHERE user_id = duplicate_user_id::uuid;
 
-    -- 9. Update transactions (user_id: text)
+    -- 9. Update push tokens (user_id: text)
+    UPDATE public.push_tokens
+    SET user_id = primary_user_id
+    WHERE user_id = duplicate_user_id;
+
+    -- 10. Update transactions (user_id: text)
     UPDATE public.transactions 
     SET user_id = primary_user_id 
     WHERE user_id = duplicate_user_id;
 
-    -- 10. Update transactions (additional_users: text[])
+    -- 11. Update transactions (additional_users: text[])
     UPDATE public.transactions
     SET additional_users = array_replace(additional_users, duplicate_user_id, primary_user_id)
     WHERE duplicate_user_id = ANY(additional_users);
@@ -90,7 +95,7 @@ BEGIN
     )
     WHERE primary_user_id = ANY(additional_users);
 
-    -- 11. Delete the duplicate from public.users
+    -- 12. Delete the duplicate from public.users
     DELETE FROM public.users WHERE id = duplicate_user_id;
 END;
 $$;

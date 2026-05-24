@@ -257,20 +257,22 @@ export default function LeavesPage() {
             });
 
             const admins = users.filter(u =>
+                u.status === 'ACTIVE' &&
                 (u.role === 'ADMIN' || u.role === 'SUPER_ADMIN') &&
                 u.departmentId === activeDepartmentId &&
                 u.id !== user?.id
             );
+            const title = 'New Leave Request';
+            const message = `${user?.name} has requested leave from ${format(parseISO(startDate), 'MMM d')} to ${format(parseISO(endDate), 'MMM d')}.`;
 
             await Promise.all(admins.map(async (admin) => {
-                const title = 'New Leave Request';
-                const message = `${user?.name} has requested leave from ${format(parseISO(startDate), 'MMM d')} to ${format(parseISO(endDate), 'MMM d')}.`;
                 await storage.addNotification({ userId: admin.id, departmentId: activeDepartmentId, title, message, link: '/leaves' });
-                if (admin.fcmToken) {
-                    sendPushNotification({ token: admin.fcmToken, title, message, link: '/leaves' })
-                        .catch(e => console.error('Failed to send push notification to admin', e));
-                }
             }));
+
+            if (admins.length > 0) {
+                sendPushNotification({ userIds: admins.map(admin => admin.id), title, message, link: '/leaves' })
+                    .catch(e => console.error('Failed to send leave request push notifications', e));
+            }
 
             fetch('/api/send-leave-email', {
                 method: 'POST',
@@ -368,8 +370,8 @@ export default function LeavesPage() {
             const notifTitle = `Leave Request ${status.charAt(0) + status.slice(1).toLowerCase()}`;
             const notifMessage = `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`;
 
-            if (applicant?.fcmToken) {
-                sendPushNotification({ token: applicant.fcmToken, title: notifTitle, message: notifMessage, link: '/leaves' })
+            if (applicant) {
+                sendPushNotification({ userId: applicant.id, title: notifTitle, message: notifMessage, link: '/leaves' })
                     .catch(e => console.error('Failed to send push notification to applicant', e));
             }
 

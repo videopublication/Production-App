@@ -3,13 +3,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Equipment, User } from '@/types';
+import { Condition, Equipment, Transaction, User } from '@/types';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useDepartment } from '@/lib/department-context';
+import { CONDITION_LABELS, getEquipmentIssue, isIssueCondition, withActiveIssue } from '@/lib/equipment-issues';
 
 type SortField = 'item' | 'project' | 'user' | 'date';
 type SortDirection = 'asc' | 'desc';
+type IssueDialogMode = 'AVAILABLE_WITH_ISSUE' | 'MAINTENANCE';
 
 import { Skeleton } from '@/components/Skeleton';
 
@@ -25,7 +27,7 @@ export default function VerificationPage() {
         : (department?.id || null);
     const [isLoading, setIsLoading] = useState(true); // Data loading state
     const [pendingItems, setPendingItems] = useState<Equipment[]>([]);
-    const [transactions, setTransactions] = useState<any[]>([]);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [viewMode, setViewMode] = useState<'card' | 'table'>(() => {
         if (typeof window !== 'undefined') {
@@ -40,10 +42,15 @@ export default function VerificationPage() {
 
     // Selection state
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+    const [issueDialog, setIssueDialog] = useState<{
+        mode: IssueDialogMode;
+        itemIds: string[];
+        note: string;
+    } | null>(null);
 
     // Sorting state
-    const [sortField, setSortField] = useState<SortField>('date');
-    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+    const [sortField, setSortField] = useState<SortField>('item');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
     const loadItems = React.useCallback(async () => {
         // Removed setIsLoading(true) to allow seamless updates
@@ -60,7 +67,7 @@ export default function VerificationPage() {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [effectiveDeptId]);
 
     useEffect(() => {
         if (authLoading) return;
@@ -77,37 +84,33 @@ export default function VerificationPage() {
         loadItems();
     }, [user, router, loadItems, authLoading]);
 
-    if (authLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
-    }
-
-    const getUserName = (userId?: string) => {
+    const getUserName = React.useCallback((userId?: string) => {
         if (!userId) return 'Unknown';
         const foundUser = users.find(u => u.id === userId);
         return foundUser ? (foundUser.name || foundUser.email || 'Unknown') : 'Unknown';
-    };
+    }, [users]);
 
-    const getItemTransaction = (itemId: string) => {
+    const getItemTransaction = React.useCallback((itemId: string) => {
         return transactions.find(t => t.items.includes(itemId));
-    };
+    }, [transactions]);
 
-    const formatTxnId = (id: string) => {
+    const formatTxnId = React.useCallback((id: string) => {
         if (id.startsWith('TXN-')) return id;
         return `TXN-${id.substring(0, 6).toUpperCase()}`;
-    };
+    }, []);
 
-    const formatDate = (dateString?: string) => {
+    const formatDate = React.useCallback((dateString?: string) => {
         if (!dateString) return 'Today';
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric'
         });
-    };
+    }, []);
+
+    const compareByName = React.useCallback((a: Equipment, b: Equipment) => {
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+    }, []);
 
     // Sorted items for table view
     const sortedItems = useMemo(() => {
@@ -119,7 +122,7 @@ export default function VerificationPage() {
 
             switch (sortField) {
                 case 'item':
-                    comparison = a.name.localeCompare(b.name);
+                    comparison = compareByName(a, b);
                     break;
                 case 'project':
                     const projA = txnA?.project || 'Unspecified';
@@ -140,29 +143,50 @@ export default function VerificationPage() {
 
             return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [pendingItems, sortField, sortDirection, transactions, users, getItemTransaction, getUserName]);
+    }, [pendingItems, sortField, sortDirection, getItemTransaction, getUserName, compareByName]);
 
     // Group items by transaction/project for card view
     const groupedItems = useMemo(() => {
-        const groups: { [key: string]: { project: string; txnId: string; date: string; items: Equipment[] } } = {};
+        const groups: {
+            [key: string]: {
+                key: string;
+                project: string;
+                txnId: string;
+                date: string;
+                timestamp: number;
+                items: Equipment[];
+            }
+        } = {};
 
         pendingItems.forEach(item => {
             const txn = getItemTransaction(item.id);
             const key = txn?.id || 'no-txn';
+            const timestampSource = txn?.timestampIn || item.lastActivity;
 
             if (!groups[key]) {
                 groups[key] = {
+                    key,
                     project: txn?.project && txn.project.trim() !== '' ? txn.project : 'General Return',
                     txnId: txn ? formatTxnId(txn.id) : '',
-                    date: formatDate(item.lastActivity),
+                    date: formatDate(timestampSource),
+                    timestamp: new Date(timestampSource || 0).getTime(),
                     items: []
                 };
             }
             groups[key].items.push(item);
         });
 
-        return Object.values(groups);
-    }, [pendingItems, transactions, getItemTransaction]);
+        return Object.values(groups)
+            .map(group => ({
+                ...group,
+                items: [...group.items].sort(compareByName)
+            }))
+            .sort((a, b) => {
+                const dateComparison = b.timestamp - a.timestamp;
+                if (dateComparison !== 0) return dateComparison;
+                return a.project.localeCompare(b.project, undefined, { sensitivity: 'base', numeric: true });
+            });
+    }, [pendingItems, getItemTransaction, formatTxnId, formatDate, compareByName]);
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
@@ -208,7 +232,15 @@ export default function VerificationPage() {
         setSelectedItems(new Set());
     };
 
-    const handleVerify = async (id: string, status: 'AVAILABLE' | 'DAMAGED' | 'MAINTENANCE') => {
+    const handleVerify = async (
+        id: string,
+        status: 'AVAILABLE' | 'DAMAGED' | 'MAINTENANCE',
+        options?: {
+            issueNote?: string;
+            issueCondition?: Condition;
+            keepAvailableWithIssue?: boolean;
+        }
+    ) => {
         try {
             const items = await storage.getEquipment(effectiveDeptId);
             const item = items.find(i => i.id === id);
@@ -218,11 +250,28 @@ export default function VerificationPage() {
                 return;
             }
 
+            const issueCondition = options?.issueCondition || (isIssueCondition(item.condition) ? item.condition : 'DAMAGED');
+            const cleanVerify = status === 'AVAILABLE' && !options?.keepAvailableWithIssue;
+            const activeIssue = options?.issueNote?.trim()
+                ? {
+                    condition: issueCondition,
+                    note: options.issueNote.trim(),
+                    source: 'verification' as const,
+                    reportedAt: getEquipmentIssue(item)?.reportedAt || new Date().toISOString(),
+                    reportedBy: getEquipmentIssue(item)?.reportedBy,
+                    verifiedAt: new Date().toISOString(),
+                    verifiedBy: user?.id,
+                }
+                : null;
+            const nextCondition: Condition = cleanVerify ? 'OK' : issueCondition;
+
             // 1. Update Equipment Status
             await storage.updateEquipment(id, {
                 status,
-                assignedTo: null as any,
-                lastActivity: new Date().toISOString()
+                condition: nextCondition,
+                assignedTo: null as unknown as string,
+                lastActivity: new Date().toISOString(),
+                metadata: withActiveIssue(item.metadata, activeIssue)
             });
 
             // 2. Find and Update Transaction
@@ -233,26 +282,21 @@ export default function VerificationPage() {
 
             if (user) {
                 const projectText = relatedTransaction ? ` for project "${relatedTransaction.project || 'Unspecified'}"` : '';
+                const issueText = activeIssue ? `, Issue: ${CONDITION_LABELS[activeIssue.condition]} - ${activeIssue.note}` : '';
                 await storage.addLog({
                     id: crypto.randomUUID(),
                     action: 'VERIFY',
                     entityId: id,
                     userId: user.id,
                     timestamp: new Date().toISOString(),
-                    details: `Verified item "${item.name}" (${item.barcode}) as ${status}${projectText}`,
+                    details: `Verified item "${item.name}" (${item.barcode}) as ${status}${issueText}${projectText}`,
                     departmentId: effectiveDeptId || undefined
                 });
             }
 
             if (relatedTransaction) {
-                // Update postReturnConditions
                 const currentConditions = relatedTransaction.postReturnConditions || {};
-                // We use the ITEM'S condition (which is what we are verifying) or map status to condition if implied.
-                // Actually the item has a 'condition' field. Only 'status' is passed to this function.
-                // We should theoretically support updating condition in this modal too, but for now we'll use existing item condition
-                // OR ideally 'OK' if status is AVAILABLE, etc.
-                // For simplicity, we record it as returned.
-                const conditionToRecord = status === 'AVAILABLE' ? 'OK' : (item.condition || 'OK');
+                const conditionToRecord = cleanVerify ? 'OK' : nextCondition;
 
                 const updatedConditions = {
                     ...currentConditions,
@@ -263,7 +307,7 @@ export default function VerificationPage() {
                     updatedConditions[itemId] !== undefined
                 );
 
-                const txnUpdates: any = {
+                const txnUpdates: Partial<Transaction> = {
                     postReturnConditions: updatedConditions
                 };
 
@@ -312,7 +356,155 @@ export default function VerificationPage() {
         showToast(`Verified ${count} items`, 'success');
     };
 
+    const openIssueDialog = (itemIds: string[], mode: IssueDialogMode) => {
+        if (itemIds.length === 0) return;
+
+        const firstItem = pendingItems.find(item => item.id === itemIds[0]);
+        const existingIssue = getEquipmentIssue(firstItem);
+        setIssueDialog({
+            mode,
+            itemIds,
+            note: existingIssue?.note || '',
+        });
+    };
+
+    const handleIssueDialogSubmit = async () => {
+        if (!issueDialog) return;
+
+        const note = issueDialog.note.trim();
+        if (!note) {
+            showToast('Add an issue note before continuing', 'warning');
+            return;
+        }
+
+        const status = issueDialog.mode === 'MAINTENANCE' ? 'MAINTENANCE' : 'AVAILABLE';
+
+        for (const itemId of issueDialog.itemIds) {
+            const item = pendingItems.find(i => i.id === itemId);
+            await handleVerify(itemId, status, {
+                issueNote: note,
+                issueCondition: item && isIssueCondition(item.condition) ? item.condition : (issueDialog.mode === 'MAINTENANCE' ? 'NOT_FUNCTIONING' : 'DAMAGED'),
+                keepAvailableWithIssue: issueDialog.mode === 'AVAILABLE_WITH_ISSUE',
+            });
+        }
+
+        showToast(
+            issueDialog.mode === 'MAINTENANCE'
+                ? `Sent ${issueDialog.itemIds.length} item${issueDialog.itemIds.length !== 1 ? 's' : ''} to maintenance`
+                : `Marked ${issueDialog.itemIds.length} item${issueDialog.itemIds.length !== 1 ? 's' : ''} available with issue`,
+            'success'
+        );
+        setIssueDialog(null);
+        clearSelection();
+    };
+
     const selectionMode = selectedItems.size > 0;
+
+    const renderVerificationCard = (item: Equipment) => {
+        const txn = getItemTransaction(item.id);
+        const isSelected = selectedItems.has(item.id);
+        const activeIssue = getEquipmentIssue(item);
+        const hasIssue = activeIssue || isIssueCondition(item.condition);
+
+        return (
+            <div
+                key={item.id}
+                onClick={() => toggleItemSelection(item.id)}
+                className={`
+                    group bg-white dark:bg-[#1c1c1e] rounded-xl p-5 border transition-all duration-300 cursor-pointer h-full flex flex-col relative
+                    ${isSelected
+                        ? 'border-primary ring-1 ring-primary shadow-sm'
+                        : 'border-gray-200 dark:border-gray-800 hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5'
+                    }
+                `}
+            >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex-1 min-w-0">
+                        <h3 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug truncate group-hover:text-primary transition-colors">
+                            {item.name}
+                        </h3>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="max-w-full truncate text-[11px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-full border border-gray-100 dark:border-gray-700">
+                                {txn?.project || 'General'}
+                            </span>
+                        </div>
+                    </div>
+                    <span className={`
+                        text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 uppercase tracking-wider
+                        ${!hasIssue ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-900' : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-100 dark:border-yellow-900'}
+                    `}>
+                        {!hasIssue ? 'Good' : CONDITION_LABELS[activeIssue?.condition || item.condition]}
+                    </span>
+                </div>
+
+                <div className="flex-1 space-y-3">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                            {getUserName(item.assignedTo)?.charAt(0)}
+                        </div>
+                        <span className="truncate">
+                            {getUserName(item.assignedTo)}
+                        </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between">
+                        <span className="font-mono text-[10px] text-gray-400 dark:text-gray-500">{item.barcode}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatDate(item.lastActivity)}</span>
+                    </div>
+
+                    {activeIssue && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+                            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide">
+                                <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                </svg>
+                                Returned issue
+                            </div>
+                            <p className="line-clamp-2 text-xs font-medium leading-snug">{activeIssue.note}</p>
+                        </div>
+                    )}
+                </div>
+
+                {!isSelected && !selectionMode && (
+                    <div className="absolute inset-x-4 bottom-4 pt-2 bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-200 grid grid-cols-3 gap-1.5 translate-y-2 group-hover:translate-y-0">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleVerify(item.id, 'AVAILABLE');
+                            }}
+                            className="flex-1 h-8 rounded-lg bg-primary text-white font-medium text-xs hover:bg-primary/90 shadow-sm shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            Verify
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); openIssueDialog([item.id], 'AVAILABLE_WITH_ISSUE'); }}
+                            className="h-8 rounded-lg border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-700 transition-all hover:bg-amber-100"
+                        >
+                            Issue
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); openIssueDialog([item.id], 'MAINTENANCE'); }}
+                            className="h-8 rounded-lg border border-red-100 bg-red-50 px-2 text-xs font-semibold text-red-600 transition-all hover:bg-red-100"
+                        >
+                            Service
+                        </button>
+                    </div>
+                )}
+
+                {selectionMode && (
+                    <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
+                        <div className={`
+                            w-5 h-5 rounded-md border flex items-center justify-center transition-all duration-200
+                            ${isSelected ? 'bg-primary border-primary' : 'bg-white border-gray-300'}
+                        `}>
+                            {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     // Sort indicator component
     const SortIndicator = ({ field }: { field: SortField }) => {
@@ -333,6 +525,14 @@ export default function VerificationPage() {
             </svg>
         );
     };
+
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 select-none mobile-safe-bottom">
@@ -382,78 +582,104 @@ export default function VerificationPage() {
 
             {/* Floating Selection Toolbar - Premium Actions */}
             <div className={`
-                fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 
+                fixed bottom-[calc(var(--mobile-tab-height)+0.75rem)] md:bottom-8 left-1/2 transform -translate-x-1/2 z-[110]
                 transition-all duration-300 ease-out origin-bottom
                 ${selectionMode ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-24 opacity-0 scale-95 pointer-events-none'}
             `}>
-                <div className="flex items-center p-2.5 rounded-2xl bg-[#0F172A] shadow-2xl border border-white/10 text-white min-w-[320px]">
-
-                    {/* Left: Count & Clear */}
-                    <div className="flex items-center gap-3 px-2">
-                        <span className="font-semibold whitespace-nowrap text-[15px]">
-                            {selectedItems.size} <span className="hidden sm:inline">Selected</span>
-                            <span className="sm:hidden">Item{selectedItems.size !== 1 ? 's' : ''}</span>
+                <div className="flex w-[calc(100vw-1.5rem)] max-w-[680px] flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#0F172A] p-2.5 text-white shadow-2xl">
+                    <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2">
+                        <span className="text-[15px] font-semibold whitespace-nowrap">
+                            {selectedItems.size} Item{selectedItems.size !== 1 ? 's' : ''}
                         </span>
                         <button
                             onClick={clearSelection}
-                            className="text-gray-400 hover:text-white hover:bg-white/10 p-1 rounded-full transition-all"
-                            title="Clear Selection"
+                            className="text-sm font-semibold text-gray-300 transition-colors hover:text-white"
                         >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                            Clear
                         </button>
                     </div>
 
-                    {/* Vertical Divider */}
-                    <div className="h-6 w-px bg-white/20 mx-3"></div>
-
-                    {/* Middle: Select All (Conditional) */}
                     {selectedItems.size < pendingItems.length && (
                         <button
                             onClick={selectAll}
-                            className="mr-3 text-sm font-medium text-gray-300 hover:text-white whitespace-nowrap transition-colors"
+                            className="rounded-xl px-3 py-2 text-sm font-semibold text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
                         >
                             Select All
                         </button>
                     )}
 
-                    {/* Right: Actions */}
-                    <div className="flex items-center gap-2 ml-auto">
-                        <button
-                            onClick={() => handleBulkVerify('AVAILABLE')}
-                            className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-semibold text-sm active:scale-95 transition-all flex items-center gap-2 shadow-lg shadow-primary/30"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Verify</span>
-                        </button>
+                    <button
+                        onClick={() => handleBulkVerify('AVAILABLE')}
+                        className="ml-auto flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition-all active:scale-95"
+                    >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Verify
+                    </button>
+                    <button
+                        onClick={() => openIssueDialog(Array.from(selectedItems), 'AVAILABLE_WITH_ISSUE')}
+                        className="rounded-xl bg-amber-500 px-3 py-2 text-sm font-semibold text-black transition-all active:scale-95"
+                    >
+                        Issue
+                    </button>
+                    <button
+                        onClick={() => openIssueDialog(Array.from(selectedItems), 'MAINTENANCE')}
+                        className="rounded-xl bg-red-500 px-3 py-2 text-sm font-semibold text-white transition-all active:scale-95"
+                    >
+                        Maintenance
+                    </button>
+                </div>
+            </div>
 
-                        <div className="flex items-center gap-1 pl-1">
+            {issueDialog && (
+                <div className="fixed inset-0 z-[140] flex items-end justify-center bg-black/50 p-4 backdrop-blur-sm sm:items-center">
+                    <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-800 dark:bg-[#1c1c1e]">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                                    {issueDialog.mode === 'MAINTENANCE' ? 'Send to Maintenance' : 'Available With Issue'}
+                                </h2>
+                                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                    Add a note so checkout users know exactly what is wrong.
+                                </p>
+                            </div>
                             <button
-                                onClick={() => handleBulkVerify('DAMAGED')}
-                                className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-white/10 active:scale-95 transition-all"
-                                title="Mark Damaged"
+                                onClick={() => setIssueDialog(null)}
+                                className="rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                                aria-label="Close"
                             >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
                             </button>
+                        </div>
+
+                        <textarea
+                            value={issueDialog.note}
+                            onChange={(e) => setIssueDialog({ ...issueDialog, note: e.target.value })}
+                            className="min-h-[120px] w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            placeholder="Example: Camera body works, but audio input is not working."
+                            autoFocus
+                        />
+
+                        <div className="mt-4 flex gap-2">
                             <button
-                                onClick={() => handleBulkVerify('MAINTENANCE')}
-                                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 active:scale-95 transition-all"
-                                title="Send to Service"
+                                onClick={() => setIssueDialog(null)}
+                                className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
                             >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                    <circle cx="15" cy="12" r="3" />
-                                </svg>
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleIssueDialogSubmit}
+                                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-transform active:scale-95 ${issueDialog.mode === 'MAINTENANCE' ? 'bg-red-500' : 'bg-amber-500 text-black'}`}
+                            >
+                                {issueDialog.mode === 'MAINTENANCE' ? 'Send' : 'Save Issue'}
                             </button>
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Content States */}
             {isLoading ? (
@@ -514,6 +740,7 @@ export default function VerificationPage() {
                                 {sortedItems.map((item) => {
                                     const txn = getItemTransaction(item.id);
                                     const isSelected = selectedItems.has(item.id);
+                                    const activeIssue = getEquipmentIssue(item);
 
                                     return (
                                         <tr key={item.id} onClick={() => toggleItemSelection(item.id)} className={`group transition-all duration-200 cursor-pointer ${isSelected ? 'bg-primary/5' : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/80'}`}>
@@ -530,6 +757,11 @@ export default function VerificationPage() {
                                                     <div>
                                                         <p className="font-semibold text-gray-900 dark:text-white">{item.name}</p>
                                                         <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">{item.barcode}</p>
+                                                        {activeIssue && (
+                                                            <p className="mt-1 max-w-xs truncate rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+                                                                Issue: {activeIssue.note}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </td>
@@ -553,8 +785,8 @@ export default function VerificationPage() {
                                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" onClick={(e) => e.stopPropagation()}>
                                                         <button onClick={() => handleVerify(item.id, 'AVAILABLE')} className="px-4 py-1.5 rounded-full bg-primary/10 hover:bg-primary text-xs font-semibold text-primary hover:text-white transition-all hover:scale-105 active:scale-95">Verify</button>
                                                         <div className="h-4 w-px bg-gray-200 mx-1"></div>
-                                                        <button onClick={() => handleVerify(item.id, 'DAMAGED')} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></button>
-                                                        <button onClick={() => handleVerify(item.id, 'MAINTENANCE')} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="15" cy="12" r="3" /></svg></button>
+                                                        <button onClick={() => openIssueDialog([item.id], 'AVAILABLE_WITH_ISSUE')} className="px-3 py-1.5 rounded-full bg-amber-50 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">Issue</button>
+                                                        <button onClick={() => openIssueDialog([item.id], 'MAINTENANCE')} className="px-3 py-1.5 rounded-full bg-red-50 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors">Service</button>
                                                     </div>
                                                 )}
                                             </td>
@@ -567,105 +799,37 @@ export default function VerificationPage() {
                 </div>
             ) : (
                 /* ========== CARD VIEW ========== */
-                /* ========== CARD VIEW ========== */
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {sortedItems.map((item) => {
-                        const txn = getItemTransaction(item.id);
-                        const isSelected = selectedItems.has(item.id);
+                <div className="space-y-6 pb-[calc(var(--mobile-tab-height)+5rem)] md:pb-0">
+                    {groupedItems.map((group) => {
+                        const groupSelected = group.items.every(item => selectedItems.has(item.id));
 
                         return (
-                            <div
-                                key={item.id}
-                                onClick={() => toggleItemSelection(item.id)}
-                                className={`
-                                    group bg-white dark:bg-[#1c1c1e] rounded-xl p-5 border transition-all duration-300 cursor-pointer h-full flex flex-col relative
-                                    ${isSelected
-                                        ? 'border-primary ring-1 ring-primary shadow-sm'
-                                        : 'border-gray-200 dark:border-gray-800 hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5'
-                                    }
-                                `}
-                            >
-                                {/* Header */}
-                                <div className="flex items-start justify-between gap-3 mb-3">
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug truncate group-hover:text-primary transition-colors">
-                                            {item.name}
-                                        </h3>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-full border border-gray-100 dark:border-gray-700">
-                                                {txn?.project || 'General'}
-                                            </span>
+                            <section key={group.key} className="space-y-3">
+                                {groupedItems.length > 1 && (
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <h2 className="truncate text-sm font-bold text-gray-900 dark:text-white">
+                                                {group.project}
+                                            </h2>
+                                            <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                                {group.txnId && <span className="font-mono">{group.txnId}</span>}
+                                                <span>{group.date}</span>
+                                                <span>{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <span className={`
-                                        text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 uppercase tracking-wider
-                                        ${item.condition === 'OK' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-900' : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-100 dark:border-yellow-900'}
-                                    `}>
-                                        {item.condition === 'OK' ? 'Good' : item.condition.replace('_', ' ')}
-                                    </span>
-                                </div>
-
-                                {/* Details */}
-                                <div className="flex-1 space-y-3">
-                                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                        <div className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-                                            {getUserName(item.assignedTo)?.charAt(0)}
-                                        </div>
-                                        <span className="truncate">
-                                            {getUserName(item.assignedTo)}
-                                        </span>
-                                    </div>
-
-                                    <div className="pt-2 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between">
-                                        <span className="font-mono text-[10px] text-gray-400 dark:text-gray-500">{item.barcode}</span>
-                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatDate(item.lastActivity)}</span>
-                                    </div>
-                                </div>
-
-                                {/* Hover Action Bar - visible only on hover AND when not selecting */}
-                                {!isSelected && !selectionMode && (
-                                    <div className="absolute inset-x-4 bottom-4 pt-2 bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-200 flex gap-2 translate-y-2 group-hover:translate-y-0">
                                         <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleVerify(item.id, 'AVAILABLE');
-                                            }}
-                                            className="flex-1 h-8 rounded-lg bg-primary text-white font-medium text-xs hover:bg-primary/90 shadow-sm shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                                            onClick={() => toggleGroupSelection(group.items)}
+                                            className="shrink-0 rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 dark:border-gray-800"
                                         >
-                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                            Verify
+                                            {groupSelected ? 'Clear' : 'Select'}
                                         </button>
-                                        <div className="flex gap-1">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleVerify(item.id, 'DAMAGED'); }}
-                                                className="h-8 w-8 flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-gray-100 hover:border-red-100 transition-all"
-                                                title="Mark Damaged"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleVerify(item.id, 'MAINTENANCE'); }}
-                                                className="h-8 w-8 flex items-center justify-center text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg border border-gray-100 hover:border-amber-100 transition-all"
-                                                title="Send to Maintenance"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="15" cy="12" r="3" /></svg>
-                                            </button>
-                                        </div>
                                     </div>
                                 )}
 
-                                {/* Checkbox overlay */}
-                                {selectionMode && (
-                                    <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
-                                        <div className={`
-                                            w-5 h-5 rounded-md border flex items-center justify-center transition-all duration-200
-                                            ${isSelected ? 'bg-primary border-primary' : 'bg-white border-gray-300'}
-                                        `}>
-                                            {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                    {group.items.map(renderVerificationCard)}
+                                </div>
+                            </section>
                         );
                     })}
                 </div>

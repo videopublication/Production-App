@@ -6,7 +6,16 @@ import { z } from 'zod';
 
 const tokenSchema = z.object({
     token: z.string().min(1),
+    platform: z.string().optional(),
 });
+
+function isMissingPushTokensTable(error: { code?: string; message?: string }) {
+    const message = (error.message || '').toLowerCase();
+    return error.code === '42P01'
+        || error.code === 'PGRST205'
+        || message.includes('push_tokens')
+        || message.includes('schema cache');
+}
 
 function getSupabaseAdmin() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -47,8 +56,31 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const admin = getSupabaseAdmin();
-        const { error: clearDuplicateError } = await admin
+        const supabaseAdmin = getSupabaseAdmin();
+        const now = new Date().toISOString();
+        const userAgent = request.headers.get('user-agent');
+
+        const { error: tokenError } = await supabaseAdmin
+            .from('push_tokens')
+            .upsert({
+                user_id: user.id,
+                token: result.data.token,
+                platform: result.data.platform,
+                user_agent: userAgent,
+                last_seen_at: now,
+                updated_at: now,
+            }, { onConflict: 'token' });
+
+        if (tokenError && !isMissingPushTokensTable(tokenError)) {
+            console.error('[register-token] Failed to upsert push token:', tokenError);
+            return NextResponse.json({ error: tokenError.message }, { status: 500 });
+        }
+
+        if (tokenError) {
+            console.warn('[register-token] push_tokens table is not available yet; saved legacy user token only');
+        }
+
+        const { error: clearDuplicateError } = await supabaseAdmin
             .from('users')
             .update({ fcm_token: null })
             .eq('fcm_token', result.data.token)
@@ -59,7 +91,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: clearDuplicateError.message }, { status: 500 });
         }
 
-        const { error } = await admin
+        const { error } = await supabaseAdmin
             .from('users')
             .update({ fcm_token: result.data.token })
             .eq('id', user.id);

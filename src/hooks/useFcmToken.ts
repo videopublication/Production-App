@@ -155,7 +155,10 @@ async function saveTokenForUser(userId: string, token: string) {
         const response = await fetch('/api/notifications/register-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token }),
+            body: JSON.stringify({
+                token,
+                platform: typeof navigator !== 'undefined' ? navigator.platform : undefined,
+            }),
         });
 
         if (!response.ok) {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Share, X, Download } from 'lucide-react';
 import { Button } from './Button';
 
@@ -13,21 +14,45 @@ interface BeforeInstallPromptEvent extends Event {
     prompt(): Promise<void>;
 }
 
+type NavigatorWithStandalone = Navigator & {
+    standalone?: boolean;
+};
+
+const isStandaloneApp = () => {
+    if (typeof window === 'undefined') return false;
+
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.matchMedia('(display-mode: fullscreen)').matches
+        || window.matchMedia('(display-mode: minimal-ui)').matches
+        || Boolean((window.navigator as NavigatorWithStandalone).standalone)
+        || document.referrer.startsWith('android-app://');
+};
+
+const isIOSDevice = () => {
+    if (typeof window === 'undefined') return false;
+
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    return /iphone|ipad|ipod/.test(userAgent)
+        || (userAgent.includes('mac') && navigator.maxTouchPoints > 2);
+};
+
 export const PWAInstallPrompt = () => {
+    const pathname = usePathname();
     const [showPrompt, setShowPrompt] = useState(false);
     const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-    const [isIOS, setIsIOS] = useState(false);
+    const isIOS = isIOSDevice();
+    const hasBottomTabs = !['/', '/login', '/inactive'].includes(pathname);
 
     useEffect(() => {
         // Only run on client
         if (typeof window === 'undefined') return;
 
         // check if already in standalone mode (installed)
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-        if (isStandalone) return;
+        if (isStandaloneApp()) return;
 
         // Check if dismissed previously in this session
-        const isDismissed = sessionStorage.getItem('pwa-prompt-dismissed');
+        const isDismissed = sessionStorage.getItem('pwa-prompt-dismissed')
+            || localStorage.getItem('pwa-prompt-dismissed');
         if (isDismissed === 'true') {
             return;
         }
@@ -39,30 +64,36 @@ export const PWAInstallPrompt = () => {
             setShowPrompt(true);
         };
 
+        const handleInstalled = () => {
+            localStorage.setItem('pwa-prompt-dismissed', 'true');
+            setShowPrompt(false);
+            setDeferredPrompt(null);
+        };
+
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        window.addEventListener('appinstalled', handleInstalled);
 
         // 2. Check if iOS (fallback since it doesn't support beforeinstallprompt)
-        const userAgent = window.navigator.userAgent.toLowerCase();
-        const isIOSDevice =
-            /iphone|ipad|ipod/.test(userAgent) ||
-            (userAgent.includes('mac') && navigator.maxTouchPoints > 2); // Modern iPads
-        setIsIOS(isIOSDevice);
-
-        if (isIOSDevice) {
+        if (isIOSDevice()) {
             // Small delay to not overwhelm user immediately
             const timer = setTimeout(() => setShowPrompt(true), 3000);
             return () => {
                 clearTimeout(timer);
                 window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+                window.removeEventListener('appinstalled', handleInstalled);
             };
         }
 
-        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        return () => {
+            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+            window.removeEventListener('appinstalled', handleInstalled);
+        };
     }, []);
 
     const handleDismiss = () => {
         setShowPrompt(false);
         sessionStorage.setItem('pwa-prompt-dismissed', 'true');
+        localStorage.setItem('pwa-prompt-dismissed', 'true');
     };
 
     const handleInstallClick = async () => {
@@ -82,6 +113,7 @@ export const PWAInstallPrompt = () => {
 
         // Save dismissal to prevent immediate re-prompting if installation fails or is cancelled
         sessionStorage.setItem('pwa-prompt-dismissed', 'true');
+        localStorage.setItem('pwa-prompt-dismissed', 'true');
 
         // We can't use the prompt again, discard it
         setDeferredPrompt(null);
@@ -91,7 +123,7 @@ export const PWAInstallPrompt = () => {
     if (!showPrompt) return null;
 
     return (
-        <div className="fixed bottom-4 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 duration-500 flex justify-center">
+        <div className={`fixed left-4 right-4 z-[110] animate-in slide-in-from-bottom-5 duration-500 flex justify-center ${hasBottomTabs ? 'bottom-[calc(var(--mobile-tab-height)+0.75rem)] md:bottom-4' : 'bottom-4'}`}>
             {/* 
                We use a dark theme by default to match the screenshot provided by user
                bg-[#1c1c1e] matches typical iOS dark mode / modern app feel 

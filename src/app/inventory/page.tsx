@@ -3,14 +3,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { storage } from '@/lib/storage';
 import { Equipment, EquipmentStatus } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { downloadFile } from '@/lib/download';
-import { Input } from '@/components/Input';
 import { Badge } from '@/components/Badge';
+import { QRScanner } from '@/components/QRScanner';
 import { useAuth } from '@/lib/auth';
+import { ScanLine, Search } from 'lucide-react';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { useEquipment, useUpdateEquipment, useDeleteEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
 import { useTransactions } from '@/hooks/useTransactions';
-import { useDepartment } from '@/lib/department-context';
+import { getEquipmentIssue, hasEquipmentIssue } from '@/lib/equipment-issues';
 
 const InlineInput = ({ value, onChange, placeholder }: { value: string, onChange: (v: string) => void, placeholder?: string }) => {
     const [val, setVal] = useState(value);
@@ -49,7 +49,6 @@ function InventoryPageContent() {
     const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
-    const { department } = useDepartment();
 
     // TanStack Query Hooks
     const { data: items = [], isLoading: equipmentLoading, refetch: refresh } = useEquipment();
@@ -90,7 +89,7 @@ function InventoryPageContent() {
 
     const cleanupAssignments = async (itemsToCleanup: Equipment[]) => {
         await Promise.all(itemsToCleanup.map(item =>
-            updateEquipment({ id: item.id, updates: { assignedTo: null as any } })
+            updateEquipment({ id: item.id, updates: { assignedTo: null as unknown as string } })
         ));
     };
 
@@ -101,7 +100,7 @@ function InventoryPageContent() {
                 id: item.id,
                 updates: {
                     status: 'AVAILABLE',
-                    assignedTo: null as any,
+                    assignedTo: null as unknown as string,
                     location: 'Storage' // Default back to storage or keep existing if known? Safest is usually Storage or previous.
                 }
             })
@@ -147,6 +146,7 @@ function InventoryPageContent() {
 
     // ... (rest of component state) ...
     const [search, setSearch] = useState('');
+    const [showInventoryScanner, setShowInventoryScanner] = useState(false);
     const searchParams = useSearchParams();
     const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL' | 'NEEDS_ATTENTION'>(() => {
         const statusParam = searchParams.get('status');
@@ -184,6 +184,47 @@ function InventoryPageContent() {
         sessionStorage.setItem('inventoryViewMode', viewMode);
     }, [viewMode]);
 
+    const parseInventoryScanCode = (decodedText: string) => {
+        try {
+            const data = JSON.parse(decodedText);
+            return String(data.barcode || data.id || decodedText).trim();
+        } catch {
+            return decodedText.trim();
+        }
+    };
+
+    const findItemForLookup = (value: string) => {
+        const query = value.trim().toLowerCase();
+        if (!query) return null;
+
+        return items.find(item =>
+            item.barcode.toLowerCase() === query ||
+            item.id.toLowerCase() === query ||
+            item.serialNumber?.toLowerCase() === query
+        ) || null;
+    };
+
+    const openLookupItem = (value: string) => {
+        const lookup = value.trim();
+        if (!lookup) return;
+
+        const exactMatch = findItemForLookup(lookup);
+        if (exactMatch) {
+            setShowInventoryScanner(false);
+            router.push(`/inventory/${encodeURIComponent(exactMatch.barcode)}`);
+            return;
+        }
+
+        setSearch(lookup);
+        showToast('No exact item found. Showing matching inventory results.', 'warning');
+    };
+
+    const handleInventoryScan = (decodedText: string) => {
+        const code = parseInventoryScanCode(decodedText);
+        setSearch(code);
+        openLookupItem(code);
+    };
+
     // Redirect if not authenticated
     useEffect(() => {
         if (!authLoading && !user) {
@@ -191,20 +232,12 @@ function InventoryPageContent() {
         }
     }, [user, router, authLoading]);
 
-    if (authLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
-    }
-
     // ... (rest of imports and functions) ...
 
-    const getUserName = (id: string | undefined) => {
+    const getUserName = React.useCallback((id: string | undefined) => {
         if (!id) return null;
         return users[id] || id;
-    };
+    }, [users]);
 
     const handleSort = (key: keyof Equipment | 'assignedToName') => {
         let direction: 'asc' | 'desc' = 'asc';
@@ -222,18 +255,21 @@ function InventoryPageContent() {
         // if item.departmentId isn't mapped correctly.
 
         if (search) {
-            const q = search.toLowerCase();
+            const normalize = (str: string) => str.toLowerCase().replace(/[\s\-_]/g, '');
+            const normalizedQ = normalize(search);
+            const basicQ = search.toLowerCase().trim();
             result = result.filter(item =>
-                item.name.toLowerCase().includes(q) ||
-                item.barcode.toLowerCase().includes(q) ||
-                item.category.toLowerCase().includes(q) ||
-                item.serialNumber?.toLowerCase().includes(q) || false
+                item.name.toLowerCase().includes(basicQ) ||
+                item.category.toLowerCase().includes(basicQ) ||
+                normalize(item.barcode).includes(normalizedQ) ||
+                (item.serialNumber && normalize(item.serialNumber).includes(normalizedQ)) ||
+                normalize(item.name).includes(normalizedQ)
             );
         }
 
         if (statusFilter !== 'ALL') {
             if (statusFilter === 'NEEDS_ATTENTION') {
-                result = result.filter(item => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(item.status));
+                result = result.filter(item => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(item.status) || hasEquipmentIssue(item));
             } else {
                 result = result.filter(item => item.status === statusFilter);
             }
@@ -259,7 +295,7 @@ function InventoryPageContent() {
         }
 
         return result;
-    }, [items, search, statusFilter, sortConfig, users]);
+    }, [items, search, statusFilter, sortConfig, getUserName]);
 
     const getStatusVariant = (status: EquipmentStatus) => {
         switch (status) {
@@ -271,6 +307,17 @@ function InventoryPageContent() {
             case 'MAINTENANCE': return 'destructive';
             default: return 'default';
         }
+    };
+
+    const getDisplayStatus = (item: Equipment) => {
+        if (item.status === 'AVAILABLE' && hasEquipmentIssue(item)) return 'Issue';
+        if (item.status === 'PENDING_VERIFICATION') return 'Pending';
+        return item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    };
+
+    const getDisplayStatusVariant = (item: Equipment) => {
+        if (item.status === 'AVAILABLE' && hasEquipmentIssue(item)) return 'warning';
+        return getStatusVariant(item.status);
     };
 
     const SortIcon = ({ active, direction }: { active: boolean; direction: 'asc' | 'desc' }) => (
@@ -471,6 +518,14 @@ function InventoryPageContent() {
         }
     };
 
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4 sm:space-y-6 animate-fade-in">
             <div className="flex flex-col gap-3 sm:gap-4">
@@ -555,14 +610,40 @@ function InventoryPageContent() {
             </div>
 
             <div className="flex flex-col gap-3">
-                <div className="w-full">
-                    <Input
-                        placeholder="Search by name, barcode, or category..."
+                <div className="relative w-full">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                        type="search"
+                        placeholder="Search by name, barcode, serial, or category..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="bg-secondary/50 border-border w-full text-sm"
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') openLookupItem(search);
+                        }}
+                        className="h-12 w-full rounded-2xl border border-border bg-secondary/50 py-2 pl-12 pr-16 text-[15px] text-foreground outline-none transition-all duration-200 placeholder:text-muted-foreground focus:border-transparent focus:ring-2 focus:ring-primary"
                     />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant={showInventoryScanner ? 'secondary' : 'outline'}
+                            className={`h-8 w-10 rounded-xl p-0 ${showInventoryScanner ? 'text-primary' : ''}`}
+                            onClick={() => setShowInventoryScanner(prev => !prev)}
+                            title={showInventoryScanner ? 'Hide scanner' : 'Scan item'}
+                        >
+                            <ScanLine className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
+
+                {showInventoryScanner && (
+                    <QRScanner
+                        onScan={handleInventoryScan}
+                        onError={(error) => showToast(error, 'error')}
+                        continuous={false}
+                    />
+                )}
+
                 <div className="w-full overflow-hidden -mx-3 px-3">
                     <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
                         {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
@@ -731,7 +812,10 @@ function InventoryPageContent() {
                     </div>
                 ) : viewMode === 'grid' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {filteredItems.map((item) => (
+                        {filteredItems.map((item) => {
+                            const issue = getEquipmentIssue(item);
+
+                            return (
                             <Link key={item.id} href={`/inventory/${item.barcode}`} className="block h-full">
                                 <div className="group bg-white dark:bg-[#1c1c1e] rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-md transition-all cursor-pointer h-full flex flex-col">
                                     <div className="flex items-start justify-between gap-2 mb-2">
@@ -741,10 +825,10 @@ function InventoryPageContent() {
                                             </h3>
                                         </div>
                                         <Badge
-                                            variant={getStatusVariant(item.status)}
+                                            variant={getDisplayStatusVariant(item)}
                                             className="text-[10px] font-medium px-2 py-0.5 rounded-md shrink-0"
                                         >
-                                            {item.status === 'PENDING_VERIFICATION' ? 'Pending' : item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                                            {getDisplayStatus(item)}
                                         </Badge>
                                     </div>
 
@@ -761,6 +845,12 @@ function InventoryPageContent() {
                                             <span>{item.category}</span>
                                             <span className="font-mono text-muted-foreground/60">{item.barcode}</span>
                                         </div>
+
+                                        {issue && (
+                                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                <span className="block truncate">Issue: {issue.note}</span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {item.status !== 'AVAILABLE' && item.assignedTo && (
@@ -777,7 +867,8 @@ function InventoryPageContent() {
                                     )}
                                 </div>
                             </Link>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : (
                     <Card className="overflow-hidden border-border/50 bg-secondary/30">
@@ -827,7 +918,10 @@ function InventoryPageContent() {
                                             </tr>
                                         ))
                                     ) : (
-                                        filteredItems.map((item) => (
+                                        filteredItems.map((item) => {
+                                            const issue = getEquipmentIssue(item);
+
+                                            return (
                                             <tr
                                                 key={item.id}
                                                 onClick={() => {
@@ -855,6 +949,14 @@ function InventoryPageContent() {
                                                         <>
                                                             <div className="font-medium text-foreground">{item.name}</div>
                                                             {item.serialNumber && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.serialNumber}</div>}
+                                                            {issue && (
+                                                                <div className="mt-1 flex max-w-[320px] items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                                    <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                                    </svg>
+                                                                    <span className="line-clamp-2">Issue: {issue.note}</span>
+                                                                </div>
+                                                            )}
                                                         </>
                                                     )}
                                                 </td>
@@ -873,8 +975,8 @@ function InventoryPageContent() {
                                                     ) : item.barcode}
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <Badge variant={getStatusVariant(item.status)}>
-                                                        {item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                                                    <Badge variant={getDisplayStatusVariant(item)}>
+                                                        {getDisplayStatus(item)}
                                                     </Badge>
                                                 </td>
                                                 <td className="px-6 py-4">
@@ -890,7 +992,8 @@ function InventoryPageContent() {
                                                 </td>
                                                 <td className="px-6 py-4 text-muted-foreground">{item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}</td>
                                             </tr>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </tbody>
                             </table>
@@ -907,7 +1010,7 @@ function InventoryPageContent() {
                         </div>
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">No items found</h3>
                         <p className="text-gray-500 mt-1 mb-6 max-w-sm">
-                            We couldn't find any items matching your current filters. Try adjusting your search criteria.
+                            We could not find any items matching your current filters. Try adjusting your search criteria.
                         </p>
                         {(search || statusFilter !== 'ALL') && (
                             <Button

@@ -72,7 +72,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: '/firebase-messaging-sw.js',
+        source: '/:serviceWorker(sw|firebase-messaging-sw).js',
         headers: [
           {
             key: 'Service-Worker-Allowed',

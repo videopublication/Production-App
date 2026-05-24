@@ -20,6 +20,32 @@ import { useShoots } from '@/hooks/useShoots';
 import { useCheckOut } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
+import { getEquipmentIssue } from '@/lib/equipment-issues';
+
+const compareByName = (a: { name: string }, b: { name: string }) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+
+const compareByLabel = (a: { label: string }, b: { label: string }) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true });
+
+const compareShootsByDateDesc = (a: Shoot, b: Shoot) => {
+    const dateDiff = new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
+    return dateDiff || a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+};
+
+const IssueWarning = ({ item, compact = false }: { item: Equipment; compact?: boolean }) => {
+    const issue = getEquipmentIssue(item);
+    if (!issue) return null;
+
+    return (
+        <div className={`mt-1 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 ${compact ? 'text-[10px]' : 'text-xs'}`}>
+            <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            </svg>
+            <span className="line-clamp-2 font-semibold">Issue: {issue.note}</span>
+        </div>
+    );
+};
 
 export default function CheckoutPage() {
     const router = useRouter();
@@ -111,18 +137,20 @@ export default function CheckoutPage() {
 
         // Super Admins: show all users (or filtered by selected department context)
         if (user.role === 'SUPER_ADMIN') {
-            return department?.id ? allUsers.filter(u => u.departmentId === department.id) : allUsers;
+            const visibleUsers = department?.id ? allUsers.filter(u => u.departmentId === department.id) : allUsers;
+            return [...visibleUsers].sort(compareByName);
         }
 
         // Regular Admins/Managers: only show users from their own department
         if (user.departmentId) {
-            return allUsers.filter(u => u.departmentId === user.departmentId);
+            return allUsers.filter(u => u.departmentId === user.departmentId).sort(compareByName);
         }
 
-        return allUsers;
+        return [...allUsers].sort(compareByName);
     }, [user, allUsers, department?.id]);
 
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const sortedCart = useMemo(() => [...cart].sort(compareByName), [cart]);
 
     // Combine loading states
     const isDataLoading = isInventoryLoading || isShootsLoading;
@@ -148,28 +176,28 @@ export default function CheckoutPage() {
             // Exclude cancelled shoots
             if (shoot.status === 'CANCELLED') return false;
             return true;
-        }).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+        }).sort(compareShootsByDateDesc);
     }, [shoots]);
 
     // Ensure selected shoot is always in options even if hidden from main list
     const activeShootOptions = useMemo(() => {
-        const baseOptions = availableShoots.map(shoot => ({
-            value: shoot.id,
-            label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-        }));
+        const optionShoots = [...availableShoots];
 
         if (selectedShootId) {
             const selectedInAvailable = availableShoots.find(s => s.id === selectedShootId);
             if (!selectedInAvailable) {
                 const shoot = shoots.find(s => s.id === selectedShootId);
                 if (shoot) {
-                    baseOptions.unshift({
-                        value: shoot.id,
-                        label: `${shoot.title} — ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                    });
+                    optionShoots.push(shoot);
                 }
             }
         }
+
+        const baseOptions = optionShoots.sort(compareShootsByDateDesc).map(shoot => ({
+            value: shoot.id,
+            label: `${shoot.title} - ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+        }));
+
         return [{ value: '', label: 'Select a shoot...' }, ...baseOptions];
     }, [availableShoots, selectedShootId, shoots]);
 
@@ -344,7 +372,8 @@ export default function CheckoutPage() {
         cartRef.current = newCart;
         setCart(newCart);
 
-        showToast(`Added "${item.name}"`, 'success');
+        const issue = getEquipmentIssue(item);
+        showToast(issue ? `Added with warning: ${issue.note}` : `Added "${item.name}"`, issue ? 'warning' : 'success');
         playSuccessSound();
 
         if (!keepSearchOpen) {
@@ -356,15 +385,20 @@ export default function CheckoutPage() {
 
     const updateSuggestions = (query: string, currentCart: Equipment[]) => {
         if (query.trim().length > 0) {
+            const normalize = (str: string) => str.toLowerCase().replace(/[\s\-_]/g, '');
+            const normalizedQuery = normalize(query);
+            const basicQuery = query.toLowerCase().trim();
             const filtered = equipmentList.filter(item =>
                 item.status === 'AVAILABLE' &&
                 !currentCart.find(c => c.id === item.id) &&
                 (
-                    item.name.toLowerCase().includes(query.toLowerCase()) ||
-                    item.barcode.toLowerCase().includes(query.toLowerCase()) ||
-                    item.category.toLowerCase().includes(query.toLowerCase())
+                    item.name.toLowerCase().includes(basicQuery) ||
+                    item.category.toLowerCase().includes(basicQuery) ||
+                    normalize(item.barcode).includes(normalizedQuery) ||
+                    (item.serialNumber && normalize(item.serialNumber).includes(normalizedQuery)) ||
+                    normalize(item.name).includes(normalizedQuery)
                 )
-            ).slice(0, 50);
+            ).sort(compareByName).slice(0, 50);
             setSuggestions(filtered);
             setShowSuggestions(filtered.length > 0);
         } else {
@@ -645,6 +679,7 @@ export default function CheckoutPage() {
                                                             <p className="text-[10px] text-primary font-medium">S/N: {item.serialNumber}</p>
                                                         )}
                                                         <p className="font-medium text-sm truncate text-foreground">{item.name}</p>
+                                                        <IssueWarning item={item} compact />
                                                         <p className="text-xs text-muted-foreground truncate">{item.barcode} • {item.category}</p>
                                                     </div>
                                                     <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded shrink-0">{item.location}</span>
@@ -677,7 +712,7 @@ export default function CheckoutPage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        {cart.map((item, index) => (
+                                        {sortedCart.map((item, index) => (
                                             <div key={`${item.id}-${index}`} className="bg-card px-3 py-2.5 rounded-2xl flex items-center gap-3 shadow-sm border border-border group hover:border-primary/20 transition-all">
                                                 <div className="w-8 h-8 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold text-sm shadow-md shrink-0">
                                                     {index + 1}
@@ -687,6 +722,7 @@ export default function CheckoutPage() {
                                                         <p className="text-[10px] text-primary font-medium mb-0.5 leading-none">S/N: {item.serialNumber}</p>
                                                     )}
                                                     <h3 className="font-semibold truncate text-foreground text-[14px] leading-tight">{item.name}</h3>
+                                                    <IssueWarning item={item} compact />
                                                     <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.barcode} • {item.category}</p>
                                                 </div>
                                                 <button
@@ -782,7 +818,8 @@ export default function CheckoutPage() {
                                                 .map(u => ({
                                                     value: u.id,
                                                     label: `${u.name} (${u.role})`
-                                                }))}
+                                                }))
+                                                .sort(compareByLabel)}
                                         />
                                     )}
 
@@ -898,10 +935,13 @@ export default function CheckoutPage() {
                                                 label="Checkout For"
                                                 value={selectedUserIds}
                                                 onChange={setSelectedUserIds}
-                                                options={users.map(u => ({
-                                                    value: u.id,
-                                                    label: `${u.name} (${u.role})`
-                                                }))}
+                                                options={users
+                                                    .filter(u => u.status !== 'SUSPENDED')
+                                                    .map(u => ({
+                                                        value: u.id,
+                                                        label: `${u.name} (${u.role})`
+                                                    }))
+                                                    .sort(compareByLabel)}
                                                 onOpenChange={setIsDropdownOpen}
                                             />
                                         </div>
@@ -973,6 +1013,7 @@ export default function CheckoutPage() {
                                                 <p className="text-[10px] text-primary font-medium">S/N: {item.serialNumber}</p>
                                             )}
                                             <p className="font-bold truncate text-[16px] text-foreground">{item.name}</p>
+                                            <IssueWarning item={item} compact />
                                             <p className="text-sm text-muted-foreground truncate">{item.barcode}</p>
                                         </div>
                                         <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
@@ -1000,7 +1041,7 @@ export default function CheckoutPage() {
                                         </button>
                                     </div>
                                 )}
-                                {cart.map((item, index) => (
+                                {sortedCart.map((item, index) => (
                                     <div key={item.id} className="bg-card px-3 py-2.5 rounded-2xl flex items-center gap-3 shadow-sm border border-border">
                                         <div className="w-8 h-8 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold text-sm shadow-md shrink-0">
                                             {index + 1}
@@ -1010,6 +1051,7 @@ export default function CheckoutPage() {
                                                 <p className="text-[9px] text-primary font-medium mb-0 leading-none">S/N: {item.serialNumber}</p>
                                             )}
                                             <p className="font-bold truncate text-foreground text-[14px] leading-tight">{item.name}</p>
+                                            <IssueWarning item={item} compact />
                                             <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.barcode}</p>
                                         </div>
                                         <button

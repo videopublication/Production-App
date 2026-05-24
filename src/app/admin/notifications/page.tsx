@@ -8,7 +8,7 @@ import { Card } from '@/components/Card';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { User } from '@/types';
-import { PushNotificationError, sendPushNotification } from '@/lib/push-notifications';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export default function SendNotificationPage() {
     const router = useRouter();
@@ -48,6 +48,7 @@ export default function SendNotificationPage() {
             } else {
                 targets = latestUsers.filter(u => u.role === targetRole);
             }
+            targets = targets.filter(u => u.status === 'ACTIVE');
 
             let inAppSaved = 0;
             let pushSuccesses = 0;
@@ -68,29 +69,27 @@ export default function SendNotificationPage() {
                     inAppSaved += 1;
                 }
 
-                // 2. Send Push Notification (if token exists)
-                if (target.fcmToken) {
-                    try {
-                        await sendPushNotification({
-                            token: target.fcmToken,
-                            title,
-                            message,
-                            link: '/'
-                        });
-                        pushSuccesses += 1;
-                    } catch (err) {
-                        pushFailures += 1;
-                        if (err instanceof PushNotificationError && err.code === 'FCM_TOKEN_UNREGISTERED') {
-                            staleTokens += 1;
-                        }
-                        console.error(`Failed to send push to ${target.name}`, err);
-                    }
-                } else {
-                    missingPushTokens += 1;
-                }
             });
 
             await Promise.all(notifications);
+
+            if (targets.length > 0) {
+                try {
+                    const pushResult = await sendPushNotification({
+                        userIds: targets.map(target => target.id),
+                        title,
+                        message,
+                        link: '/'
+                    });
+                    pushSuccesses = pushResult.sent;
+                    pushFailures = pushResult.failed;
+                    staleTokens = pushResult.staleTokens;
+                    missingPushTokens = pushResult.missingTokens;
+                } catch (err) {
+                    pushFailures = targets.length;
+                    console.error('Failed to send push notifications', err);
+                }
+            }
 
             const pushSummary = `${pushSuccesses} push sent, ${missingPushTokens} no token, ${pushFailures} failed`;
             showToast(

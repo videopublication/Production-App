@@ -15,6 +15,9 @@ import { useConfirm } from '@/lib/dialog-context';
 import { useDepartment } from '@/lib/department-context';
 import Link from 'next/link';
 
+const compareByName = (a: { name: string }, b: { name: string }) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+
 export default function TransactionDetailPage() {
     const router = useRouter();
     const params = useParams();
@@ -53,6 +56,7 @@ export default function TransactionDetailPage() {
     const [notes, setNotes] = useState('');
     const [isEditingNotes, setIsEditingNotes] = useState(false);
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
+    const canForceReturnItems = ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
     useEffect(() => {
         if (user && !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
@@ -141,6 +145,15 @@ export default function TransactionDetailPage() {
 
     const getItemDetails = (itemId: string) => {
         return equipment.find(e => e.id === itemId);
+    };
+
+    const compareItemIdsByName = (a: string, b: string) => {
+        const itemA = getItemDetails(a);
+        const itemB = getItemDetails(b);
+        if (!itemA && !itemB) return 0;
+        if (!itemA) return 1;
+        if (!itemB) return -1;
+        return compareByName(itemA, itemB);
     };
 
     const getUserName = (userId?: string) => {
@@ -286,6 +299,11 @@ export default function TransactionDetailPage() {
 
 
     const handleForceReturn = async (itemId: string) => {
+        if (!canForceReturnItems) {
+            showToast('Only managers and admins can force return items', 'error');
+            return;
+        }
+
         const item = equipment.find(e => e.id === itemId);
         if (!item) {
             showToast('Item not found', 'error');
@@ -379,7 +397,7 @@ export default function TransactionDetailPage() {
         return transaction?.items.filter(itemId => {
             const item = equipment.find(e => e.id === itemId);
             return item?.status === 'CHECKED_OUT';
-        }) || [];
+        }).sort(compareItemIdsByName) || [];
     };
 
     const selectAllCheckedOut = () => {
@@ -407,6 +425,11 @@ export default function TransactionDetailPage() {
     };
 
     const handleForceReturnSelected = async () => {
+        if (!canForceReturnItems) {
+            showToast('Only managers and admins can force return items', 'error');
+            return;
+        }
+
         if (selectedItems.size === 0) return;
 
         const itemNames = Array.from(selectedItems)
@@ -461,13 +484,17 @@ export default function TransactionDetailPage() {
 
     const filteredAvailableItems = availableEquipment.filter(item => {
         if (!searchQuery) return true;
-        const query = searchQuery.toLowerCase();
+        const normalize = (str: string) => str.toLowerCase().replace(/[\s\-_]/g, '');
+        const normalizedQuery = normalize(searchQuery);
+        const basicQuery = searchQuery.toLowerCase().trim();
         return (
-            item.name.toLowerCase().includes(query) ||
-            item.barcode.toLowerCase().includes(query) ||
-            item.category.toLowerCase().includes(query)
+            item.name.toLowerCase().includes(basicQuery) ||
+            item.category.toLowerCase().includes(basicQuery) ||
+            normalize(item.barcode).includes(normalizedQuery) ||
+            (item.serialNumber && normalize(item.serialNumber).includes(normalizedQuery)) ||
+            normalize(item.name).includes(normalizedQuery)
         );
-    });
+    }).sort(compareByName);
 
     if (!user || !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
         return null;
@@ -813,7 +840,7 @@ export default function TransactionDetailPage() {
                     <div className="flex items-center justify-between gap-3 mb-4">
                         <h2 className="text-lg font-semibold">Checked Out Items</h2>
                         <div className="flex items-center gap-2">
-                            {transaction.status === 'OPEN' && getCheckedOutItems().length > 1 && (
+                            {transaction.status === 'OPEN' && getCheckedOutItems().length > 1 && canForceReturnItems && (
                                 <button
                                     onClick={() => {
                                         setSelectionMode(true);
@@ -959,7 +986,7 @@ export default function TransactionDetailPage() {
                             <p>No items in this transaction</p>
                         </div>
                     ) : (
-                        transaction.items.map((itemId, index) => {
+                        [...transaction.items].sort(compareItemIdsByName).map((itemId, index) => {
                             const item = getItemDetails(itemId);
                             if (!item) return null;
 
@@ -971,7 +998,7 @@ export default function TransactionDetailPage() {
                             const isCheckedOut = !isReturned;
 
                             const isSelected = selectedItems.has(itemId);
-                            const canSelect = isCheckedOut && transaction.status === 'OPEN';
+                            const canSelect = isCheckedOut && transaction.status === 'OPEN' && canForceReturnItems;
 
                             return (
                                 <div
@@ -1040,7 +1067,7 @@ export default function TransactionDetailPage() {
                                             {/* Actions */}
                                             <div className="flex items-center gap-2">
                                                 {/* Force Return button - only for checked out items */}
-                                                {transaction.status === 'OPEN' && isCheckedOut && (
+                                                {transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems && (
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();

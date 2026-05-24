@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 next dev --turbopack",
+    "dev:mobile": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 next dev --turbopack -H 0.0.0.0 -p 3000",
+    "dev:https": "next dev --turbopack -H 0.0.0.0 -p 3000 --experimental-https --experimental-https-key ./certs/local-dev.key --experimental-https-cert ./certs/local-dev.crt",
     "dev:beta": "cmd /c \"copy .env.beta .env.local\" && next dev --turbopack -p 3000",
     "dev:prod": "cmd /c \"copy .env.production .env.local\" && next dev --turbopack -p 3000",
     "build": "next build --webpack",

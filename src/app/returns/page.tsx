@@ -14,6 +14,10 @@ import { useTransactions } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
 import { sendPushNotification } from '@/lib/push-notifications';
+import { CONDITION_LABELS, isIssueCondition, withActiveIssue } from '@/lib/equipment-issues';
+
+const compareByName = (a: { name: string }, b: { name: string }) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
 
 export default function ReturnsPage() {
     const router = useRouter();
@@ -64,11 +68,12 @@ export default function ReturnsPage() {
         return allItems.filter(i =>
             relevantItemIds.has(i.id) &&
             i.status === 'CHECKED_OUT'
-        );
+        ).sort(compareByName);
     }, [user, allItems, allTransactions, allAssignments]);
 
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
     const [conditions, setConditions] = useState<Record<string, Condition>>({});
+    const [issueNotes, setIssueNotes] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (authLoading) return;
@@ -88,8 +93,11 @@ export default function ReturnsPage() {
         if (selectedItems.includes(id)) {
             setSelectedItems(selectedItems.filter(i => i !== id));
             const newConditions = { ...conditions };
+            const newIssueNotes = { ...issueNotes };
             delete newConditions[id];
+            delete newIssueNotes[id];
             setConditions(newConditions);
+            setIssueNotes(newIssueNotes);
         } else {
             setSelectedItems([...selectedItems, id]);
             setConditions({ ...conditions, [id]: 'OK' });
@@ -98,6 +106,15 @@ export default function ReturnsPage() {
 
     const handleConditionChange = (id: string, condition: Condition) => {
         setConditions({ ...conditions, [id]: condition });
+        if (!isIssueCondition(condition)) {
+            const newIssueNotes = { ...issueNotes };
+            delete newIssueNotes[id];
+            setIssueNotes(newIssueNotes);
+        }
+    };
+
+    const handleIssueNoteChange = (id: string, note: string) => {
+        setIssueNotes({ ...issueNotes, [id]: note });
     };
 
     const handleSubmitReturn = async () => {
@@ -108,13 +125,36 @@ export default function ReturnsPage() {
             return;
         }
 
+        const missingIssueNoteId = selectedItems.find(id =>
+            isIssueCondition(conditions[id]) && !issueNotes[id]?.trim()
+        );
+
+        if (missingIssueNoteId) {
+            const item = allItems.find(i => i.id === missingIssueNoteId);
+            showToast(`Add an issue note for ${item?.name || 'the damaged item'}`, 'warning');
+            return;
+        }
+
         try {
             await Promise.all(selectedItems.map(async (id) => {
+                const item = allItems.find(i => i.id === id);
+                const condition = conditions[id] || 'OK';
+                const issueNote = issueNotes[id]?.trim();
+
                 await updateEquipment({
                     id,
                     updates: {
                         status: 'PENDING_VERIFICATION',
-                        condition: conditions[id]
+                        condition,
+                        ...(item && isIssueCondition(condition) && issueNote ? {
+                            metadata: withActiveIssue(item.metadata, {
+                                condition,
+                                note: issueNote,
+                                source: 'return',
+                                reportedAt: new Date().toISOString(),
+                                reportedBy: user?.id,
+                            })
+                        } : {})
                     }
                 });
 
@@ -125,7 +165,7 @@ export default function ReturnsPage() {
                         entityId: id,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: `Submitted for return (Condition: ${conditions[id] || 'OK'})`,
+                        details: `Submitted for return (Condition: ${CONDITION_LABELS[condition]}${issueNote ? `, Note: ${issueNote}` : ''})`,
                         departmentId: activeDepartmentId || undefined
                     });
                 }
@@ -135,32 +175,32 @@ export default function ReturnsPage() {
             try {
                 const allUsers = await storage.getUsers(activeDepartmentId);
                 const managers = allUsers.filter(u =>
-                    ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role) && u.fcmToken
+                    u.status === 'ACTIVE' &&
+                    ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role)
                 );
 
                 if (managers.length > 0) {
-                    // 1. Send Push Notifications
-                    const pushPromises = managers.map(manager =>
-                        sendPushNotification({
-                            token: manager.fcmToken!,
-                            title: 'Items Returned',
-                            message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
-                            link: '/verification'
-                        }).catch(e => console.error(`Failed to send push to ${manager.name}`, e))
-                    );
+                    const title = 'Items Returned';
+                    const message = `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`;
 
-                    // 2. Save to Database for each manager
+                    const pushPromise = sendPushNotification({
+                        userIds: managers.map(manager => manager.id),
+                        title,
+                        message,
+                        link: '/verification'
+                    }).catch(e => console.error('Failed to send return push notifications', e));
+
                     const dbPromises = managers.map(manager =>
                         storage.addNotification({
                             userId: manager.id,
-                            title: 'Items Returned',
-                            message: `${user?.name || 'A user'} has returned ${selectedItems.length} items. Verification required.`,
+                            title,
+                            message,
                             link: '/verification',
                             departmentId: activeDepartmentId
                         })
                     );
 
-                    await Promise.all([...pushPromises, ...dbPromises]);
+                    await Promise.all([pushPromise, ...dbPromises]);
                 }
             } catch (e) {
                 console.error("Failed to send notifications", e);
@@ -169,6 +209,7 @@ export default function ReturnsPage() {
             showToast('Items submitted for verification', 'success');
             setSelectedItems([]);
             setConditions({});
+            setIssueNotes({});
         } catch (error) {
             console.error('Submit return failed:', error);
             showToast('Failed to return items. Please check your connection and try again.', 'error');
@@ -241,6 +282,21 @@ export default function ReturnsPage() {
                                         <option value="LOOSE_MOUNT">Loose Mount</option>
                                         <option value="DAMAGED">Damaged</option>
                                     </select>
+
+                                    {isIssueCondition(conditions[item.id]) && (
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs sm:text-sm font-medium text-amber-700 dark:text-amber-300">
+                                                Issue note required
+                                            </label>
+                                            <textarea
+                                                className="w-full min-h-[82px] rounded-md border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-700 dark:bg-amber-950/20"
+                                                value={issueNotes[item.id] || ''}
+                                                onChange={(e) => handleIssueNoteChange(item.id, e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                placeholder="Describe the issue, e.g. audio not working but camera body is usable."
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </Card>

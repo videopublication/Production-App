@@ -83,15 +83,12 @@ export default function NewShootPage() {
                         departmentId: activeDepartmentId || undefined
                     });
 
-                    const assignedUser = users.find(u => u.id === assignment.userId);
-                    if (assignedUser?.fcmToken) {
-                        sendPushNotification({
-                            token: assignedUser.fcmToken,
-                            title,
-                            message,
-                            link: `/shoots/${shootId}`
-                        }).catch(e => console.error('Push notification failed', e));
-                    }
+                    sendPushNotification({
+                        userId: assignment.userId,
+                        title,
+                        message,
+                        link: `/shoots/${shootId}`
+                    }).catch(e => console.error('Push notification failed', e));
                 }));
             }
 

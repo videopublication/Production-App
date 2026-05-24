@@ -1,8 +1,20 @@
 export interface PushNotificationPayload {
-    token: string;
+    token?: string;
+    userId?: string;
+    userIds?: string[];
     title: string;
     message: string;
     link?: string;
+}
+
+export interface PushNotificationResult {
+    success: boolean;
+    attempted: number;
+    sent: number;
+    failed: number;
+    staleTokens: number;
+    missingTokens: number;
+    message?: string;
 }
 
 export class PushNotificationError extends Error {
@@ -17,7 +29,7 @@ export class PushNotificationError extends Error {
     }
 }
 
-export async function sendPushNotification(payload: PushNotificationPayload) {
+export async function sendPushNotification(payload: PushNotificationPayload): Promise<PushNotificationResult> {
     const response = await fetch('/api/send-notification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

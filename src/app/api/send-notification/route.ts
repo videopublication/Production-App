@@ -5,14 +5,44 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 
-const allowedSenderRoles = new Set(['ADMIN', 'MANAGER', 'SUPER_ADMIN']);
+const allowedDirectTokenSenderRoles = new Set(['ADMIN', 'MANAGER', 'SUPER_ADMIN']);
+const elevatedSenderRoles = new Set(['ADMIN', 'MANAGER', 'SUPER_ADMIN']);
+const operationalRecipientRoles = new Set(['ADMIN', 'MANAGER', 'SUPER_ADMIN']);
 
 const notificationSchema = z.object({
-    token: z.string().min(1),
-    title: z.string().min(1),
-    message: z.string().min(1),
+    token: z.string().min(1).optional(),
+    userId: z.string().min(1).optional(),
+    userIds: z.array(z.string().min(1)).min(1).max(500).optional(),
+    title: z.string().min(1).max(120),
+    message: z.string().min(1).max(1000),
     link: z.string().optional(),
+}).refine((value) => {
+    const targets = [
+        value.token,
+        value.userId,
+        value.userIds && value.userIds.length > 0 ? value.userIds : undefined,
+    ].filter(Boolean);
+
+    return targets.length === 1;
+}, {
+    message: 'Provide exactly one target: token, userId, or userIds',
+    path: ['target'],
 });
+
+type SenderProfile = {
+    id: string;
+    role: string;
+    status: string;
+    department_id: string | null;
+};
+
+type TargetUser = {
+    id: string;
+    role: string;
+    status: string;
+    department_id: string | null;
+    fcm_token: string | null;
+};
 
 function isUnregisteredTokenError(error: unknown) {
     const err = error as {
@@ -66,21 +96,31 @@ function getFirebaseMessaging() {
     return admin.messaging();
 }
 
-async function clearInvalidToken(token: string) {
+async function clearInvalidTokens(tokens: string[]) {
+    if (tokens.length === 0) return;
+
     const supabaseAdmin = getSupabaseAdmin();
-    const { error } = await supabaseAdmin
+
+    const { error: tokenError } = await supabaseAdmin
+        .from('push_tokens')
+        .delete()
+        .in('token', tokens);
+
+    if (tokenError) {
+        console.error('[send-notification] Failed to delete invalid push tokens:', tokenError);
+    }
+
+    const { error: userError } = await supabaseAdmin
         .from('users')
         .update({ fcm_token: null })
-        .eq('fcm_token', token);
+        .in('fcm_token', tokens);
 
-    if (error) {
-        console.error('[send-notification] Failed to clear invalid token:', error);
-    } else {
-        console.warn('[send-notification] Cleared invalid FCM token from user profiles');
+    if (userError) {
+        console.error('[send-notification] Failed to clear invalid legacy FCM tokens:', userError);
     }
 }
 
-async function ensureCanSendNotifications() {
+async function ensureAuthenticatedSender() {
     const cookieStore = await cookies();
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -102,7 +142,7 @@ async function ensureCanSendNotifications() {
     const supabaseAdmin = getSupabaseAdmin();
     const { data: profile, error: profileError } = await supabaseAdmin
         .from('users')
-        .select('role')
+        .select('id, role, status, department_id')
         .eq('id', user.id)
         .single();
 
@@ -111,20 +151,144 @@ async function ensureCanSendNotifications() {
         return { error: 'Sender profile not found', status: 403 } as const;
     }
 
-    if (!allowedSenderRoles.has(profile.role)) {
-        return { error: 'Forbidden', status: 403 } as const;
+    if (profile.status !== 'ACTIVE') {
+        return { error: 'Sender is not active', status: 403 } as const;
     }
 
-    return { userId: user.id, role: profile.role } as const;
+    return { profile: profile as SenderProfile } as const;
+}
+
+async function getAuthorizedTargetUsers(sender: SenderProfile, requestedUserIds: string[]) {
+    const uniqueUserIds = Array.from(new Set(requestedUserIds));
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, role, status, department_id, fcm_token')
+        .in('id', uniqueUserIds);
+
+    if (error) {
+        throw new Error(`Target user lookup failed: ${error.message}`);
+    }
+
+    const users = (data || []) as TargetUser[];
+    const foundIds = new Set(users.map((target) => target.id));
+    const missingIds = uniqueUserIds.filter((id) => !foundIds.has(id));
+    if (missingIds.length > 0) {
+        return { error: 'One or more target users were not found', status: 404 } as const;
+    }
+
+    const unauthorized = users.filter((target) => {
+        if (target.status !== 'ACTIVE') return true;
+        if (sender.role === 'SUPER_ADMIN') return false;
+        if (target.role === 'SUPER_ADMIN') return false;
+        if (target.department_id !== sender.department_id) return true;
+        if (elevatedSenderRoles.has(sender.role)) return false;
+        return !operationalRecipientRoles.has(target.role);
+    });
+
+    if (unauthorized.length > 0) {
+        return { error: 'Cannot notify users outside your department', status: 403 } as const;
+    }
+
+    return { users } as const;
+}
+
+async function getTokensForUsers(users: TargetUser[]) {
+    const userIds = users.map((target) => target.id);
+    const tokensByUserId = new Map<string, Set<string>>();
+    users.forEach((target) => {
+        const tokens = new Set<string>();
+        if (target.fcm_token) tokens.add(target.fcm_token);
+        tokensByUserId.set(target.id, tokens);
+    });
+
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data, error } = await supabaseAdmin
+        .from('push_tokens')
+        .select('token, user_id')
+        .in('user_id', userIds);
+
+    if (error) {
+        console.error('[send-notification] Push token lookup failed, using legacy tokens only:', error);
+    } else {
+        (data || []).forEach((row: { token?: string | null; user_id?: string | null }) => {
+            if (!row.token || !row.user_id) return;
+            const tokens = tokensByUserId.get(row.user_id) || new Set<string>();
+            tokens.add(row.token);
+            tokensByUserId.set(row.user_id, tokens);
+        });
+    }
+
+    const tokens = Array.from(tokensByUserId.values()).flatMap((userTokens) => Array.from(userTokens));
+    const missingUserCount = Array.from(tokensByUserId.values()).filter((userTokens) => userTokens.size === 0).length;
+
+    return {
+        tokens: Array.from(new Set(tokens)),
+        missingUserCount,
+    };
+}
+
+function buildMessage(token: string, title: string, message: string, link?: string): admin.messaging.Message {
+    const notificationLink = link || '/notifications';
+    const timestamp = Date.now().toString();
+
+    return {
+        token,
+        data: {
+            link: notificationLink,
+            title,
+            message,
+            body: message,
+            timestamp,
+        },
+        webpush: {
+            headers: {
+                Urgency: 'high',
+            },
+            fcmOptions: {
+                link: notificationLink,
+            },
+        },
+    };
+}
+
+async function sendToTokens(tokens: string[], title: string, message: string, link?: string) {
+    const messaging = getFirebaseMessaging();
+    const results = await Promise.all(tokens.map(async (token) => {
+        try {
+            const messageId = await messaging.send(buildMessage(token, title, message, link));
+            return { token, success: true, messageId };
+        } catch (error: unknown) {
+            const err = error as Error;
+            return {
+                token,
+                success: false,
+                stale: isUnregisteredTokenError(error),
+                error: err.message || 'Unknown push send error',
+            };
+        }
+    }));
+
+    const staleTokens = results
+        .filter((result) => !result.success && 'stale' in result && result.stale)
+        .map((result) => result.token);
+
+    await clearInvalidTokens(staleTokens);
+
+    return {
+        results,
+        sent: results.filter((result) => result.success).length,
+        failed: results.filter((result) => !result.success).length,
+        staleTokens: staleTokens.length,
+    };
 }
 
 export async function POST(request: Request) {
-    const auth = await ensureCanSendNotifications();
+    const auth = await ensureAuthenticatedSender();
     if ('error' in auth) {
         return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-
-    let tokenForCleanup: string | null = null;
 
     try {
         const body = await request.json();
@@ -133,50 +297,68 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { token, title, message, link } = result.data;
-        tokenForCleanup = token;
-        const notificationLink = link || '/notifications';
-        const timestamp = Date.now().toString();
+        const { token, userId, userIds, title, message, link } = result.data;
+        let tokens: string[] = [];
+        let targetUserCount = 0;
+        let missingTokenUsers = 0;
 
-        const payload: admin.messaging.Message = {
-            token,
-            data: {
-                link: notificationLink,
-                title,
-                message,
-                body: message,
-                timestamp,
-            },
-            webpush: {
-                headers: {
-                    Urgency: 'high',
-                },
-                fcmOptions: {
-                    link: notificationLink,
-                },
-            },
-        };
+        if (token) {
+            if (!allowedDirectTokenSenderRoles.has(auth.profile.role)) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+            tokens = [token];
+        } else {
+            const requestedUserIds = userId ? [userId] : userIds!;
+            targetUserCount = requestedUserIds.length;
+            const targets = await getAuthorizedTargetUsers(auth.profile, requestedUserIds);
+            if ('error' in targets) {
+                return NextResponse.json({ error: targets.error }, { status: targets.status });
+            }
 
-        console.log('[send-notification] Sending push:', {
-            sender: auth.userId,
-            senderRole: auth.role,
-            token: `${token.substring(0, 20)}...`,
-            title,
-            link: notificationLink,
-        });
-
-        const messageId = await getFirebaseMessaging().send(payload);
-        return NextResponse.json({ success: true, messageId });
-    } catch (error: unknown) {
-        const err = error as Error;
-        if (tokenForCleanup && isUnregisteredTokenError(error)) {
-            await clearInvalidToken(tokenForCleanup);
-            return NextResponse.json(
-                { error: 'Device unregistered', code: 'FCM_TOKEN_UNREGISTERED' },
-                { status: 410 }
-            );
+            const tokenResult = await getTokensForUsers(targets.users);
+            tokens = tokenResult.tokens;
+            missingTokenUsers = tokenResult.missingUserCount;
         }
 
+        if (tokens.length === 0) {
+            return NextResponse.json({
+                success: false,
+                attempted: 0,
+                sent: 0,
+                failed: 0,
+                staleTokens: 0,
+                missingTokens: targetUserCount || 1,
+                message: 'No registered push devices found',
+            });
+        }
+
+        console.log('[send-notification] Sending push:', {
+            sender: auth.profile.id,
+            senderRole: auth.profile.role,
+            targetUserCount,
+            deviceCount: tokens.length,
+            title,
+            link: link || '/notifications',
+        });
+
+        const sendResult = await sendToTokens(tokens, title, message, link);
+
+        return NextResponse.json({
+            success: sendResult.sent > 0,
+            attempted: tokens.length,
+            sent: sendResult.sent,
+            failed: sendResult.failed,
+            staleTokens: sendResult.staleTokens,
+            missingTokens: missingTokenUsers,
+            failures: sendResult.results
+                .filter((result) => !result.success)
+                .map((result) => ({
+                    token: `${result.token.substring(0, 12)}...`,
+                    error: 'error' in result ? result.error : 'Unknown push send error',
+                })),
+        });
+    } catch (error: unknown) {
+        const err = error as Error;
         console.error('[send-notification] Error:', err.message);
         return NextResponse.json({ error: 'Failed to send notification', details: err.message }, { status: 500 });
     }

@@ -131,17 +131,12 @@ export function useCheckOut() {
                     departmentId
                 });
 
-                // Fetch user to get FCM token
-                const users = await storage.getUsers(departmentId);
-                const assignedUser = users.find(u => u.id === userId);
-                if (assignedUser?.fcmToken) {
-                    sendPushNotification({
-                        token: assignedUser.fcmToken,
-                        title,
-                        message,
-                        link: '/transactions'
-                    }).catch(e => console.error('Push notification failed', e));
-                }
+                sendPushNotification({
+                    userId,
+                    title,
+                    message,
+                    link: `/transactions/${transactionId}`
+                }).catch(e => console.error('Push notification failed', e));
             }
 
             return transaction;
@@ -178,6 +173,7 @@ export function useCheckIn() {
 
             const allTransactions = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, activeDepartmentId);
             const timestamp = new Date().toISOString();
+            let relatedTransactionId: string | undefined;
 
             for (const item of items) {
                 // Find open transaction containing this item
@@ -188,6 +184,7 @@ export function useCheckIn() {
                 );
 
                 if (txn) {
+                    if (!relatedTransactionId) relatedTransactionId = txn.id;
                     const currentConditions = txn.postReturnConditions || {};
                     const updatedConditions = { ...currentConditions, [item.id]: condition || item.condition };
 
@@ -245,16 +242,12 @@ export function useCheckIn() {
                     departmentId: activeDepartmentId || undefined
                 });
 
-                const users = await storage.getUsers(activeDepartmentId);
-                const userObj = users.find(u => u.id === userId);
-                if (userObj?.fcmToken) {
-                    sendPushNotification({
-                        token: userObj.fcmToken,
-                        title,
-                        message,
-                        link: '/transactions'
-                    }).catch(e => console.error('Push notification failed', e));
-                }
+                sendPushNotification({
+                    userId,
+                    title,
+                    message,
+                    link: relatedTransactionId ? `/transactions/${relatedTransactionId}` : '/transactions'
+                }).catch(e => console.error('Push notification failed', e));
             }
         },
         onSuccess: () => {
