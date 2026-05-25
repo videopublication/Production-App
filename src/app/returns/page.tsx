@@ -12,6 +12,7 @@ import { useEquipment, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
+import { useShoots } from '@/hooks/useShoots';
 import { useDepartment } from '@/lib/department-context';
 import { sendPushNotification } from '@/lib/push-notifications';
 import {
@@ -25,9 +26,41 @@ import {
     issueToCondition,
     withActiveIssue
 } from '@/lib/equipment-issues';
+import { Equipment, ManualTransactionItem, Shoot, Transaction } from '@/types';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+
+type ManualReturnRow = {
+    transaction: Transaction;
+    item: ManualTransactionItem;
+    key: string;
+};
+
+type ReturnGroup = {
+    key: string;
+    title: string;
+    date: string;
+    timestamp: number;
+    transactionIds: string[];
+    items: Equipment[];
+    manualItems: ManualReturnRow[];
+};
+
+const getDateValue = (dateString?: string) => {
+    if (!dateString) return 0;
+    const time = new Date(dateString).getTime();
+    return Number.isNaN(time) ? 0 : time;
+};
+
+const formatShortDate = (dateString?: string) => {
+    if (!dateString) return 'No date';
+    return new Date(dateString).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+    });
+};
 
 export default function ReturnsPage() {
     const router = useRouter();
@@ -39,15 +72,14 @@ export default function ReturnsPage() {
 
     const { data: allTransactions = [] } = useTransactions();
     const { data: allAssignments = [] } = useAssignments();
+    const { data: allShoots = [], isLoading: isShootsLoading } = useShoots();
     const { department } = useDepartment();
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
-    // Derive checked out items from transactions where the user is involved
-    const checkedOutItems = React.useMemo(() => {
-        if (!user || !allItems || !allTransactions) return [];
+    const relevantTransactions = React.useMemo(() => {
+        if (!user || !allTransactions || !allAssignments) return [];
 
-        // Determine relevant OPEN transactions
-        const relevantTxns = allTransactions.filter(txn => {
+        return allTransactions.filter(txn => {
             if (txn.status !== 'OPEN') return false;
 
             const isPrimary = txn.userId === user.id;
@@ -67,10 +99,15 @@ export default function ReturnsPage() {
             const isAdditional = txn.additionalUsers?.includes(user.id);
             return isPrimary || isAdditional;
         });
+    }, [user, allTransactions, allAssignments]);
+
+    // Derive checked out items from transactions where the user is involved
+    const checkedOutItems = React.useMemo(() => {
+        if (!user || !allItems || !relevantTransactions) return [];
 
         // Collect all item IDs from these transactions
         const relevantItemIds = new Set<string>();
-        relevantTxns.forEach(txn => {
+        relevantTransactions.forEach(txn => {
             txn.items.forEach(id => relevantItemIds.add(id));
         });
 
@@ -79,31 +116,18 @@ export default function ReturnsPage() {
             relevantItemIds.has(i.id) &&
             i.status === 'CHECKED_OUT'
         ).sort(compareByName);
-    }, [user, allItems, allTransactions, allAssignments]);
+    }, [user, allItems, relevantTransactions]);
 
-    const manualReturnItems = React.useMemo(() => {
-        if (!user || !allTransactions || !allAssignments) return [];
+    const manualReturnItems = React.useMemo<ManualReturnRow[]>(() => {
+        if (!user || !relevantTransactions) return [];
 
-        return allTransactions
-            .filter(txn => {
-                if (txn.status !== 'OPEN') return false;
-                const isPrimary = txn.userId === user.id;
-                if (txn.shootId) {
-                    const assignment = allAssignments.find(a =>
-                        a.shootId === txn.shootId &&
-                        a.userId === user.id &&
-                        ['ACCEPTED', 'PENDING'].includes(a.status)
-                    );
-                    return isPrimary || !!assignment;
-                }
-                return isPrimary || txn.additionalUsers?.includes(user.id);
-            })
+        return relevantTransactions
             .flatMap(txn => (txn.manualItems || [])
                 .filter(item => item.returnRequired && item.status === 'OUT')
                 .map(item => ({ transaction: txn, item, key: `${txn.id}:${item.id}` }))
             )
             .sort((a, b) => a.item.name.localeCompare(b.item.name, undefined, { sensitivity: 'base', numeric: true }));
-    }, [user, allTransactions, allAssignments]);
+    }, [user, relevantTransactions]);
 
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
     const [selectedManualItems, setSelectedManualItems] = useState<string[]>([]);
@@ -111,6 +135,72 @@ export default function ReturnsPage() {
     const [issueTypes, setIssueTypes] = useState<Record<string, EquipmentIssueType>>({});
     const [issueSeverities, setIssueSeverities] = useState<Record<string, EquipmentIssueSeverity>>({});
     const [issueNotes, setIssueNotes] = useState<Record<string, string>>({});
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const returnableItemIds = checkedOutItems.map(item => item.id);
+    const returnableManualKeys = manualReturnItems.map(item => item.key);
+    const totalReturnableCount = returnableItemIds.length + returnableManualKeys.length;
+    const selectedCount = selectedItems.length + selectedManualItems.length;
+    const allReturnableSelected = totalReturnableCount > 0
+        && returnableItemIds.every(id => selectedItems.includes(id))
+        && returnableManualKeys.every(key => selectedManualItems.includes(key));
+
+    const returnGroups = React.useMemo<ReturnGroup[]>(() => {
+        const groups: Record<string, ReturnGroup> = {};
+
+        const getGroup = (txn?: Transaction, fallbackDate?: string) => {
+            const linkedShoot = txn?.shootId ? allShoots.find((shoot: Shoot) => shoot.id === txn.shootId) : undefined;
+            const key = linkedShoot ? `shoot:${linkedShoot.id}` : txn ? `transaction:${txn.id}` : 'unlinked';
+            const shootPrefix = linkedShoot?.shootNumber ? `#${linkedShoot.shootNumber} ` : '';
+            const title = linkedShoot
+                ? `${shootPrefix}${linkedShoot.title}`
+                : txn?.project && txn.project.trim() !== ''
+                    ? txn.project
+                    : 'General Return';
+            const dateSource = linkedShoot?.startTime || txn?.timestampOut || fallbackDate;
+            const timestamp = getDateValue(dateSource);
+
+            if (!groups[key]) {
+                groups[key] = {
+                    key,
+                    title,
+                    date: formatShortDate(dateSource),
+                    timestamp,
+                    transactionIds: [],
+                    items: [],
+                    manualItems: [],
+                };
+            }
+
+            if (txn && !groups[key].transactionIds.includes(txn.id)) {
+                groups[key].transactionIds.push(txn.id);
+            }
+
+            return groups[key];
+        };
+
+        checkedOutItems.forEach(item => {
+            const txn = relevantTransactions.find(transaction => transaction.items.includes(item.id));
+            getGroup(txn, item.lastActivity).items.push(item);
+        });
+
+        manualReturnItems.forEach(row => {
+            getGroup(row.transaction, row.transaction.timestampOut).manualItems.push(row);
+        });
+
+        return Object.values(groups)
+            .map(group => ({
+                ...group,
+                items: [...group.items].sort(compareByName),
+                manualItems: [...group.manualItems].sort((a, b) =>
+                    a.item.name.localeCompare(b.item.name, undefined, { sensitivity: 'base', numeric: true })
+                ),
+            }))
+            .sort((a, b) => {
+                const dateComparison = b.timestamp - a.timestamp;
+                if (dateComparison !== 0) return dateComparison;
+                return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+            });
+    }, [checkedOutItems, manualReturnItems, relevantTransactions, allShoots]);
 
     useEffect(() => {
         if (authLoading) return;
@@ -118,7 +208,7 @@ export default function ReturnsPage() {
         if (!user) router.replace('/login');
     }, [user, router, authLoading]);
 
-    if (authLoading || isInventoryLoading) {
+    if (authLoading || isInventoryLoading || isShootsLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -204,8 +294,113 @@ export default function ReturnsPage() {
         }
     };
 
+    const toggleSelectAllReturns = () => {
+        if (allReturnableSelected) {
+            setSelectedItems([]);
+            setSelectedManualItems([]);
+            setConditions({});
+            setIssueTypes({});
+            setIssueSeverities({});
+            setIssueNotes({});
+            return;
+        }
+
+        setSelectedItems(returnableItemIds);
+        setSelectedManualItems(returnableManualKeys);
+        setConditions(prev => {
+            const next = { ...prev };
+            [...returnableItemIds, ...returnableManualKeys].forEach(id => {
+                if (!next[id]) next[id] = 'OK';
+            });
+            return next;
+        });
+        setIssueTypes(prev => {
+            const next = { ...prev };
+            [...returnableItemIds, ...returnableManualKeys].forEach(id => {
+                if (!next[id]) next[id] = 'PHYSICAL_DAMAGE';
+            });
+            return next;
+        });
+        setIssueSeverities(prev => {
+            const next = { ...prev };
+            [...returnableItemIds, ...returnableManualKeys].forEach(id => {
+                if (!next[id]) next[id] = 'USABLE_WITH_WARNING';
+            });
+            return next;
+        });
+    };
+
+    const toggleGroupExpanded = (groupKey: string) => {
+        setCollapsedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupKey)) {
+                next.delete(groupKey);
+            } else {
+                next.add(groupKey);
+            }
+            return next;
+        });
+    };
+
+    const toggleGroupSelection = (group: ReturnGroup) => {
+        const itemIds = group.items.map(item => item.id);
+        const manualKeys = group.manualItems.map(row => row.key);
+        const allSelected = itemIds.every(id => selectedItems.includes(id))
+            && manualKeys.every(key => selectedManualItems.includes(key));
+
+        if (allSelected) {
+            const keysToRemove = new Set([...itemIds, ...manualKeys]);
+            setSelectedItems(prev => prev.filter(id => !keysToRemove.has(id)));
+            setSelectedManualItems(prev => prev.filter(key => !keysToRemove.has(key)));
+            setConditions(prev => {
+                const next = { ...prev };
+                keysToRemove.forEach(key => delete next[key]);
+                return next;
+            });
+            setIssueTypes(prev => {
+                const next = { ...prev };
+                keysToRemove.forEach(key => delete next[key]);
+                return next;
+            });
+            setIssueSeverities(prev => {
+                const next = { ...prev };
+                keysToRemove.forEach(key => delete next[key]);
+                return next;
+            });
+            setIssueNotes(prev => {
+                const next = { ...prev };
+                keysToRemove.forEach(key => delete next[key]);
+                return next;
+            });
+            return;
+        }
+
+        setSelectedItems(prev => Array.from(new Set([...prev, ...itemIds])));
+        setSelectedManualItems(prev => Array.from(new Set([...prev, ...manualKeys])));
+        setConditions(prev => {
+            const next = { ...prev };
+            [...itemIds, ...manualKeys].forEach(id => {
+                if (!next[id]) next[id] = 'OK';
+            });
+            return next;
+        });
+        setIssueTypes(prev => {
+            const next = { ...prev };
+            [...itemIds, ...manualKeys].forEach(id => {
+                if (!next[id]) next[id] = 'PHYSICAL_DAMAGE';
+            });
+            return next;
+        });
+        setIssueSeverities(prev => {
+            const next = { ...prev };
+            [...itemIds, ...manualKeys].forEach(id => {
+                if (!next[id]) next[id] = 'USABLE_WITH_WARNING';
+            });
+            return next;
+        });
+    };
+
     const handleSubmitReturn = async () => {
-        const selectedCount = selectedItems.length + selectedManualItems.length;
         if (selectedCount === 0) return;
 
         if (!isOnline) {
@@ -361,18 +556,223 @@ export default function ReturnsPage() {
         }
     };
 
+    const renderInventoryReturnCard = (item: Equipment) => (
+        <Card
+            key={item.id}
+            className={`cursor-pointer transition-all ${selectedItems.includes(item.id) ? 'ring-2 ring-primary border-transparent' : ''}`}
+        >
+            <div className="flex items-start justify-between mb-3 sm:mb-4" onClick={() => toggleSelection(item.id)}>
+                <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-base sm:text-lg truncate">{item.name}</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{item.category} - {item.barcode}</p>
+                </div>
+                <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 ${selectedItems.includes(item.id) ? 'border-primary bg-primary text-white' : 'border-muted'}`}>
+                    {selectedItems.includes(item.id) && (
+                        <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    )}
+                </div>
+            </div>
+
+            {selectedItems.includes(item.id) && (
+                <div className="mt-3 space-y-3 border-t border-border pt-3 sm:mt-4 sm:pt-4" onClick={(e) => e.stopPropagation()}>
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Return Status</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-secondary/60 p-1">
+                            <button
+                                type="button"
+                                onClick={() => setReturnMode(item.id, false)}
+                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${!isIssueCondition(conditions[item.id])
+                                    ? 'bg-primary text-primary-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                OK
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReturnMode(item.id, true)}
+                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${isIssueCondition(conditions[item.id])
+                                    ? 'bg-amber-500 text-black shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                Report Issue
+                            </button>
+                        </div>
+                    </div>
+
+                    {isIssueCondition(conditions[item.id]) && (
+                        <div className="space-y-3 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="space-y-1.5">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Type</span>
+                                    <select
+                                        value={issueTypes[item.id] || 'PHYSICAL_DAMAGE'}
+                                        onChange={(e) => handleIssueTypeChange(item.id, e.target.value as EquipmentIssueType)}
+                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                    >
+                                        {EQUIPMENT_ISSUE_TYPE_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="space-y-1.5">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Severity</span>
+                                    <select
+                                        value={issueSeverities[item.id] || 'USABLE_WITH_WARNING'}
+                                        onChange={(e) => handleIssueSeverityChange(item.id, e.target.value as EquipmentIssueSeverity)}
+                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                    >
+                                        {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </div>
+                            <label className="block space-y-1.5">
+                                <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Note Required</span>
+                                <textarea
+                                    className="w-full min-h-[104px] rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                    value={issueNotes[item.id] || ''}
+                                    onChange={(e) => handleIssueNoteChange(item.id, e.target.value)}
+                                    placeholder="Describe the issue, e.g. audio is not working but the item is otherwise usable."
+                                />
+                            </label>
+                            <p className="text-xs font-medium leading-relaxed text-amber-800 dark:text-amber-300">
+                                Managers will see this in verification and the item will show an active issue warning until cleared.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </Card>
+    );
+
+    const renderManualReturnCard = ({ item, transaction, key }: ManualReturnRow) => (
+        <Card
+            key={key}
+            className={`cursor-pointer transition-all border-amber-300/50 ${selectedManualItems.includes(key) ? 'ring-2 ring-amber-500 border-transparent' : ''}`}
+        >
+            <div className="flex items-start justify-between mb-3 sm:mb-4" onClick={() => toggleManualSelection(key)}>
+                <div className="min-w-0 flex-1">
+                    <div className="mb-1 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                        Manual
+                    </div>
+                    <h3 className="font-semibold text-base sm:text-lg truncate">{item.name}</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        Qty {item.quantity} - {transaction.project || 'Unspecified project'}
+                    </p>
+                    {item.notes && (
+                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{item.notes}</p>
+                    )}
+                </div>
+                <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 ${selectedManualItems.includes(key) ? 'border-amber-500 bg-amber-500 text-black' : 'border-muted'}`}>
+                    {selectedManualItems.includes(key) && (
+                        <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    )}
+                </div>
+            </div>
+
+            {selectedManualItems.includes(key) && (
+                <div className="mt-3 space-y-3 border-t border-border pt-3 sm:mt-4 sm:pt-4" onClick={(e) => e.stopPropagation()}>
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Return Status</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-secondary/60 p-1">
+                            <button
+                                type="button"
+                                onClick={() => setReturnMode(key, false)}
+                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${!isIssueCondition(conditions[key])
+                                    ? 'bg-primary text-primary-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                OK
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReturnMode(key, true)}
+                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${isIssueCondition(conditions[key])
+                                    ? 'bg-amber-500 text-black shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                Report Issue
+                            </button>
+                        </div>
+                    </div>
+
+                    {isIssueCondition(conditions[key]) && (
+                        <div className="space-y-3 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="space-y-1.5">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Type</span>
+                                    <select
+                                        value={issueTypes[key] || 'PHYSICAL_DAMAGE'}
+                                        onChange={(e) => handleIssueTypeChange(key, e.target.value as EquipmentIssueType)}
+                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                    >
+                                        {EQUIPMENT_ISSUE_TYPE_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="space-y-1.5">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Severity</span>
+                                    <select
+                                        value={issueSeverities[key] || 'USABLE_WITH_WARNING'}
+                                        onChange={(e) => handleIssueSeverityChange(key, e.target.value as EquipmentIssueSeverity)}
+                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                    >
+                                        {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </div>
+                            <label className="block space-y-1.5">
+                                <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Note Required</span>
+                                <textarea
+                                    className="w-full min-h-[104px] rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                    value={issueNotes[key] || ''}
+                                    onChange={(e) => handleIssueNoteChange(key, e.target.value)}
+                                    placeholder="Describe the issue or missing quantity."
+                                />
+                            </label>
+                        </div>
+                    )}
+                </div>
+            )}
+        </Card>
+    );
+
     return (
         <div className="space-y-4 sm:space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Returns</h1>
-                <Button
-                    onClick={handleSubmitReturn}
-                    disabled={(selectedItems.length + selectedManualItems.length) === 0 || !isOnline}
-                    className="w-full sm:w-auto"
-                    size="sm"
-                >
-                    {!isOnline ? 'Offline' : `Return Selected (${selectedItems.length + selectedManualItems.length})`}
-                </Button>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    {totalReturnableCount > 0 && (
+                        <Button
+                            onClick={toggleSelectAllReturns}
+                            variant="secondary"
+                            className="w-full sm:w-auto"
+                            size="sm"
+                        >
+                            {allReturnableSelected ? 'Clear Selection' : `Select All (${totalReturnableCount})`}
+                        </Button>
+                    )}
+                    <Button
+                        onClick={handleSubmitReturn}
+                        disabled={selectedCount === 0 || !isOnline}
+                        className="w-full sm:w-auto"
+                        size="sm"
+                    >
+                        {!isOnline ? 'Offline' : `Return Selected (${selectedCount})`}
+                    </Button>
+                </div>
             </div>
 
             {!isOnline && (
@@ -391,198 +791,70 @@ export default function ReturnsPage() {
                     You have no items to return.
                 </div>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
-                    {checkedOutItems.map((item) => (
-                        <Card
-                            key={item.id}
-                            className={`cursor-pointer transition-all ${selectedItems.includes(item.id) ? 'ring-2 ring-primary border-transparent' : ''}`}
-                        >
-                            <div className="flex items-start justify-between mb-3 sm:mb-4" onClick={() => toggleSelection(item.id)}>
-                                <div className="min-w-0 flex-1">
-                                    <h3 className="font-semibold text-base sm:text-lg truncate">{item.name}</h3>
-                                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{item.category} • {item.barcode}</p>
-                                </div>
-                                <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 ${selectedItems.includes(item.id) ? 'border-primary bg-primary text-white' : 'border-muted'}`}>
-                                    {selectedItems.includes(item.id) && (
-                                        <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    )}
-                                </div>
-                            </div>
+                <div className="space-y-3">
+                    {returnGroups.map(group => {
+                        const isExpanded = !collapsedGroups.has(group.key);
+                        const totalItems = group.items.length + group.manualItems.length;
+                        const groupSelected = group.items.every(item => selectedItems.includes(item.id))
+                            && group.manualItems.every(row => selectedManualItems.includes(row.key));
 
-                            {selectedItems.includes(item.id) && (
-                                <div className="mt-3 space-y-3 border-t border-border pt-3 sm:mt-4 sm:pt-4" onClick={(e) => e.stopPropagation()}>
-                                    <div>
-                                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Return Status</p>
-                                        <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-secondary/60 p-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => setReturnMode(item.id, false)}
-                                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${!isIssueCondition(conditions[item.id])
-                                                    ? 'bg-primary text-primary-foreground shadow-sm'
-                                                    : 'text-muted-foreground hover:text-foreground'
-                                                    }`}
+                        return (
+                            <section key={group.key} className="overflow-hidden rounded-2xl border border-border bg-card">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleGroupExpanded(group.key)}
+                                    className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-muted/40"
+                                    aria-expanded={isExpanded}
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <svg
+                                                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                strokeWidth={2.5}
                                             >
-                                                OK
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setReturnMode(item.id, true)}
-                                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${isIssueCondition(conditions[item.id])
-                                                    ? 'bg-amber-500 text-black shadow-sm'
-                                                    : 'text-muted-foreground hover:text-foreground'
-                                                    }`}
-                                            >
-                                                Report Issue
-                                            </button>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
+                                            </svg>
+                                            <h2 className="truncate text-base font-bold">{group.title}</h2>
+                                        </div>
+                                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-muted-foreground">
+                                            {group.transactionIds.length > 1 && <span>{group.transactionIds.length} transactions</span>}
+                                            <span>{group.date}</span>
+                                            <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+                                            {group.manualItems.length > 0 && (
+                                                <span className="text-amber-600 dark:text-amber-300">
+                                                    {group.manualItems.length} manual
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
+                                    <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                                        {isExpanded ? 'Hide' : 'Open'}
+                                    </span>
+                                </button>
 
-                                    {isIssueCondition(conditions[item.id]) && (
-                                        <div className="space-y-3 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/20">
-                                            <div className="grid gap-3 sm:grid-cols-2">
-                                                <label className="space-y-1.5">
-                                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Type</span>
-                                                    <select
-                                                        value={issueTypes[item.id] || 'PHYSICAL_DAMAGE'}
-                                                        onChange={(e) => handleIssueTypeChange(item.id, e.target.value as EquipmentIssueType)}
-                                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
-                                                    >
-                                                        {EQUIPMENT_ISSUE_TYPE_OPTIONS.map(option => (
-                                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </label>
-                                                <label className="space-y-1.5">
-                                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Severity</span>
-                                                    <select
-                                                        value={issueSeverities[item.id] || 'USABLE_WITH_WARNING'}
-                                                        onChange={(e) => handleIssueSeverityChange(item.id, e.target.value as EquipmentIssueSeverity)}
-                                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
-                                                    >
-                                                        {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.map(option => (
-                                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </label>
-                                            </div>
-                                            <label className="block space-y-1.5">
-                                                <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Note Required</span>
-                                                <textarea
-                                                    className="w-full min-h-[104px] rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
-                                                    value={issueNotes[item.id] || ''}
-                                                    onChange={(e) => handleIssueNoteChange(item.id, e.target.value)}
-                                                    placeholder="Describe the issue, e.g. audio is not working but the item is otherwise usable."
-                                                />
-                                            </label>
-                                            <p className="text-xs font-medium leading-relaxed text-amber-800 dark:text-amber-300">
-                                                Managers will see this in verification and the item will show an active issue warning until cleared.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </Card>
-                    ))}
-                    {manualReturnItems.map(({ item, transaction, key }) => (
-                        <Card
-                            key={key}
-                            className={`cursor-pointer transition-all border-amber-300/50 ${selectedManualItems.includes(key) ? 'ring-2 ring-amber-500 border-transparent' : ''}`}
-                        >
-                            <div className="flex items-start justify-between mb-3 sm:mb-4" onClick={() => toggleManualSelection(key)}>
-                                <div className="min-w-0 flex-1">
-                                    <div className="mb-1 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
-                                        Manual
-                                    </div>
-                                    <h3 className="font-semibold text-base sm:text-lg truncate">{item.name}</h3>
-                                    <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                                        Qty {item.quantity} • {transaction.project || 'Unspecified project'}
-                                    </p>
-                                    {item.notes && (
-                                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{item.notes}</p>
-                                    )}
-                                </div>
-                                <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 ${selectedManualItems.includes(key) ? 'border-amber-500 bg-amber-500 text-black' : 'border-muted'}`}>
-                                    {selectedManualItems.includes(key) && (
-                                        <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    )}
-                                </div>
-                            </div>
-
-                            {selectedManualItems.includes(key) && (
-                                <div className="mt-3 space-y-3 border-t border-border pt-3 sm:mt-4 sm:pt-4" onClick={(e) => e.stopPropagation()}>
-                                    <div>
-                                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Return Status</p>
-                                        <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-secondary/60 p-1">
+                                {isExpanded && (
+                                    <div className="border-t border-border p-3 sm:p-4">
+                                        <div className="mb-3 flex justify-end">
                                             <button
                                                 type="button"
-                                                onClick={() => setReturnMode(key, false)}
-                                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${!isIssueCondition(conditions[key])
-                                                    ? 'bg-primary text-primary-foreground shadow-sm'
-                                                    : 'text-muted-foreground hover:text-foreground'
-                                                    }`}
+                                                onClick={() => toggleGroupSelection(group)}
+                                                className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
                                             >
-                                                OK
+                                                {groupSelected ? 'Clear group' : `Select group (${totalItems})`}
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setReturnMode(key, true)}
-                                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${isIssueCondition(conditions[key])
-                                                    ? 'bg-amber-500 text-black shadow-sm'
-                                                    : 'text-muted-foreground hover:text-foreground'
-                                                    }`}
-                                            >
-                                                Report Issue
-                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                                            {group.items.map(renderInventoryReturnCard)}
+                                            {group.manualItems.map(renderManualReturnCard)}
                                         </div>
                                     </div>
-
-                                    {isIssueCondition(conditions[key]) && (
-                                        <div className="space-y-3 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/20">
-                                            <div className="grid gap-3 sm:grid-cols-2">
-                                                <label className="space-y-1.5">
-                                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Type</span>
-                                                    <select
-                                                        value={issueTypes[key] || 'PHYSICAL_DAMAGE'}
-                                                        onChange={(e) => handleIssueTypeChange(key, e.target.value as EquipmentIssueType)}
-                                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
-                                                    >
-                                                        {EQUIPMENT_ISSUE_TYPE_OPTIONS.map(option => (
-                                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </label>
-                                                <label className="space-y-1.5">
-                                                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Severity</span>
-                                                    <select
-                                                        value={issueSeverities[key] || 'USABLE_WITH_WARNING'}
-                                                        onChange={(e) => handleIssueSeverityChange(key, e.target.value as EquipmentIssueSeverity)}
-                                                        className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
-                                                    >
-                                                        {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.map(option => (
-                                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </label>
-                                            </div>
-                                            <label className="block space-y-1.5">
-                                                <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Note Required</span>
-                                                <textarea
-                                                    className="w-full min-h-[104px] rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
-                                                    value={issueNotes[key] || ''}
-                                                    onChange={(e) => handleIssueNoteChange(key, e.target.value)}
-                                                    placeholder="Describe the issue or missing quantity."
-                                                />
-                                            </label>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </Card>
-                    ))}
+                                )}
+                            </section>
+                        );
+                    })}
                 </div>
             )}
         </div>

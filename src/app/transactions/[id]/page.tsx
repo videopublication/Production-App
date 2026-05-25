@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Transaction, Equipment, User, Log, Shoot, Assignment } from '@/types';
+import { Transaction, Equipment, User, Log, Shoot, Assignment, ManualTransactionItem } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -14,10 +14,96 @@ import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
 import { useDepartment } from '@/lib/department-context';
 import Link from 'next/link';
-import { areManualItemsComplete } from '@/lib/transaction-manual-items';
+import { areManualItemsComplete, decodeTransactionNotes } from '@/lib/transaction-manual-items';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+
+const getShootDateValue = (shoot: Shoot) => {
+    if (!shoot.startTime) return 0;
+    const time = new Date(shoot.startTime).getTime();
+    return Number.isNaN(time) ? 0 : time;
+};
+
+const compareShootsByDate = (a: Shoot, b: Shoot) =>
+    getShootDateValue(b) - getShootDateValue(a)
+    || a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+
+const formatShootOption = (shoot: Shoot) => {
+    const dateValue = getShootDateValue(shoot);
+    const dateLabel = dateValue
+        ? new Date(dateValue).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'No date';
+    const shootNumber = shoot.shootNumber ? `#${shoot.shootNumber} - ` : '';
+    return `${shootNumber}${shoot.title} - ${dateLabel}`;
+};
+
+const isManualTransactionItem = (value: unknown): value is ManualTransactionItem => {
+    if (!value || typeof value !== 'object') return false;
+    const item = value as Record<string, unknown>;
+    return typeof item.id === 'string'
+        && typeof item.name === 'string'
+        && typeof item.quantity === 'number';
+};
+
+const getManualItemsFromUnknown = (value: unknown): ManualTransactionItem[] => {
+    if (!value) return [];
+
+    if (typeof value === 'string') {
+        return decodeTransactionNotes(value).manualItems;
+    }
+
+    if (Array.isArray(value)) {
+        return value.filter(isManualTransactionItem);
+    }
+
+    if (typeof value === 'object') {
+        const record = value as Record<string, unknown>;
+        if (Array.isArray(record.manualItems)) {
+            return record.manualItems.filter(isManualTransactionItem);
+        }
+        if (typeof record.notes === 'string') {
+            return decodeTransactionNotes(record.notes).manualItems;
+        }
+    }
+
+    return [];
+};
+
+const recoverManualItemsFromLogs = (logs: Log[]) => {
+    const seenIds = new Set<string>();
+    const recovered: ManualTransactionItem[] = [];
+
+    for (const log of logs) {
+        const candidates = [
+            log.details,
+            log.oldValue,
+            log.newValue,
+        ];
+
+        for (const candidate of candidates) {
+            const items = getManualItemsFromUnknown(candidate);
+            for (const item of items) {
+                if (seenIds.has(item.id)) continue;
+                seenIds.add(item.id);
+                recovered.push(item);
+            }
+        }
+
+        if (recovered.length > 0) return recovered;
+    }
+
+    return recovered;
+};
+
+const formatLogDetails = (details?: string) => {
+    if (!details) return '';
+    const decoded = decodeTransactionNotes(details);
+    if (decoded.manualItems.length > 0) {
+        return decoded.notes || 'Updated manual item details';
+    }
+    return details;
+};
 
 export default function TransactionDetailPage() {
     const router = useRouter();
@@ -56,6 +142,16 @@ export default function TransactionDetailPage() {
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [notes, setNotes] = useState('');
     const [isEditingNotes, setIsEditingNotes] = useState(false);
+    const [isEditingDetails, setIsEditingDetails] = useState(false);
+    const [editProject, setEditProject] = useState('');
+    const [editShootId, setEditShootId] = useState('');
+    const [editingManualItemId, setEditingManualItemId] = useState<string | null>(null);
+    const [manualItemDraft, setManualItemDraft] = useState({
+        name: '',
+        quantity: '1',
+        returnRequired: true,
+        notes: '',
+    });
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
     const canForceReturnItems = ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
@@ -79,8 +175,8 @@ export default function TransactionDetailPage() {
                 storage.getAssignments(effectiveDeptId)
             ]);
 
-            const txn = txns.find(t => t.id === transactionId);
-            if (!txn) {
+            const loadedTxn = txns.find(t => t.id === transactionId);
+            if (!loadedTxn) {
                 showToast('Transaction not found', 'error');
                 router.push('/transactions');
                 return;
@@ -88,9 +184,10 @@ export default function TransactionDetailPage() {
 
             // Fetch logs for this transaction AND its items directly
             // This prevents missing old transaction logs due to the 1000 row limits of global getLogs()
-            const entityIdsToFetch = [transactionId, ...txn.items];
+            const entityIdsToFetch = [transactionId, ...loadedTxn.items];
             const allLogs = await storage.getLogsByEntities(entityIdsToFetch);
 
+            let txn = loadedTxn;
             const txnUser = users.find(u => u.id === txn.userId);
             const available = equip.filter(e => e.status === 'AVAILABLE');
 
@@ -126,10 +223,39 @@ export default function TransactionDetailPage() {
                 })
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
+            if ((txn.manualItems || []).length === 0) {
+                const recoveredManualItems = recoverManualItemsFromLogs(transactionLogs);
+                if (recoveredManualItems.length > 0) {
+                    await storage.updateTransaction(txn.id, {
+                        notes: txn.notes,
+                        manualItems: recoveredManualItems,
+                    });
+
+                    await storage.addLog({
+                        id: crypto.randomUUID(),
+                        action: 'EDIT',
+                        entityId: txn.id,
+                        userId: user?.id,
+                        timestamp: new Date().toISOString(),
+                        details: `Recovered ${recoveredManualItems.length} manual item${recoveredManualItems.length === 1 ? '' : 's'} from activity history`,
+                        newValue: { manualItems: recoveredManualItems },
+                        departmentId: effectiveDeptId || txn.departmentId,
+                    });
+
+                    txn = {
+                        ...txn,
+                        manualItems: recoveredManualItems,
+                    };
+                    showToast('Recovered manual item details from history', 'success');
+                }
+            }
+
             setTransaction(txn);
             setLinkedShoot(linkedShootData);
             setShootAssignments(linkedAssignments);
             setNotes(txn.notes || '');
+            setEditProject(txn.project || '');
+            setEditShootId(txn.shootId || '');
             setEquipment(equip);
             setAvailableEquipment(available);
             setTransactionUser(txnUser || null);
@@ -264,7 +390,7 @@ export default function TransactionDetailPage() {
             // Update item status back to available
             await storage.updateEquipment(itemId, {
                 status: 'AVAILABLE',
-                assignedTo: null as any,
+                assignedTo: null as unknown as string,
                 lastActivity: new Date().toISOString()
             });
 
@@ -332,13 +458,13 @@ export default function TransactionDetailPage() {
             // 1. Update item status directly to AVAILABLE and CLEAR assignee
             await storage.updateEquipment(itemId, {
                 status: 'AVAILABLE',
-                assignedTo: null as any,
+                assignedTo: null as unknown as string,
                 lastActivity: new Date().toISOString()
             });
 
             // 2. Update Transaction (Close if all returned)
-            const currentConditions = transaction?.postReturnConditions || {};
-            const updatedConditions = {
+            const currentConditions: Record<string, Equipment['condition']> = transaction?.postReturnConditions || {};
+            const updatedConditions: Record<string, Equipment['condition']> = {
                 ...currentConditions,
                 [itemId]: 'OK' // Default to OK for force return, or we could ask
             };
@@ -347,7 +473,7 @@ export default function TransactionDetailPage() {
                 updatedConditions[id] !== undefined
             );
 
-            const txnUpdates: any = {
+            const txnUpdates: Partial<Transaction> = {
                 postReturnConditions: updatedConditions
             };
 
@@ -545,12 +671,223 @@ export default function TransactionDetailPage() {
         .map(id => getUserName(id))
         .filter(name => name !== 'Unknown User');
 
-    const allMemberNames = [primaryUserName, ...additionalUserNames];
+    const manualItemQuantity = (transaction.manualItems || []).reduce((sum, item) => sum + item.quantity, 0);
+    const totalItemCount = transaction.items.length + manualItemQuantity;
 
     const canManualClose = transaction?.status === 'OPEN' && transaction.items.every(itemId => {
         const item = equipment.find(e => e.id === itemId);
         return item && item.status !== 'CHECKED_OUT' && item.status !== 'PENDING_VERIFICATION';
     }) && areManualItemsComplete(transaction.manualItems);
+
+    const canEditTransactionDetails = ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
+    const shootOptions = [...allShoots]
+        .filter(shoot => shoot.status !== 'CANCELLED')
+        .sort(compareShootsByDate);
+    const selectedEditShoot = editShootId ? allShoots.find(shoot => shoot.id === editShootId) : null;
+    const canEditManualItems = transaction.status === 'OPEN' && canEditTransactionDetails;
+
+    const openDetailsEditor = () => {
+        setEditProject(transaction.project || '');
+        setEditShootId(transaction.shootId || '');
+        setIsEditingDetails(true);
+    };
+
+    const openManualItemEditor = (item: ManualTransactionItem) => {
+        setEditingManualItemId(item.id);
+        setManualItemDraft({
+            name: item.name,
+            quantity: String(item.quantity),
+            returnRequired: item.returnRequired,
+            notes: item.notes || '',
+        });
+    };
+
+    const handleSaveManualItem = async (itemId: string) => {
+        if (!transaction || !canEditManualItems) return;
+
+        const currentItem = (transaction.manualItems || []).find(item => item.id === itemId);
+        if (!currentItem) return;
+
+        const nextName = manualItemDraft.name.trim();
+        const nextQuantity = Number.parseInt(manualItemDraft.quantity, 10);
+        if (!nextName) {
+            showToast('Manual item name is required', 'error');
+            return;
+        }
+        if (!Number.isFinite(nextQuantity) || nextQuantity < 1) {
+            showToast('Quantity must be at least 1', 'error');
+            return;
+        }
+
+        let updatedItem: ManualTransactionItem = {
+            ...currentItem,
+            name: nextName,
+            quantity: nextQuantity,
+            notes: manualItemDraft.notes.trim() || undefined,
+            returnRequired: manualItemDraft.returnRequired,
+        };
+
+        if (!manualItemDraft.returnRequired) {
+            updatedItem = {
+                ...updatedItem,
+                status: 'RETURNED',
+                returnedQuantity: nextQuantity,
+                returnCondition: undefined,
+                issueType: undefined,
+                issueSeverity: undefined,
+                returnNote: undefined,
+                returnedAt: undefined,
+                returnedBy: undefined,
+                verifiedAt: undefined,
+                verifiedBy: undefined,
+            };
+        } else if (!currentItem.returnRequired) {
+            updatedItem = {
+                ...updatedItem,
+                status: 'OUT',
+                returnedQuantity: undefined,
+                returnCondition: undefined,
+                returnNote: undefined,
+                returnedAt: undefined,
+                returnedBy: undefined,
+                verifiedAt: undefined,
+                verifiedBy: undefined,
+            };
+        }
+
+        setSaving(true);
+        try {
+            const updatedManualItems = (transaction.manualItems || []).map(item =>
+                item.id === itemId ? updatedItem : item
+            );
+
+            await storage.updateTransaction(transaction.id, { manualItems: updatedManualItems });
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: transaction.id,
+                userId: user.id,
+                timestamp: new Date().toISOString(),
+                details: `Updated manual item "${currentItem.name}" to "${updatedItem.name}" (${updatedItem.returnRequired ? 'return required' : 'consumable'})`,
+                oldValue: currentItem,
+                newValue: updatedItem,
+                departmentId: effectiveDeptId || transaction.departmentId,
+            });
+
+            await loadData(true);
+            setEditingManualItemId(null);
+            showToast('Manual item updated', 'success');
+        } catch (error) {
+            console.error('Error updating manual item:', error);
+            showToast('Failed to update manual item', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleRemoveManualItem = async (item: ManualTransactionItem) => {
+        if (!transaction || !canEditManualItems) return;
+
+        const isConfirmed = await confirm({
+            title: 'Remove Manual Item?',
+            message: `Remove "${item.name}" from this transaction?`,
+            confirmLabel: 'Remove',
+            variant: 'danger'
+        });
+
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            const updatedManualItems = (transaction.manualItems || []).filter(manualItem => manualItem.id !== item.id);
+            await storage.updateTransaction(transaction.id, { manualItems: updatedManualItems });
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: transaction.id,
+                userId: user.id,
+                timestamp: new Date().toISOString(),
+                details: `Removed manual item "${item.name}" from transaction`,
+                oldValue: item,
+                newValue: null,
+                departmentId: effectiveDeptId || transaction.departmentId,
+            });
+
+            await loadData(true);
+            showToast('Manual item removed', 'success');
+        } catch (error) {
+            console.error('Error removing manual item:', error);
+            showToast('Failed to remove manual item', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSaveTransactionDetails = async () => {
+        if (!canEditTransactionDetails || !transaction) return;
+
+        const nextProject = editProject.trim();
+        if (!nextProject) {
+            showToast('Transaction name is required', 'error');
+            return;
+        }
+
+        const currentShootId = transaction.shootId || '';
+        const nextShootId = editShootId || '';
+        const currentProject = transaction.project || '';
+
+        if (nextProject === currentProject && nextShootId === currentShootId) {
+            setIsEditingDetails(false);
+            return;
+        }
+
+        const oldShoot = currentShootId ? allShoots.find(shoot => shoot.id === currentShootId) : null;
+        const newShoot = nextShootId ? allShoots.find(shoot => shoot.id === nextShootId) : null;
+
+        setSaving(true);
+        try {
+            const updates: Partial<Transaction> & { shootId?: string | null } = {};
+            if (nextProject !== currentProject) updates.project = nextProject;
+            if (nextShootId !== currentShootId) updates.shootId = nextShootId || null;
+
+            await storage.updateTransaction(transaction.id, updates);
+
+            const changes: string[] = [];
+            if (nextProject !== currentProject) {
+                changes.push(`name from "${currentProject || 'Unspecified'}" to "${nextProject}"`);
+            }
+            if (nextShootId !== currentShootId) {
+                changes.push(`linked shoot from "${oldShoot?.title || 'None'}" to "${newShoot?.title || 'None'}"`);
+            }
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: transaction.id,
+                userId: user.id,
+                timestamp: new Date().toISOString(),
+                details: `Updated transaction details: ${changes.join('; ')}`,
+                oldValue: {
+                    project: currentProject || null,
+                    shootId: currentShootId || null,
+                },
+                newValue: {
+                    project: nextProject,
+                    shootId: nextShootId || null,
+                },
+                departmentId: effectiveDeptId || transaction.departmentId,
+            });
+
+            await loadData(true);
+            setIsEditingDetails(false);
+            showToast('Transaction details updated', 'success');
+        } catch (error) {
+            console.error('Error updating transaction details:', error);
+            showToast('Failed to update transaction details', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const handleSaveNotes = async () => {
         if (!transaction) return;
@@ -566,7 +903,10 @@ export default function TransactionDetailPage() {
                 entityId: transaction.id,
                 userId: user!.id,
                 timestamp: new Date().toISOString(),
-                details: `Updated notes: "${notes.trim()}" (Previous: "${transaction.notes || ''}")`
+                details: 'Updated transaction notes',
+                oldValue: { notes: transaction.notes || '' },
+                newValue: { notes: notes.trim() },
+                departmentId: effectiveDeptId || transaction.departmentId,
             });
 
             await loadData(true);
@@ -615,7 +955,7 @@ export default function TransactionDetailPage() {
                 if (item && (item.status === 'CHECKED_OUT' || item.status === 'PENDING_VERIFICATION')) {
                     await storage.updateEquipment(itemId, {
                         status: 'AVAILABLE',
-                        assignedTo: null as any,
+                        assignedTo: null as unknown as string,
                         lastActivity: new Date().toISOString()
                     });
                 }
@@ -646,7 +986,7 @@ export default function TransactionDetailPage() {
             <div className="flex items-start sm:items-center justify-between gap-3">
                 <div className="flex items-start sm:items-center gap-3">
                     <div className="min-w-0">
-                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">
+                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight break-words">
                             {transaction.project || 'Unspecified Project'}
                         </h1>
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -661,58 +1001,21 @@ export default function TransactionDetailPage() {
                                     </span>
                                 </Link>
                             ) : (
-                                transaction.status === 'OPEN' && ['MANAGER', 'ADMIN'].includes(user?.role || '') && (
-                                    <div className="relative group">
-                                        <select
-                                            className="appearance-none text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2 pl-6 py-0.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer border-none focus:ring-0 w-32 truncate"
-                                            onChange={async (e) => {
-                                                if (!e.target.value) return;
-                                                const shootId = e.target.value;
-                                                const shoot = (await storage.getShoots(effectiveDeptId)).find(s => s.id === shootId);
-                                                if (!shoot) return;
-
-                                                const isConfirmed = await confirm({
-                                                    title: 'Link Shoot?',
-                                                    message: `Link this transaction to "${shoot.title}"? This allows assigned crew to return items.`,
-                                                    confirmLabel: 'Link',
-                                                });
-
-                                                if (isConfirmed) {
-                                                    setSaving(true);
-                                                    try {
-                                                        await storage.updateTransaction(transaction.id, { shootId: shoot.id });
-                                                        await storage.addLog({
-                                                            id: crypto.randomUUID(),
-                                                            action: 'EDIT',
-                                                            entityId: transaction.id,
-                                                            userId: user!.id,
-                                                            timestamp: new Date().toISOString(),
-                                                            details: `Linked transaction to shoot: ${shoot.title} (#${shoot.shootNumber || 'N/A'})`
-                                                        });
-                                                        await loadData(true);
-                                                        showToast('Shoot linked successfully', 'success');
-                                                    } catch (err) {
-                                                        console.error(err);
-                                                        showToast('Failed to link shoot', 'error');
-                                                    } finally {
-                                                        setSaving(false);
-                                                    }
-                                                } else {
-                                                    e.target.value = ""; // Reset
-                                                }
-                                            }}
-                                            defaultValue=""
-                                        >
-                                            <option value="" disabled>Link Shoot...</option>
-                                            {(allShoots || []).filter(s => s.status !== 'CANCELLED').map(s => (
-                                                <option key={s.id} value={s.id}>{s.title} {s.shootNumber ? `(#${s.shootNumber})` : ''}</option>
-                                            ))}
-                                        </select>
-                                        <svg className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                        </svg>
-                                    </div>
-                                )
+                                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md font-medium">
+                                    No linked shoot
+                                </span>
+                            )}
+                            {canEditTransactionDetails && (
+                                <button
+                                    type="button"
+                                    onClick={openDetailsEditor}
+                                    className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 font-semibold"
+                                >
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                                    </svg>
+                                    Edit Details
+                                </button>
                             )}
                         </div>
                     </div>
@@ -734,6 +1037,103 @@ export default function TransactionDetailPage() {
                     </Badge>
                 </div>
             </div>
+
+            {isEditingDetails && canEditTransactionDetails && (
+                <Card className="p-4 border-primary/30 bg-primary/5">
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                        <div>
+                            <h2 className="text-base font-bold">Edit Transaction Details</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Fix the transaction name or attach it to the correct shoot.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setEditProject(transaction.project || '');
+                                setEditShootId(transaction.shootId || '');
+                                setIsEditingDetails(false);
+                            }}
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            aria-label="Close edit details"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
+                        <Input
+                            label="Transaction Name"
+                            value={editProject}
+                            onChange={(event) => setEditProject(event.target.value)}
+                            placeholder="Enter transaction name"
+                            disabled={saving}
+                            className="bg-background"
+                        />
+
+                        <div className="w-full">
+                            <label className="block text-sm font-medium text-foreground mb-2">
+                                Linked Shoot
+                            </label>
+                            <select
+                                value={editShootId}
+                                onChange={(event) => setEditShootId(event.target.value)}
+                                disabled={saving}
+                                className="flex h-12 w-full rounded-2xl border border-input bg-background px-4 py-2 text-[15px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <option value="">No linked shoot</option>
+                                {shootOptions.map((shoot) => (
+                                    <option key={shoot.id} value={shoot.id}>
+                                        {formatShootOption(shoot)}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {selectedEditShoot && (
+                        <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-2xl bg-background/80 border border-border px-4 py-3">
+                            <div className="min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected shoot</p>
+                                <p className="text-sm font-medium truncate">
+                                    {formatShootOption(selectedEditShoot)}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setEditProject(selectedEditShoot.title)}
+                                className="text-xs font-semibold text-primary hover:text-primary/80 self-start sm:self-auto"
+                            >
+                                Use shoot name
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 mt-4">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                                setEditProject(transaction.project || '');
+                                setEditShootId(transaction.shootId || '');
+                                setIsEditingDetails(false);
+                            }}
+                            disabled={saving}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={handleSaveTransactionDetails}
+                            isLoading={saving}
+                        >
+                            Save Details
+                        </Button>
+                    </div>
+                </Card>
+            )}
 
             {/* Transaction Info Cards - Desktop: Grid, Mobile: Compact Single Card */}
             {/* Desktop View */}
@@ -767,7 +1167,7 @@ export default function TransactionDetailPage() {
                 </Card>
                 <Card className="p-4">
                     <p className="text-sm text-muted-foreground mb-1">Total Items</p>
-                    <p className="font-semibold text-2xl">{transaction.items.length}</p>
+                    <p className="font-semibold text-2xl">{totalItemCount}</p>
                 </Card>
             </div>
 
@@ -785,7 +1185,7 @@ export default function TransactionDetailPage() {
                     </div>
                     <div className="text-right shrink-0">
                         <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Items</p>
-                        <p className="font-bold text-2xl text-primary leading-none">{transaction.items.length}</p>
+                        <p className="font-bold text-2xl text-primary leading-none">{totalItemCount}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 pt-3 border-t border-border">
@@ -984,7 +1384,7 @@ export default function TransactionDetailPage() {
                 <div className="space-y-2">
                     {transaction.items.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
-                            <p>No items in this transaction</p>
+                            <p>{manualItemQuantity > 0 ? 'No inventory items in this transaction' : 'No items in this transaction'}</p>
                         </div>
                     ) : (
                         [...transaction.items].sort(compareItemIdsByName).map((itemId, index) => {
@@ -1114,6 +1514,7 @@ export default function TransactionDetailPage() {
                     <div className="space-y-2 pt-3">
                         <h3 className="px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Manual Items</h3>
                         {(transaction.manualItems || []).map((item, index) => {
+                            const isEditingManualItem = editingManualItemId === item.id;
                             const statusLabel = item.returnRequired
                                 ? item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
                                 : 'Consumable';
@@ -1132,26 +1533,141 @@ export default function TransactionDetailPage() {
                                             {transaction.items.length + index + 1}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <h3 className="font-semibold text-sm text-foreground leading-tight">{item.name}</h3>
-                                                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
-                                                    Manual
-                                                </span>
-                                            </div>
-                                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                                Qty {item.quantity}{item.notes ? ` - ${item.notes}` : ''}
-                                            </p>
-                                            {item.returnNote && (
-                                                <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                                    {item.returnNote}
-                                                </p>
+                                            {isEditingManualItem ? (
+                                                <div className="space-y-3">
+                                                    <div className="grid gap-3 sm:grid-cols-[1fr_96px]">
+                                                        <input
+                                                            type="text"
+                                                            value={manualItemDraft.name}
+                                                            onChange={(event) => setManualItemDraft(prev => ({ ...prev, name: event.target.value }))}
+                                                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                                            placeholder="Manual item name"
+                                                            disabled={saving}
+                                                        />
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={manualItemDraft.quantity}
+                                                            onChange={(event) => setManualItemDraft(prev => ({ ...prev, quantity: event.target.value }))}
+                                                            className="h-10 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                                            placeholder="Qty"
+                                                            disabled={saving}
+                                                        />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={manualItemDraft.notes}
+                                                        onChange={(event) => setManualItemDraft(prev => ({ ...prev, notes: event.target.value }))}
+                                                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                                        placeholder="Optional note"
+                                                        disabled={saving}
+                                                    />
+                                                    <div>
+                                                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Item Type</p>
+                                                        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-background p-1 border border-border">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setManualItemDraft(prev => ({ ...prev, returnRequired: true }))}
+                                                                disabled={saving}
+                                                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${manualItemDraft.returnRequired
+                                                                    ? 'bg-primary text-primary-foreground shadow-sm'
+                                                                    : 'text-muted-foreground hover:text-foreground'
+                                                                    }`}
+                                                            >
+                                                                Return required
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setManualItemDraft(prev => ({ ...prev, returnRequired: false }))}
+                                                                disabled={saving}
+                                                                className={`h-11 rounded-xl text-sm font-bold transition-colors ${!manualItemDraft.returnRequired
+                                                                    ? 'bg-orange-500 text-white shadow-sm'
+                                                                    : 'text-muted-foreground hover:text-foreground'
+                                                                    }`}
+                                                            >
+                                                                Consumable
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <h3 className="font-semibold text-sm text-foreground leading-tight">{item.name}</h3>
+                                                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                                                            Manual
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                                        Qty {item.quantity}
+                                                    </p>
+                                                    {item.notes && (
+                                                        <p className="mt-2 rounded-lg bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
+                                                            <span className="font-semibold text-foreground">Note:</span> {item.notes}
+                                                        </p>
+                                                    )}
+                                                    {item.returnNote && (
+                                                        <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                            {item.returnNote}
+                                                        </p>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="mt-2.5 flex items-center justify-between border-t border-border/50 pt-2.5">
+                                    <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/50 pt-2.5">
                                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${statusClass}`}>
                                             {statusLabel}
                                         </span>
+                                        {canEditManualItems && (
+                                            <div className="flex items-center gap-2">
+                                                {isEditingManualItem ? (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setEditingManualItemId(null);
+                                                                setManualItemDraft({ name: '', quantity: '1', returnRequired: true, notes: '' });
+                                                            }}
+                                                            disabled={saving}
+                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSaveManualItem(item.id)}
+                                                            disabled={saving}
+                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openManualItemEditor(item)}
+                                                            disabled={saving}
+                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveManualItem(item)}
+                                                            disabled={saving}
+                                                            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                            title="Remove manual item"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -1238,7 +1754,7 @@ export default function TransactionDetailPage() {
                                     <p className="text-xs text-muted-foreground italic leading-relaxed">
                                         <span className="font-medium not-italic text-foreground">{getUserName(log.userId)}</span>
                                         {' — '}
-                                        {log.details || log.action}
+                                        {formatLogDetails(log.details) || log.action}
                                     </p>
                                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">
                                         {new Date(log.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}

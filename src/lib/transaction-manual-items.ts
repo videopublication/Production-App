@@ -2,7 +2,11 @@ import { ManualTransactionItem } from '@/types';
 
 const START_MARKER = '[[VP_APP_MANUAL_ITEMS_V1]]';
 const END_MARKER = '[[/VP_APP_MANUAL_ITEMS_V1]]';
-const MANUAL_ITEMS_BLOCK = new RegExp(`\\n*${START_MARKER}\\n([\\s\\S]*?)\\n${END_MARKER}\\n*`, 'm');
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const MANUAL_ITEMS_BLOCK = new RegExp(
+    `\\s*${escapeRegExp(START_MARKER)}\\s*([\\s\\S]*?)\\s*${escapeRegExp(END_MARKER)}\\s*`,
+    'm'
+);
 
 export function decodeTransactionNotes(rawNotes?: string | null): { notes?: string; manualItems: ManualTransactionItem[] } {
     if (!rawNotes) return { notes: undefined, manualItems: [] };

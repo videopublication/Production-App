@@ -610,21 +610,21 @@ function InventoryPageContent() {
             </div>
 
             <div className="flex flex-col gap-3">
-                <div className="relative w-full">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground sm:h-6 sm:w-6" />
+                <div className="flex h-14 w-full items-center gap-2 rounded-2xl border border-border bg-secondary/50 px-3 transition-all duration-200 focus-within:border-transparent focus-within:ring-2 focus-within:ring-primary">
+                    <Search className="h-5 w-5 shrink-0 text-muted-foreground sm:h-6 sm:w-6" />
                     <input
                         type="search"
-                        placeholder="Search by name, barcode, serial, or category..."
+                        placeholder="Search name, barcode, serial..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') openLookupItem(search);
                         }}
-                        className="h-14 w-full rounded-2xl border border-border bg-secondary/50 py-2 pl-12 pr-20 text-[15px] text-foreground outline-none transition-all duration-200 placeholder:text-muted-foreground focus:border-transparent focus:ring-2 focus:ring-primary sm:pl-14"
+                        className="h-full min-w-0 flex-1 bg-transparent py-2 text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
                     />
                     <button
                         type="button"
-                        className={`absolute right-2 top-1/2 flex h-11 w-14 -translate-y-1/2 items-center justify-center rounded-2xl border transition-all active:scale-95 ${showInventoryScanner
+                        className={`flex h-11 w-12 shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95 ${showInventoryScanner
                             ? 'border-primary/30 bg-primary text-primary-foreground shadow-lg shadow-primary/20'
                             : 'border-border bg-[#1f2937] text-white hover:bg-[#273449] dark:bg-secondary dark:text-foreground dark:hover:bg-secondary/80'
                             }`}

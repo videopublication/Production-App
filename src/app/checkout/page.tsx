@@ -654,24 +654,36 @@ export default function CheckoutPage() {
                 />
             </div>
 
-            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_260px]">
                 <input
                     type="text"
                     value={manualItemNotes}
                     onChange={(e) => setManualItemNotes(e.target.value)}
-                    placeholder="Optional note"
+                    placeholder="Manual item note (optional)"
                     className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
                 />
-                <button
-                    type="button"
-                    onClick={() => setManualItemReturnRequired(prev => !prev)}
-                    className={`h-11 rounded-xl px-3 text-sm font-bold transition-colors ${manualItemReturnRequired
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-orange-500/15 text-orange-600 dark:text-orange-300'
-                        }`}
-                >
-                    {manualItemReturnRequired ? 'Return required' : 'Consumable'}
-                </button>
+                <div className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1 border border-border" aria-label="Manual item type">
+                    <button
+                        type="button"
+                        onClick={() => setManualItemReturnRequired(true)}
+                        className={`h-9 rounded-lg px-2 text-xs font-bold transition-colors ${manualItemReturnRequired
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        Returnable
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setManualItemReturnRequired(false)}
+                        className={`h-9 rounded-lg px-2 text-xs font-bold transition-colors ${!manualItemReturnRequired
+                            ? 'bg-orange-500 text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        Consumable
+                    </button>
+                </div>
             </div>
 
             <button
@@ -689,7 +701,7 @@ export default function CheckoutPage() {
                             <div className="min-w-0">
                                 <p className="truncate text-sm font-bold text-foreground">{item.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                    Qty {item.quantity} - {item.returnRequired ? 'Return required' : 'Consumable'}
+                                    Qty {item.quantity} - {item.returnRequired ? 'Returnable' : 'Consumable'}
                                     {item.notes ? ` - ${item.notes}` : ''}
                                 </p>
                             </div>
@@ -903,7 +915,7 @@ export default function CheckoutPage() {
                                                 <div className="flex-1 min-w-0">
                                                     <h3 className="font-semibold truncate text-foreground text-[14px] leading-tight">{item.name}</h3>
                                                     <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">
-                                                        Manual • Qty {item.quantity} • {item.returnRequired ? 'Return required' : 'Consumable'}
+                                                        Manual • Qty {item.quantity} • {item.returnRequired ? 'Returnable' : 'Consumable'}
                                                     </p>
                                                 </div>
                                                 <button
@@ -1018,9 +1030,9 @@ export default function CheckoutPage() {
                                     {renderManualItemsEditor()}
 
                                     <div>
-                                        <label className="text-[13px] font-semibold text-muted-foreground mb-2 block">Transaction Notes</label>
+                                        <label className="text-[13px] font-semibold text-muted-foreground mb-2 block">Checkout Notes (Optional)</label>
                                         <textarea
-                                            placeholder="Optional notes about this checkout..."
+                                            placeholder="Notes for this whole checkout..."
                                             value={notes}
                                             onChange={(e) => setNotes(e.target.value)}
                                             className="w-full h-24 p-4 bg-muted text-foreground border-0 rounded-xl text-[15px] focus:ring-2 focus:ring-primary transition-all resize-none placeholder:text-muted-foreground/70"
@@ -1149,7 +1161,7 @@ export default function CheckoutPage() {
                                 <div className="mt-2">
                                     <div className="mb-2 pl-1">
                                         <label className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">
-                                            Transaction Notes
+                                            Checkout Notes (Optional)
                                         </label>
                                     </div>
                                     <div className={`rounded-2xl border bg-muted shadow-inner transition-all ${isNotesFocused
@@ -1157,7 +1169,7 @@ export default function CheckoutPage() {
                                         : 'border-border/60'
                                         }`}>
                                         <textarea
-                                            placeholder="Optional notes about this checkout..."
+                                            placeholder="Notes for this whole checkout..."
                                             value={notes}
                                             onChange={(e) => setNotes(e.target.value)}
                                             onFocus={() => setIsNotesFocused(true)}
@@ -1265,7 +1277,7 @@ export default function CheckoutPage() {
                                         <div className="flex-1 min-w-0">
                                             <p className="font-bold truncate text-foreground text-[14px] leading-tight">{item.name}</p>
                                             <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">
-                                                Manual • Qty {item.quantity} • {item.returnRequired ? 'Return required' : 'Consumable'}
+                                                Manual • Qty {item.quantity} • {item.returnRequired ? 'Returnable' : 'Consumable'}
                                             </p>
                                         </div>
                                         <button

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Condition, Equipment, ManualTransactionItem, Transaction, User } from '@/types';
+import { Condition, Equipment, ManualTransactionItem, Shoot, Transaction, User } from '@/types';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useDepartment } from '@/lib/department-context';
@@ -26,6 +26,16 @@ type PendingManualItem = {
     item: ManualTransactionItem;
     key: string;
 };
+type VerificationGroup = {
+    key: string;
+    title: string;
+    txnId: string;
+    date: string;
+    timestamp: number;
+    transactionIds: string[];
+    items: Equipment[];
+    manualItems: PendingManualItem[];
+};
 
 import { Skeleton } from '@/components/Skeleton';
 
@@ -43,6 +53,8 @@ export default function VerificationPage() {
     const [pendingItems, setPendingItems] = useState<Equipment[]>([]);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [users, setUsers] = useState<User[]>([]);
+    const [shoots, setShoots] = useState<Shoot[]>([]);
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [viewMode, setViewMode] = useState<'card' | 'table'>(() => {
         if (typeof window !== 'undefined') {
             return (sessionStorage.getItem('verificationViewMode') as 'card' | 'table') || 'card';
@@ -72,10 +84,12 @@ export default function VerificationPage() {
             const items = await storage.getEquipment(effectiveDeptId);
             const txns = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, effectiveDeptId);
             const usersList = await storage.getUsers(effectiveDeptId);
+            const shootsList = await storage.getShoots(effectiveDeptId);
 
             setPendingItems(items.filter(i => i.status === 'PENDING_VERIFICATION'));
             setTransactions(txns);
             setUsers(usersList);
+            setShoots(shootsList);
         } catch (error) {
             console.error("Failed to load items", error);
         } finally {
@@ -159,49 +173,6 @@ export default function VerificationPage() {
         });
     }, [pendingItems, sortField, sortDirection, getItemTransaction, getUserName, compareByName]);
 
-    // Group items by transaction/project for card view
-    const groupedItems = useMemo(() => {
-        const groups: {
-            [key: string]: {
-                key: string;
-                project: string;
-                txnId: string;
-                date: string;
-                timestamp: number;
-                items: Equipment[];
-            }
-        } = {};
-
-        pendingItems.forEach(item => {
-            const txn = getItemTransaction(item.id);
-            const key = txn?.id || 'no-txn';
-            const timestampSource = txn?.timestampIn || item.lastActivity;
-
-            if (!groups[key]) {
-                groups[key] = {
-                    key,
-                    project: txn?.project && txn.project.trim() !== '' ? txn.project : 'General Return',
-                    txnId: txn ? formatTxnId(txn.id) : '',
-                    date: formatDate(timestampSource),
-                    timestamp: new Date(timestampSource || 0).getTime(),
-                    items: []
-                };
-            }
-            groups[key].items.push(item);
-        });
-
-        return Object.values(groups)
-            .map(group => ({
-                ...group,
-                items: [...group.items].sort(compareByName)
-            }))
-            .sort((a, b) => {
-                const dateComparison = b.timestamp - a.timestamp;
-                if (dateComparison !== 0) return dateComparison;
-                return a.project.localeCompare(b.project, undefined, { sensitivity: 'base', numeric: true });
-            });
-    }, [pendingItems, getItemTransaction, formatTxnId, formatDate, compareByName]);
-
     const pendingManualItems = useMemo<PendingManualItem[]>(() => {
         return transactions
             .filter(txn => txn.status === 'OPEN')
@@ -211,6 +182,81 @@ export default function VerificationPage() {
             )
             .sort((a, b) => a.item.name.localeCompare(b.item.name, undefined, { sensitivity: 'base', numeric: true }));
     }, [transactions]);
+
+    const verificationGroups = useMemo<VerificationGroup[]>(() => {
+        const groups: Record<string, VerificationGroup> = {};
+
+        const getGroupForTransaction = (txn?: Transaction, fallbackDate?: string) => {
+            const linkedShoot = txn?.shootId ? shoots.find(shoot => shoot.id === txn.shootId) : undefined;
+            const key = linkedShoot ? `shoot:${linkedShoot.id}` : txn ? `transaction:${txn.id}` : 'unlinked';
+            const shootPrefix = linkedShoot?.shootNumber ? `#${linkedShoot.shootNumber} ` : '';
+            const title = linkedShoot
+                ? `${shootPrefix}${linkedShoot.title}`
+                : txn?.project && txn.project.trim() !== ''
+                    ? txn.project
+                    : 'General Return';
+            const timestampSource = fallbackDate || txn?.timestampIn || linkedShoot?.startTime || txn?.timestampOut;
+            const timestamp = new Date(timestampSource || 0).getTime();
+
+            if (!groups[key]) {
+                groups[key] = {
+                    key,
+                    title,
+                    txnId: txn ? formatTxnId(txn.id) : '',
+                    date: formatDate(timestampSource),
+                    timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
+                    transactionIds: [],
+                    items: [],
+                    manualItems: [],
+                };
+            }
+
+            if (txn && !groups[key].transactionIds.includes(txn.id)) {
+                groups[key].transactionIds.push(txn.id);
+            }
+
+            if (!Number.isNaN(timestamp) && timestamp > groups[key].timestamp) {
+                groups[key].timestamp = timestamp;
+                groups[key].date = formatDate(timestampSource);
+            }
+
+            return groups[key];
+        };
+
+        pendingItems.forEach(item => {
+            const txn = getItemTransaction(item.id);
+            getGroupForTransaction(txn, item.lastActivity).items.push(item);
+        });
+
+        pendingManualItems.forEach(row => {
+            getGroupForTransaction(row.transaction, row.item.returnedAt || row.transaction.timestampIn).manualItems.push(row);
+        });
+
+        return Object.values(groups)
+            .map(group => ({
+                ...group,
+                items: [...group.items].sort(compareByName),
+                manualItems: [...group.manualItems].sort((a, b) =>
+                    a.item.name.localeCompare(b.item.name, undefined, { sensitivity: 'base', numeric: true })
+                ),
+            }))
+            .sort((a, b) => {
+                const dateComparison = b.timestamp - a.timestamp;
+                if (dateComparison !== 0) return dateComparison;
+                return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+            });
+    }, [pendingItems, pendingManualItems, shoots, getItemTransaction, formatTxnId, formatDate, compareByName]);
+
+    useEffect(() => {
+        setExpandedGroups(prev => {
+            const validKeys = new Set(verificationGroups.map(group => group.key));
+            const next = new Set([...prev].filter(key => validKeys.has(key)));
+            if (verificationGroups.length === 1) {
+                next.add(verificationGroups[0].key);
+            }
+            return next;
+        });
+    }, [verificationGroups]);
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
@@ -254,6 +300,18 @@ export default function VerificationPage() {
 
     const clearSelection = () => {
         setSelectedItems(new Set());
+    };
+
+    const toggleGroupExpanded = (groupKey: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupKey)) {
+                next.delete(groupKey);
+            } else {
+                next.add(groupKey);
+            }
+            return next;
+        });
     };
 
     const handleVerify = async (
@@ -580,6 +638,44 @@ export default function VerificationPage() {
             </div>
         );
     };
+
+    const renderManualVerificationCard = (row: PendingManualItem) => (
+        <div key={row.key} className="rounded-xl border border-amber-300/60 bg-white p-5 shadow-sm dark:bg-[#1c1c1e]">
+            <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="mb-1 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                        Manual
+                    </div>
+                    <h3 className="truncate text-[15px] font-bold text-gray-900 dark:text-white">{row.item.name}</h3>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        Qty {row.item.returnedQuantity || row.item.quantity} - {row.transaction.project || 'General'}
+                    </p>
+                </div>
+                <span className="rounded-lg bg-amber-500 px-2 py-1 text-[10px] font-bold uppercase text-black">
+                    Pending
+                </span>
+            </div>
+            {row.item.returnNote && (
+                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                    {row.item.returnNote}
+                </p>
+            )}
+            <div className="flex gap-2">
+                <button
+                    onClick={() => handleVerifyManualItem(row, 'RETURNED')}
+                    className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white transition-transform active:scale-95"
+                >
+                    Verify
+                </button>
+                <button
+                    onClick={() => handleVerifyManualItem(row, 'MISSING')}
+                    className="rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white transition-transform active:scale-95"
+                >
+                    Missing
+                </button>
+            </div>
+        </div>
+    );
 
     // Sort indicator component
     const SortIndicator = ({ field }: { field: SortField }) => {
@@ -909,8 +1005,8 @@ export default function VerificationPage() {
                 </div>
             ) : (
                 /* ========== CARD VIEW ========== */
-                <div className="space-y-6 pb-[calc(var(--mobile-tab-height)+5rem)] md:pb-0">
-                    {pendingManualItems.length > 0 && (
+                <div className="space-y-3 pb-[calc(var(--mobile-tab-height)+5rem)] md:pb-0">
+                    {pendingManualItems.length > 0 && verificationGroups.length === 0 && (
                         <section className="space-y-3">
                             <div>
                                 <h2 className="text-sm font-bold text-gray-900 dark:text-white">Manual Items</h2>
@@ -958,35 +1054,72 @@ export default function VerificationPage() {
                         </section>
                     )}
 
-                    {groupedItems.map((group) => {
-                        const groupSelected = group.items.every(item => selectedItems.has(item.id));
+                    {verificationGroups.map((group) => {
+                        const groupSelected = group.items.length > 0 && group.items.every(item => selectedItems.has(item.id));
+                        const isExpanded = expandedGroups.has(group.key);
+                        const totalItems = group.items.length + group.manualItems.length;
 
                         return (
-                            <section key={group.key} className="space-y-3">
-                                {groupedItems.length > 1 && (
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <h2 className="truncate text-sm font-bold text-gray-900 dark:text-white">
-                                                {group.project}
+                            <section key={group.key} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-[#1c1c1e]">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleGroupExpanded(group.key)}
+                                    className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40"
+                                    aria-expanded={isExpanded}
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <svg
+                                                className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                strokeWidth={2.5}
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
+                                            </svg>
+                                            <h2 className="truncate text-base font-bold text-gray-900 dark:text-white">
+                                                {group.title}
                                             </h2>
-                                            <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                                {group.txnId && <span className="font-mono">{group.txnId}</span>}
-                                                <span>{group.date}</span>
-                                                <span>{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
-                                            </div>
                                         </div>
-                                        <button
-                                            onClick={() => toggleGroupSelection(group.items)}
-                                            className="shrink-0 rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 dark:border-gray-800"
-                                        >
-                                            {groupSelected ? 'Clear' : 'Select'}
-                                        </button>
+                                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-gray-500 dark:text-gray-400">
+                                            {group.transactionIds.length > 1 ? (
+                                                <span>{group.transactionIds.length} transactions</span>
+                                            ) : (
+                                                group.txnId && <span className="font-mono">{group.txnId}</span>
+                                            )}
+                                            <span>{group.date}</span>
+                                            <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+                                            {group.manualItems.length > 0 && (
+                                                <span className="text-amber-600 dark:text-amber-300">
+                                                    {group.manualItems.length} manual
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                                        {isExpanded ? 'Hide' : 'Open'}
+                                    </span>
+                                </button>
+
+                                {isExpanded && (
+                                    <div className="border-t border-gray-100 p-4 dark:border-gray-800">
+                                        {group.items.length > 0 && (
+                                            <div className="mb-3 flex justify-end">
+                                                <button
+                                                    onClick={() => toggleGroupSelection(group.items)}
+                                                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 dark:border-gray-800"
+                                                >
+                                                    {groupSelected ? 'Clear inventory' : 'Select inventory'}
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                                            {group.items.map(renderVerificationCard)}
+                                            {group.manualItems.map(renderManualVerificationCard)}
+                                        </div>
                                     </div>
                                 )}
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                                    {group.items.map(renderVerificationCard)}
-                                </div>
                             </section>
                         );
                     })}

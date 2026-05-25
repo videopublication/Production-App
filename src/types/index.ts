@@ -94,7 +94,7 @@ export interface Transaction {
     timestampOut: string;
     timestampIn?: string;
     project?: string;
-    shootId?: string; // Link to assigned shoot
+    shootId?: string | null; // Link to assigned shoot
     preCheckoutConditions: Record<string, Condition>; // ItemID -> Condition
     postReturnConditions?: Record<string, Condition>;
     status: 'OPEN' | 'CLOSED';

@@ -15,6 +15,9 @@ const savedTokenByUserId = new Map<string, string>();
 const saveTokenPromises = new Map<string, Promise<void>>();
 
 const FCM_TOKEN_STORAGE_KEY = 'fcm-token';
+const MESSAGING_SW_PATH = process.env.NODE_ENV === 'development'
+    ? '/firebase-messaging-sw.js'
+    : '/sw.js';
 
 function getNotificationPermission(): NotificationPermissionState {
     if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -45,7 +48,10 @@ function cacheToken(token: string) {
 }
 
 function usesExpectedWorker(registration?: ServiceWorkerRegistration | null) {
-    return registration?.active?.scriptURL.endsWith('/sw.js') ?? false;
+    const worker = registration?.active || registration?.waiting || registration?.installing;
+    if (!worker?.scriptURL) return false;
+
+    return new URL(worker.scriptURL).pathname === MESSAGING_SW_PATH;
 }
 
 async function waitForInstallingWorker(registration: ServiceWorkerRegistration) {
@@ -70,7 +76,11 @@ async function getMessagingServiceWorkerRegistration() {
     let registration = await navigator.serviceWorker.getRegistration('/');
 
     if (!usesExpectedWorker(registration)) {
-        registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        if (registration) {
+            await registration.unregister();
+        }
+
+        registration = await navigator.serviceWorker.register(MESSAGING_SW_PATH, { scope: '/' });
         await waitForInstallingWorker(registration);
     }
 
