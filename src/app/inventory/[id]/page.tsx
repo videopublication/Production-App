@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Equipment, EquipmentStatus, Condition, Log, Transaction, Shoot } from '@/types';
+import { Equipment, EquipmentStatus, Condition, Log, Transaction, Shoot, EquipmentIssueSeverity, EquipmentIssueType } from '@/types';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
@@ -13,7 +13,18 @@ import Image from 'next/image';
 import { useEquipmentItem, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
 import { useDepartment } from '@/lib/department-context';
-import { CONDITION_LABELS, getEquipmentIssue, isIssueCondition, withActiveIssue } from '@/lib/equipment-issues';
+import {
+    EQUIPMENT_ISSUE_SEVERITY_LABELS,
+    EQUIPMENT_ISSUE_SEVERITY_OPTIONS,
+    EQUIPMENT_ISSUE_TYPE_LABELS,
+    EQUIPMENT_ISSUE_TYPE_OPTIONS,
+    getEquipmentIssue,
+    getIssueSummary,
+    isIssueCondition,
+    issueToCondition,
+    withActiveIssue,
+} from '@/lib/equipment-issues';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export default function ItemDetailsPage() {
     const params = useParams();
@@ -50,6 +61,12 @@ export default function ItemDetailsPage() {
     const [editSerialNumber, setEditSerialNumber] = useState('');
     const [editHasActiveIssue, setEditHasActiveIssue] = useState(false);
     const [editIssueNote, setEditIssueNote] = useState('');
+    const [showIssueForm, setShowIssueForm] = useState(false);
+    const [issueType, setIssueType] = useState<EquipmentIssueType>('PHYSICAL_DAMAGE');
+    const [issueSeverity, setIssueSeverity] = useState<EquipmentIssueSeverity>('USABLE_WITH_WARNING');
+    const [issueNote, setIssueNote] = useState('');
+    const [resolutionNote, setResolutionNote] = useState('');
+    const [isIssueSaving, setIsIssueSaving] = useState(false);
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
@@ -67,6 +84,10 @@ export default function ItemDetailsPage() {
             const activeIssue = getEquipmentIssue(item);
             setEditHasActiveIssue(!!activeIssue);
             setEditIssueNote(activeIssue?.note || '');
+            setIssueType(activeIssue?.issueType || 'PHYSICAL_DAMAGE');
+            setIssueSeverity(activeIssue?.severity || 'USABLE_WITH_WARNING');
+            setIssueNote('');
+            setResolutionNote('');
 
             // QR & Assigned User Logic
             const generateQR = async () => {
@@ -161,26 +182,185 @@ export default function ItemDetailsPage() {
     const canManage = user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
     // Admin can edit everything including critical fields
     const canEditEverything = user && ['ADMIN', 'SUPER_ADMIN'].includes(user.role);
+    const activeIssue = getEquipmentIssue(item);
+
+    const notifyManagersAboutIssue = async (title: string, message: string) => {
+        if (!item) return;
+        const recipients = users.filter(u =>
+            u.status === 'ACTIVE' &&
+            ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role) &&
+            u.id !== user?.id
+        );
+
+        if (recipients.length === 0) return;
+
+        const link = `/inventory/${encodeURIComponent(item.barcode)}`;
+        await Promise.all(recipients.map(recipient =>
+            storage.addNotification({
+                userId: recipient.id,
+                title,
+                message,
+                link,
+                departmentId: item.departmentId || effectiveDeptId
+            })
+        ));
+
+        sendPushNotification({
+            userIds: recipients.map(recipient => recipient.id),
+            title,
+            message,
+            link
+        }).catch(error => console.error('Equipment issue push notification failed', error));
+    };
+
+    const handleReportIssue = async () => {
+        if (!item || !user || isIssueSaving) return;
+
+        if (!issueNote.trim()) {
+            setSaveMessage('Issue note is required');
+            setTimeout(() => setSaveMessage(''), 3000);
+            return;
+        }
+
+        const nextIssue = {
+            condition: issueToCondition(issueType, issueSeverity),
+            issueType,
+            severity: issueSeverity,
+            note: issueNote.trim(),
+            source: 'crew_report' as const,
+            reportedAt: new Date().toISOString(),
+            reportedBy: user.id,
+            reporterName: user.name,
+        };
+
+        setIsIssueSaving(true);
+        try {
+            await updateEquipment({
+                id: item.id,
+                updates: {
+                    condition: nextIssue.condition,
+                    metadata: withActiveIssue(item.metadata, nextIssue),
+                }
+            });
+
+            const issueSummary = getIssueSummary(nextIssue);
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: item.id,
+                userId: user.id,
+                timestamp: new Date().toISOString(),
+                details: `Reported issue for "${item.name}" (${item.barcode}): ${issueSummary}. ${nextIssue.note}`,
+                oldValue: activeIssue,
+                newValue: nextIssue,
+                departmentId: item.departmentId || effectiveDeptId || undefined
+            });
+
+            await notifyManagersAboutIssue(
+                'Equipment Issue Reported',
+                `${item.name}: ${issueSummary}`
+            );
+
+            setShowIssueForm(false);
+            setIssueNote('');
+            setSaveMessage('Issue reported successfully. Managers have been notified.');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } catch (err) {
+            console.error('Failed to report issue:', err);
+            setSaveMessage('Failed to report issue');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } finally {
+            setIsIssueSaving(false);
+        }
+    };
+
+    const handleClearIssue = async () => {
+        if (!item || !user || !canManage || isIssueSaving) return;
+
+        setIsIssueSaving(true);
+        try {
+            await updateEquipment({
+                id: item.id,
+                updates: {
+                    condition: 'OK',
+                    metadata: withActiveIssue(item.metadata, null),
+                }
+            });
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'VERIFY',
+                entityId: item.id,
+                userId: user.id,
+                timestamp: new Date().toISOString(),
+                details: `Cleared issue for "${item.name}" (${item.barcode})${resolutionNote.trim() ? `: ${resolutionNote.trim()}` : ''}`,
+                oldValue: activeIssue,
+                newValue: { cleared: true, resolutionNote: resolutionNote.trim() || undefined },
+                departmentId: item.departmentId || effectiveDeptId || undefined
+            });
+
+            setResolutionNote('');
+            setSaveMessage('Issue cleared successfully');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } catch (err) {
+            console.error('Failed to clear issue:', err);
+            setSaveMessage('Failed to clear issue');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } finally {
+            setIsIssueSaving(false);
+        }
+    };
+
+    const handleMoveToMaintenance = async () => {
+        if (!item || !user || !canManage || isIssueSaving) return;
+
+        setIsIssueSaving(true);
+        try {
+            await updateEquipment({
+                id: item.id,
+                updates: {
+                    status: 'MAINTENANCE',
+                    condition: 'DAMAGED',
+                    assignedTo: null as unknown as string,
+                }
+            });
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: item.id,
+                userId: user.id,
+                timestamp: new Date().toISOString(),
+                details: `Moved "${item.name}" (${item.barcode}) to maintenance${resolutionNote.trim() ? `: ${resolutionNote.trim()}` : ''}`,
+                oldValue: { status: item.status, condition: item.condition },
+                newValue: { status: 'MAINTENANCE', condition: 'DAMAGED' },
+                departmentId: item.departmentId || effectiveDeptId || undefined
+            });
+
+            setSaveMessage('Item moved to maintenance successfully');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } catch (err) {
+            console.error('Failed to move item to maintenance:', err);
+            setSaveMessage('Failed to move item to maintenance');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } finally {
+            setIsIssueSaving(false);
+        }
+    };
 
     // Handle save changes
     // Handle save changes
     const handleSaveChanges = async () => {
         if (!item || !canManage) return;
 
-        if (editHasActiveIssue && !isIssueCondition(editCondition)) {
-            setSaveMessage('Choose a non-OK condition before saving a checkout warning');
-            setTimeout(() => setSaveMessage(''), 3000);
-            return;
-        }
-
         if (editStatus === 'AVAILABLE' && isIssueCondition(editCondition) && !editHasActiveIssue) {
-            setSaveMessage('Available items with a non-OK condition need a checkout warning note');
+            setSaveMessage('Available items with a non-OK condition need an active issue note');
             setTimeout(() => setSaveMessage(''), 3000);
             return;
         }
 
         if (editHasActiveIssue && !editIssueNote.trim()) {
-            setSaveMessage('Issue note is required for checkout warnings');
+            setSaveMessage('Issue note is required');
             setTimeout(() => setSaveMessage(''), 3000);
             return;
         }
@@ -188,13 +368,17 @@ export default function ItemDetailsPage() {
         setIsSaving(true);
         try {
             const existingIssue = getEquipmentIssue(item);
-            const activeIssue = editHasActiveIssue
+            const nextCondition = editHasActiveIssue ? issueToCondition(issueType, issueSeverity) : editCondition;
+            const editedIssue = editHasActiveIssue
                 ? {
-                    condition: editCondition,
+                    issueType,
+                    severity: issueSeverity,
+                    condition: nextCondition,
                     note: editIssueNote.trim(),
                     source: existingIssue?.source || ('manual' as const),
                     reportedAt: existingIssue?.reportedAt || new Date().toISOString(),
                     reportedBy: existingIssue?.reportedBy || user?.id,
+                    reporterName: existingIssue?.reporterName || user?.name,
                     verifiedAt: existingIssue?.verifiedAt,
                     verifiedBy: existingIssue?.verifiedBy,
                 }
@@ -202,11 +386,11 @@ export default function ItemDetailsPage() {
 
             const updates: Partial<Equipment> = {
                 status: editStatus,
-                condition: editCondition,
+                condition: nextCondition,
                 location: editLocation,
                 // Clear assignedTo if status is AVAILABLE
                 assignedTo: editStatus === 'AVAILABLE' ? null as unknown as string : item.assignedTo,
-                metadata: withActiveIssue(item.metadata, activeIssue),
+                metadata: withActiveIssue(item.metadata, editedIssue),
             };
 
             // Only add critical fields if user is ADMIN and they have changed
@@ -226,7 +410,8 @@ export default function ItemDetailsPage() {
                 entityId: item.id,
                 userId: user.id,
                 timestamp: new Date().toISOString(),
-                details: `Updated item "${item.name}" (${item.barcode}). Status: ${editStatus}, Condition: ${editCondition}${activeIssue ? `, Checkout warning: ${activeIssue.note}` : ''}`
+                details: `Updated item "${item.name}" (${item.barcode}). Status: ${editStatus}, Condition: ${nextCondition}${editedIssue ? `, Issue: ${getIssueSummary(editedIssue)} - ${editedIssue.note}` : ''}`,
+                departmentId: item.departmentId || effectiveDeptId || undefined
             });
 
             setIsEditing(false);
@@ -254,6 +439,8 @@ export default function ItemDetailsPage() {
             const activeIssue = getEquipmentIssue(item);
             setEditHasActiveIssue(!!activeIssue);
             setEditIssueNote(activeIssue?.note || '');
+            setIssueType(activeIssue?.issueType || 'PHYSICAL_DAMAGE');
+            setIssueSeverity(activeIssue?.severity || 'USABLE_WITH_WARNING');
         }
         setIsEditing(false);
     };
@@ -399,26 +586,140 @@ export default function ItemDetailsPage() {
                 </div>
             </div>
 
-            {getEquipmentIssue(item) && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-                    <div className="flex items-start gap-3">
-                        <svg className="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                        </svg>
-                        <div className="min-w-0">
-                            <p className="text-sm font-bold">Checkout warning active</p>
-                            <p className="mt-1 text-sm leading-relaxed">{getEquipmentIssue(item)?.note}</p>
-                        </div>
+            <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <p className="text-sm font-bold text-foreground">Item Issue Status</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Crew can report problems here. Active issues appear in Needs Attention and during checkout.
+                        </p>
                     </div>
+                    {!activeIssue && (
+                        <button
+                            type="button"
+                            onClick={() => setShowIssueForm(prev => !prev)}
+                            className="inline-flex h-10 items-center justify-center rounded-full bg-amber-500 px-4 text-sm font-bold text-black transition-colors hover:bg-amber-400"
+                        >
+                            {showIssueForm ? 'Cancel' : 'Report Issue'}
+                        </button>
+                    )}
                 </div>
-            )}
 
-            {!getEquipmentIssue(item) && item.status === 'AVAILABLE' && isIssueCondition(item.condition) && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-                    <p className="text-sm font-bold">This item has a non-OK condition but no checkout warning note.</p>
-                    <p className="mt-1 text-sm">Click Edit and add a warning note so checkout users can see the issue before taking it.</p>
-                </div>
-            )}
+                {activeIssue ? (
+                    <div className={`mt-4 rounded-2xl border p-4 ${activeIssue.severity === 'NOT_USABLE'
+                        ? 'border-red-300 bg-red-50 text-red-950 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100'
+                        : 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100'
+                        }`}>
+                        <div className="flex items-start gap-3">
+                            <svg className="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                            </svg>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-bold">{EQUIPMENT_ISSUE_TYPE_LABELS[activeIssue.issueType]}</span>
+                                    <span className="rounded-full bg-black/10 px-2 py-0.5 text-xs font-bold dark:bg-white/10">
+                                        {EQUIPMENT_ISSUE_SEVERITY_LABELS[activeIssue.severity]}
+                                    </span>
+                                </div>
+                                <p className="mt-2 text-sm leading-relaxed">{activeIssue.note}</p>
+                                <p className="mt-2 text-xs opacity-80">
+                                    Reported {activeIssue.reporterName ? `by ${activeIssue.reporterName} ` : ''}
+                                    {activeIssue.reportedAt ? new Date(activeIssue.reportedAt).toLocaleString() : ''}
+                                </p>
+                            </div>
+                        </div>
+
+                        {canManage && (
+                            <div className="mt-4 space-y-3">
+                                <textarea
+                                    value={resolutionNote}
+                                    onChange={(e) => setResolutionNote(e.target.value)}
+                                    className="min-h-[84px] w-full rounded-xl border border-black/10 bg-white/80 px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary dark:border-white/10 dark:bg-background/80"
+                                    placeholder="Manager note before clearing or moving to maintenance..."
+                                />
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <button
+                                        type="button"
+                                        onClick={handleClearIssue}
+                                        disabled={isIssueSaving}
+                                        className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-60"
+                                    >
+                                        Clear Issue
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleMoveToMaintenance}
+                                        disabled={isIssueSaving}
+                                        className="inline-flex h-10 items-center justify-center rounded-full border border-current px-4 text-sm font-bold disabled:opacity-60"
+                                    >
+                                        Move to Maintenance
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        {showIssueForm && (
+                            <div className="mt-4 grid gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900 dark:bg-amber-950/20 sm:grid-cols-2">
+                                <label className="space-y-1.5">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Issue Type</span>
+                                    <select
+                                        value={issueType}
+                                        onChange={(e) => setIssueType(e.target.value as EquipmentIssueType)}
+                                        className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary"
+                                    >
+                                        {EQUIPMENT_ISSUE_TYPE_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="space-y-1.5">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Severity</span>
+                                    <select
+                                        value={issueSeverity}
+                                        onChange={(e) => setIssueSeverity(e.target.value as EquipmentIssueSeverity)}
+                                        className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary"
+                                    >
+                                        {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                    <span className="block text-xs text-muted-foreground">
+                                        {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.find(option => option.value === issueSeverity)?.description}
+                                    </span>
+                                </label>
+                                <label className="space-y-1.5 sm:col-span-2">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">What is the issue?</span>
+                                    <textarea
+                                        value={issueNote}
+                                        onChange={(e) => setIssueNote(e.target.value)}
+                                        className="min-h-[112px] w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="Example: Works normally, but the battery door is loose."
+                                    />
+                                </label>
+                                <div className="sm:col-span-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleReportIssue}
+                                        disabled={isIssueSaving}
+                                        className="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-60 sm:w-auto"
+                                    >
+                                        {isIssueSaving ? 'Reporting...' : 'Submit Issue'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {item.status === 'AVAILABLE' && isIssueCondition(item.condition) && (
+                            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                                <p className="text-sm font-bold">This item has a non-OK condition but no active issue note.</p>
+                                <p className="mt-1 text-sm">Use Report Issue so checkout users can see what needs attention.</p>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">
@@ -598,29 +899,62 @@ export default function ItemDetailsPage() {
                             </div>
 
                             {isEditing && canManage && (
-                                <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-800 dark:bg-amber-950/20">
-                                    <label className="flex items-start gap-3 text-sm font-semibold text-amber-900 dark:text-amber-100">
-                                        <input
-                                            type="checkbox"
-                                            checked={editHasActiveIssue}
-                                            onChange={(e) => setEditHasActiveIssue(e.target.checked)}
-                                            className="mt-1 h-4 w-4 rounded border-amber-300 accent-amber-500"
-                                        />
-                                        <span>
-                                            Show checkout warning for this item
-                                            <span className="block text-xs font-medium text-amber-700 dark:text-amber-300">
-                                                Use this when the item is available but has an issue users must know before checkout.
-                                            </span>
-                                        </span>
-                                    </label>
+                                <div className="space-y-4 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-amber-950 dark:text-amber-100">Active Issue</p>
+                                            <p className="mt-0.5 text-xs font-medium leading-relaxed text-amber-800 dark:text-amber-300">
+                                                Use this when the item is usable with a warning or should be blocked from checkout.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditHasActiveIssue(prev => !prev)}
+                                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${editHasActiveIssue
+                                                ? 'bg-amber-500 text-black'
+                                                : 'bg-background text-muted-foreground border border-border'
+                                                }`}
+                                        >
+                                            {editHasActiveIssue ? 'On' : 'Off'}
+                                        </button>
+                                    </div>
 
                                     {editHasActiveIssue && (
-                                        <textarea
-                                            value={editIssueNote}
-                                            onChange={(e) => setEditIssueNote(e.target.value)}
-                                            className="min-h-[92px] w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-700 dark:bg-background"
-                                            placeholder="Example: Camera works, but audio input is not working."
-                                        />
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <label className="space-y-1.5">
+                                                <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Type</span>
+                                                <select
+                                                    value={issueType}
+                                                    onChange={(e) => setIssueType(e.target.value as EquipmentIssueType)}
+                                                    className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                                >
+                                                    {EQUIPMENT_ISSUE_TYPE_OPTIONS.map(option => (
+                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                            <label className="space-y-1.5">
+                                                <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Severity</span>
+                                                <select
+                                                    value={issueSeverity}
+                                                    onChange={(e) => setIssueSeverity(e.target.value as EquipmentIssueSeverity)}
+                                                    className="h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                                >
+                                                    {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.map(option => (
+                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                            <label className="space-y-1.5 sm:col-span-2">
+                                                <span className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Issue Note</span>
+                                                <textarea
+                                                    value={editIssueNote}
+                                                    onChange={(e) => setEditIssueNote(e.target.value)}
+                                                    className="min-h-[104px] w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-800 dark:bg-background"
+                                                    placeholder="Example: Fully working, but audio input is noisy."
+                                                />
+                                            </label>
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -631,7 +965,7 @@ export default function ItemDetailsPage() {
                                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                                         </svg>
-                                        Checkout Warning ({CONDITION_LABELS[getEquipmentIssue(item)!.condition]})
+                                        {getIssueSummary(getEquipmentIssue(item)!)}
                                     </div>
                                     <p className="leading-relaxed">{getEquipmentIssue(item)?.note}</p>
                                 </div>
@@ -645,7 +979,11 @@ export default function ItemDetailsPage() {
                                     </svg>
                                     Condition
                                 </dt>
-                                {isEditing && canManage ? (
+                                {isEditing && canManage && editHasActiveIssue ? (
+                                    <dd className="max-w-[180px] text-right text-sm font-semibold text-amber-600 dark:text-amber-300">
+                                        Managed by issue
+                                    </dd>
+                                ) : isEditing && canManage ? (
                                     <select
                                         value={editCondition}
                                         onChange={(e) => setEditCondition(e.target.value as Condition)}

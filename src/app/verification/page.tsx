@@ -3,15 +3,29 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Condition, Equipment, Transaction, User } from '@/types';
+import { Condition, Equipment, ManualTransactionItem, Transaction, User } from '@/types';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useDepartment } from '@/lib/department-context';
-import { CONDITION_LABELS, getEquipmentIssue, isIssueCondition, withActiveIssue } from '@/lib/equipment-issues';
+import {
+    CONDITION_LABELS,
+    conditionToIssueSeverity,
+    conditionToIssueType,
+    getEquipmentIssue,
+    getIssueSummary,
+    isIssueCondition,
+    withActiveIssue,
+} from '@/lib/equipment-issues';
+import { areManualItemsComplete } from '@/lib/transaction-manual-items';
 
 type SortField = 'item' | 'project' | 'user' | 'date';
 type SortDirection = 'asc' | 'desc';
 type IssueDialogMode = 'AVAILABLE_WITH_ISSUE' | 'MAINTENANCE';
+type PendingManualItem = {
+    transaction: Transaction;
+    item: ManualTransactionItem;
+    key: string;
+};
 
 import { Skeleton } from '@/components/Skeleton';
 
@@ -188,6 +202,16 @@ export default function VerificationPage() {
             });
     }, [pendingItems, getItemTransaction, formatTxnId, formatDate, compareByName]);
 
+    const pendingManualItems = useMemo<PendingManualItem[]>(() => {
+        return transactions
+            .filter(txn => txn.status === 'OPEN')
+            .flatMap(txn => (txn.manualItems || [])
+                .filter(item => item.status === 'PENDING_VERIFICATION')
+                .map(item => ({ transaction: txn, item, key: `${txn.id}:${item.id}` }))
+            )
+            .sort((a, b) => a.item.name.localeCompare(b.item.name, undefined, { sensitivity: 'base', numeric: true }));
+    }, [transactions]);
+
     const handleSort = (field: SortField) => {
         if (sortField === field) {
             setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -255,10 +279,13 @@ export default function VerificationPage() {
             const activeIssue = options?.issueNote?.trim()
                 ? {
                     condition: issueCondition,
+                    issueType: conditionToIssueType(issueCondition),
+                    severity: conditionToIssueSeverity(issueCondition),
                     note: options.issueNote.trim(),
                     source: 'verification' as const,
                     reportedAt: getEquipmentIssue(item)?.reportedAt || new Date().toISOString(),
                     reportedBy: getEquipmentIssue(item)?.reportedBy,
+                    reporterName: getEquipmentIssue(item)?.reporterName,
                     verifiedAt: new Date().toISOString(),
                     verifiedBy: user?.id,
                 }
@@ -282,7 +309,7 @@ export default function VerificationPage() {
 
             if (user) {
                 const projectText = relatedTransaction ? ` for project "${relatedTransaction.project || 'Unspecified'}"` : '';
-                const issueText = activeIssue ? `, Issue: ${CONDITION_LABELS[activeIssue.condition]} - ${activeIssue.note}` : '';
+                const issueText = activeIssue ? `, Issue: ${getIssueSummary(activeIssue)} - ${activeIssue.note}` : '';
                 await storage.addLog({
                     id: crypto.randomUUID(),
                     action: 'VERIFY',
@@ -305,7 +332,7 @@ export default function VerificationPage() {
 
                 const allItemsReturned = relatedTransaction.items.every(itemId =>
                     updatedConditions[itemId] !== undefined
-                );
+                ) && areManualItemsComplete(relatedTransaction.manualItems);
 
                 const txnUpdates: Partial<Transaction> = {
                     postReturnConditions: updatedConditions
@@ -354,6 +381,53 @@ export default function VerificationPage() {
 
         clearSelection();
         showToast(`Verified ${count} items`, 'success');
+    };
+
+    const handleVerifyManualItem = async (row: PendingManualItem, status: 'RETURNED' | 'MISSING') => {
+        try {
+            const updatedManualItems = (row.transaction.manualItems || []).map(item =>
+                item.id === row.item.id
+                    ? {
+                        ...item,
+                        status,
+                        verifiedAt: new Date().toISOString(),
+                        verifiedBy: user?.id,
+                    }
+                    : item
+            );
+
+            const inventoryComplete = row.transaction.items.every(itemId =>
+                row.transaction.postReturnConditions?.[itemId] !== undefined
+            );
+            const txnUpdates: Partial<Transaction> = {
+                manualItems: updatedManualItems
+            };
+
+            if (inventoryComplete && areManualItemsComplete(updatedManualItems)) {
+                txnUpdates.status = 'CLOSED';
+                txnUpdates.timestampIn = new Date().toISOString();
+            }
+
+            await storage.updateTransaction(row.transaction.id, txnUpdates);
+
+            if (user) {
+                await storage.addLog({
+                    id: crypto.randomUUID(),
+                    action: 'VERIFY',
+                    entityId: row.transaction.id,
+                    userId: user.id,
+                    timestamp: new Date().toISOString(),
+                    details: `Verified manual item "${row.item.name}" as ${status.toLowerCase()}`,
+                    departmentId: effectiveDeptId || undefined
+                });
+            }
+
+            await loadItems();
+            showToast(`Manual item marked ${status.toLowerCase()}`, 'success');
+        } catch (error) {
+            console.error('Failed to verify manual item', error);
+            showToast('Failed to verify manual item', 'error');
+        }
     };
 
     const openIssueDialog = (itemIds: string[], mode: IssueDialogMode) => {
@@ -433,7 +507,7 @@ export default function VerificationPage() {
                         text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 uppercase tracking-wider
                         ${!hasIssue ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-900' : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-100 dark:border-yellow-900'}
                     `}>
-                        {!hasIssue ? 'Good' : CONDITION_LABELS[activeIssue?.condition || item.condition]}
+                        {!hasIssue ? 'Good' : activeIssue?.severity === 'NOT_USABLE' ? 'Not usable' : activeIssue ? 'Issue' : CONDITION_LABELS[item.condition]}
                     </span>
                 </div>
 
@@ -460,6 +534,7 @@ export default function VerificationPage() {
                                 </svg>
                                 Returned issue
                             </div>
+                            <p className="text-xs font-bold leading-snug">{getIssueSummary(activeIssue)}</p>
                             <p className="line-clamp-2 text-xs font-medium leading-snug">{activeIssue.note}</p>
                         </div>
                     )}
@@ -556,7 +631,7 @@ export default function VerificationPage() {
                 </div>
 
                 {/* Main Select All Toggle (Always Visible if items exist) */}
-                {pendingItems.length > 0 && (
+                {(pendingItems.length > 0 || pendingManualItems.length > 0) && (
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <span className="flex h-3 w-3 relative">
@@ -564,7 +639,7 @@ export default function VerificationPage() {
                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                             </span>
                             <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
-                                {pendingItems.length} items waiting for action
+                                {pendingItems.length + pendingManualItems.length} items waiting for action
                             </span>
                         </div>
 
@@ -681,6 +756,41 @@ export default function VerificationPage() {
                 </div>
             )}
 
+            {!isLoading && viewMode === 'table' && pendingItems.length > 0 && pendingManualItems.length > 0 && (
+                <section className="space-y-3">
+                    <div>
+                        <h2 className="text-sm font-bold text-gray-900 dark:text-white">Manual Items</h2>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Items without QR waiting for manager verification</p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {pendingManualItems.map(row => (
+                            <div key={row.key} className="rounded-xl border border-amber-300/60 bg-white p-4 shadow-sm dark:bg-[#1c1c1e]">
+                                <div className="mb-3 flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="mb-1 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                                            Manual
+                                        </div>
+                                        <h3 className="truncate text-sm font-bold text-gray-900 dark:text-white">{row.item.name}</h3>
+                                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                            Qty {row.item.returnedQuantity || row.item.quantity} - {row.transaction.project || 'General'}
+                                        </p>
+                                    </div>
+                                </div>
+                                {row.item.returnNote && (
+                                    <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                        {row.item.returnNote}
+                                    </p>
+                                )}
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleVerifyManualItem(row, 'RETURNED')} className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">Verify</button>
+                                    <button onClick={() => handleVerifyManualItem(row, 'MISSING')} className="rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white">Missing</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
             {/* Content States */}
             {isLoading ? (
                 viewMode === 'table' ? (
@@ -700,7 +810,7 @@ export default function VerificationPage() {
                         ))}
                     </div>
                 )
-            ) : pendingItems.length === 0 ? (
+            ) : pendingItems.length === 0 && pendingManualItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-[#1c1c1e] rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
                     <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
                         <svg className="w-8 h-8 text-primary/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -712,7 +822,7 @@ export default function VerificationPage() {
                         There are no items pending verification. Great job!
                     </p>
                 </div>
-            ) : viewMode === 'table' ? (
+            ) : viewMode === 'table' && pendingItems.length > 0 ? (
                 /* ========== TABLE VIEW ========== */
                 <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
@@ -759,7 +869,7 @@ export default function VerificationPage() {
                                                         <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">{item.barcode}</p>
                                                         {activeIssue && (
                                                             <p className="mt-1 max-w-xs truncate rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
-                                                                Issue: {activeIssue.note}
+                                                                {getIssueSummary(activeIssue)}: {activeIssue.note}
                                                             </p>
                                                         )}
                                                     </div>
@@ -800,6 +910,54 @@ export default function VerificationPage() {
             ) : (
                 /* ========== CARD VIEW ========== */
                 <div className="space-y-6 pb-[calc(var(--mobile-tab-height)+5rem)] md:pb-0">
+                    {pendingManualItems.length > 0 && (
+                        <section className="space-y-3">
+                            <div>
+                                <h2 className="text-sm font-bold text-gray-900 dark:text-white">Manual Items</h2>
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Items without QR waiting for manager verification</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {pendingManualItems.map(row => (
+                                    <div key={row.key} className="rounded-xl border border-amber-300/60 bg-white p-5 shadow-sm dark:bg-[#1c1c1e]">
+                                        <div className="mb-3 flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="mb-1 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                                                    Manual
+                                                </div>
+                                                <h3 className="truncate text-[15px] font-bold text-gray-900 dark:text-white">{row.item.name}</h3>
+                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                                    Qty {row.item.returnedQuantity || row.item.quantity} • {row.transaction.project || 'General'}
+                                                </p>
+                                            </div>
+                                            <span className="rounded-lg bg-amber-500 px-2 py-1 text-[10px] font-bold uppercase text-black">
+                                                Pending
+                                            </span>
+                                        </div>
+                                        {row.item.returnNote && (
+                                            <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                {row.item.returnNote}
+                                            </p>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => handleVerifyManualItem(row, 'RETURNED')}
+                                                className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white transition-transform active:scale-95"
+                                            >
+                                                Verify
+                                            </button>
+                                            <button
+                                                onClick={() => handleVerifyManualItem(row, 'MISSING')}
+                                                className="rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white transition-transform active:scale-95"
+                                            >
+                                                Missing
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
                     {groupedItems.map((group) => {
                         const groupSelected = group.items.every(item => selectedItems.has(item.id));
 

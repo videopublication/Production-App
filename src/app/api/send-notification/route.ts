@@ -229,25 +229,63 @@ async function getTokensForUsers(users: TargetUser[]) {
     };
 }
 
+function getNotificationLinks(link?: string) {
+    const rawLink = link || '/notifications';
+    if (/^https?:\/\//i.test(rawLink)) {
+        return {
+            dataLink: rawLink,
+            webPushLink: rawLink,
+        };
+    }
+
+    const dataLink = rawLink.startsWith('/') ? rawLink : `/${rawLink}`;
+    const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+    const origin = configuredOrigin.replace(/\/$/, '');
+
+    return {
+        dataLink,
+        webPushLink: origin ? `${origin}${dataLink}` : dataLink,
+    };
+}
+
 function buildMessage(token: string, title: string, message: string, link?: string): admin.messaging.Message {
-    const notificationLink = link || '/notifications';
+    const { dataLink, webPushLink } = getNotificationLinks(link);
     const timestamp = Date.now().toString();
+    const tag = `vp-app-${dataLink}`;
 
     return {
         token,
+        notification: {
+            title,
+            body: message,
+        },
         data: {
-            link: notificationLink,
+            link: dataLink,
             title,
             message,
             body: message,
             timestamp,
+            tag,
         },
         webpush: {
             headers: {
                 Urgency: 'high',
             },
+            notification: {
+                title,
+                body: message,
+                icon: '/icon-192.png',
+                badge: '/icon-192.png',
+                tag,
+                data: {
+                    link: dataLink,
+                },
+                requireInteraction: false,
+                silent: false,
+            },
             fcmOptions: {
-                link: notificationLink,
+                link: webPushLink,
             },
         },
     };

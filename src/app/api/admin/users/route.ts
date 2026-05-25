@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { z } from 'zod';
+
+const getErrorMessage = (error: unknown) => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    return 'Unknown error';
+};
 
 // Create admin client for admin operations (create user, change password, toggle status)
 const getSupabaseAdmin = () => {
@@ -58,7 +65,7 @@ async function ensureAdmin() {
     const supabaseAdmin = getSupabaseAdmin();
     const { data: profile } = await supabaseAdmin
         .from('users')
-        .select('role')
+        .select('role, department_id')
         .eq('id', user.id)
         .single();
     
@@ -66,10 +73,10 @@ async function ensureAdmin() {
         return { error: 'Forbidden: Admin access required', status: 403 }
     }
 
-    return { success: true }
+    return { success: true, user, profile }
 }
 
-export async function GET(request: Request) {
+export async function GET() {
     // 1. Verify User is Admin
     const authCheck = await ensureAdmin();
     if (authCheck.error) {
@@ -92,20 +99,18 @@ export async function GET(request: Request) {
 
         console.log('Successfully fetched users, count:', users?.length || 0);
         return NextResponse.json(users || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('API Route Error:', error);
-        return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 });
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }
-
-import { z } from 'zod';
 
 const createUserSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6),
     name: z.string().min(1),
     role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'FINANCE_MANAGER', 'CREW']),
-    departmentId: z.string().uuid().optional()
+    departmentId: z.string().uuid().nullable().optional()
 });
 
 export async function POST(request: Request) {
@@ -126,6 +131,23 @@ export async function POST(request: Request) {
         }
 
         const { email, password, name, role, departmentId } = result.data;
+        const requester = authCheck.profile;
+        if (!requester) {
+            return NextResponse.json({ error: 'Admin profile not found' }, { status: 403 });
+        }
+
+        if (requester.role !== 'SUPER_ADMIN' && role === 'SUPER_ADMIN') {
+            return NextResponse.json({ error: 'Only super admins can create super admin users' }, { status: 403 });
+        }
+
+        const assignedDepartmentId = requester.role === 'SUPER_ADMIN'
+            ? (departmentId || null)
+            : requester.department_id;
+
+        if (requester.role !== 'SUPER_ADMIN' && !assignedDepartmentId) {
+            return NextResponse.json({ error: 'Your admin account is not assigned to a department' }, { status: 400 });
+        }
+
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
@@ -145,7 +167,7 @@ export async function POST(request: Request) {
                         name,
                         role,
                         status: 'ACTIVE', // Admin created users are active by default
-                        department_id: departmentId
+                        department_id: assignedDepartmentId
                     }
                 ]);
 
@@ -157,8 +179,8 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({ message: 'User created successfully' });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }
 
@@ -200,7 +222,13 @@ export async function PUT(request: Request) {
             if (passwordError) throw passwordError;
         }
 
-        const updates: any = {};
+        const updates: {
+            status?: string;
+            role?: string;
+            department_id?: string | null;
+            is_primary_leave_approver?: boolean;
+            can_manage_expenses?: boolean;
+        } = {};
         if (status) updates.status = status;
         if (role) updates.role = role;
         if (departmentId !== undefined) updates.department_id = departmentId;
@@ -217,7 +245,7 @@ export async function PUT(request: Request) {
         }
 
         return NextResponse.json({ message: 'User updated successfully' });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

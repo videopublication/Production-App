@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { storage } from '@/lib/storage';
-import { Equipment, Transaction } from '@/types';
+import { Equipment, ManualTransactionItem, Transaction } from '@/types';
 import { generateTransactionId } from '@/lib/id';
 import { sendPushNotification } from '@/lib/push-notifications';
 
@@ -42,6 +42,7 @@ export function useCheckOut() {
             userId,
             additionalUsers = [],
             notes,
+            manualItems = [],
             location,
             project,
             id,
@@ -54,6 +55,7 @@ export function useCheckOut() {
             userId: string,
             additionalUsers?: string[],
             notes?: string,
+            manualItems?: ManualTransactionItem[],
             location?: string,
             project: string,
             id?: string,
@@ -78,6 +80,7 @@ export function useCheckOut() {
                 userId,
                 additionalUsers,
                 items: items.map(i => i.id),
+                manualItems,
                 timestampOut: new Date().toISOString(),
                 project,
                 shootId,
@@ -104,9 +107,11 @@ export function useCheckOut() {
             // 3. Log it
             const isBehalf = performerId && performerId !== userId;
             const logUserId = isBehalf ? performerId : userId;
+            const manualQuantity = manualItems.reduce((sum, item) => sum + item.quantity, 0);
+            const itemSummary = `${items.length} inventory item${items.length === 1 ? '' : 's'}${manualQuantity > 0 ? ` and ${manualQuantity} manual item${manualQuantity === 1 ? '' : 's'}` : ''}`;
             const detailsMsg = isBehalf && targetUserName
-                ? `Checked out ${items.length} items for ${project} on behalf of ${targetUserName}`
-                : `Checked out ${items.length} items for ${project}`;
+                ? `Checked out ${itemSummary} for ${project} on behalf of ${targetUserName}`
+                : `Checked out ${itemSummary} for ${project}`;
 
             await storage.addLog({
                 id: crypto.randomUUID(),
@@ -121,7 +126,7 @@ export function useCheckOut() {
             // 4. Notify the user
             if (userId !== performerId) {
                 const title = 'Equipment Checked Out';
-                const message = `Admin has checked out ${items.length} items to you for ${project}.`;
+                const message = `Admin has checked out ${itemSummary} to you for ${project}.`;
                 
                 await storage.addNotification({
                     userId,
@@ -150,7 +155,7 @@ export function useCheckOut() {
 
                 if (managerRecipients.length > 0) {
                     const title = 'Items Checked Out';
-                    const message = `${items.length} items checked out for ${project}.`;
+                    const message = `${itemSummary} checked out for ${project}.`;
                     const link = `/transactions/${transactionId}`;
 
                     await Promise.all(managerRecipients.map(manager =>

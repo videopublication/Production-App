@@ -455,7 +455,7 @@ export default function LeavesPage() {
 
     return (
         <div
-            className="px-2 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] pb-24 md:pb-6 relative transition-transform duration-200 ease-out"
+            className="px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] pb-28 md:pb-6 relative transition-transform duration-200 ease-out"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -480,35 +480,35 @@ export default function LeavesPage() {
             </div>
 
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Leaves</h1>
-                    <p className="text-sm text-gray-500 mt-1">Manage your time off requests</p>
+            <div className="space-y-3 sm:flex sm:items-end sm:justify-between sm:gap-4 sm:space-y-0">
+                <div className="min-w-0">
+                    <h1 className="text-3xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Leaves</h1>
+                    <p className="mt-1 text-[15px] text-gray-500 dark:text-gray-400">Manage your time off requests</p>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:flex-wrap">
                     <Link
                         href="/calendar"
-                        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                        className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-gray-300 px-3 text-[14px] font-semibold text-gray-600 transition-colors hover:border-primary hover:text-primary dark:border-gray-700 dark:text-gray-300 dark:hover:border-primary dark:hover:text-primary"
                     >
-                        <Calendar size={15} />
-                        <span className="hidden sm:inline">View Calendar</span>
-                        <ExternalLink size={12} />
+                        <Calendar size={17} />
+                        <span>Calendar</span>
+                        <ExternalLink size={13} className="hidden sm:block" />
                     </Link>
                     {isAdmin && (
                         <>
-                            <Button onClick={handleExport} variant="outline" className="gap-2 shrink-0 hidden sm:flex">
-                                <Download size={15} /> Export CSV
+                            <Button onClick={handleExport} variant="outline" className="h-11 rounded-2xl gap-2 shrink-0 px-3 sm:px-5">
+                                <Download size={16} /> Export CSV
                             </Button>
                             <Button
                                 onClick={() => setIsAdminModalOpen(true)}
-                                className="gap-2 shrink-0 bg-amber-600 hover:bg-amber-700 text-white border-none dark:bg-amber-700/80 dark:hover:bg-amber-600"
+                                className="col-span-2 h-12 rounded-2xl gap-2 shrink-0 bg-amber-600 hover:bg-amber-700 text-white border-none dark:bg-amber-700/80 dark:hover:bg-amber-600 sm:col-span-1"
                             >
                                 <Plus size={18} /> Record Absence
                             </Button>
                         </>
                     )}
                     {!isAdmin && (
-                        <Button onClick={() => setIsApplying(!isApplying)} className="gap-2 shrink-0">
+                        <Button onClick={() => setIsApplying(!isApplying)} className="col-span-2 h-12 rounded-2xl gap-2 shrink-0 sm:col-span-1">
                             {isApplying ? <XCircle size={18} /> : <Plus size={18} />}
                             {isApplying ? 'Cancel' : 'Apply for Leave'}
                         </Button>
@@ -518,34 +518,34 @@ export default function LeavesPage() {
 
             {/* Stats bar */}
             {isAdmin ? (
-                <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-white dark:bg-[#1c1c1e] rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Pending</p>
-                        <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">{statsData.pending}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">awaiting review</p>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    <div className="min-w-0 rounded-2xl border border-yellow-500/10 bg-yellow-500/5 p-3 dark:bg-[#1c1c1e] sm:p-4">
+                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">Pending</p>
+                        <p className="mt-1 text-3xl font-bold leading-none text-yellow-500 dark:text-yellow-400">{statsData.pending}</p>
+                        <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-500 sm:text-xs">awaiting review</p>
                     </div>
-                    <div className="bg-white dark:bg-[#1c1c1e] rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">On Leave</p>
-                        <p className="text-2xl font-bold text-red-500 dark:text-red-400 mt-1">{statsData.onLeaveToday}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">today</p>
+                    <div className="min-w-0 rounded-2xl border border-red-500/10 bg-red-500/5 p-3 dark:bg-[#1c1c1e] sm:p-4">
+                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">On Leave</p>
+                        <p className="mt-1 text-3xl font-bold leading-none text-red-500 dark:text-red-400">{statsData.onLeaveToday}</p>
+                        <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-500 sm:text-xs">today</p>
                     </div>
-                    <div className="bg-white dark:bg-[#1c1c1e] rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">This Month</p>
-                        <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{statsData.approvedThisMonth}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">approved</p>
+                    <div className="min-w-0 rounded-2xl border border-green-500/10 bg-green-500/5 p-3 dark:bg-[#1c1c1e] sm:p-4">
+                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">This Month</p>
+                        <p className="mt-1 text-3xl font-bold leading-none text-green-500 dark:text-green-400">{statsData.approvedThisMonth}</p>
+                        <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-500 sm:text-xs">approved</p>
                     </div>
                 </div>
             ) : myStats && (
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white dark:bg-[#1c1c1e] rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Days Taken</p>
-                        <p className="text-2xl font-bold text-primary mt-1">{myStats.daysThisYear}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">this year</p>
+                    <div className="rounded-2xl border border-primary/10 bg-primary/5 p-4 dark:bg-[#1c1c1e]">
+                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Days Taken</p>
+                        <p className="mt-1 text-3xl font-bold leading-none text-primary">{myStats.daysThisYear}</p>
+                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">this year</p>
                     </div>
-                    <div className="bg-white dark:bg-[#1c1c1e] rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Pending</p>
-                        <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">{myStats.pending}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">awaiting approval</p>
+                    <div className="rounded-2xl border border-yellow-500/10 bg-yellow-500/5 p-4 dark:bg-[#1c1c1e]">
+                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Pending</p>
+                        <p className="mt-1 text-3xl font-bold leading-none text-yellow-500 dark:text-yellow-400">{myStats.pending}</p>
+                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">awaiting approval</p>
                     </div>
                 </div>
             )}
@@ -600,22 +600,27 @@ export default function LeavesPage() {
             )}
 
             {/* List + filters */}
-            <div className="bg-white dark:bg-[#1c1c1e] rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-800 space-y-3">
+            <div className="overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-[#1c1c1e]">
+                <div className="space-y-3 border-b border-gray-200 p-3 dark:border-gray-800 sm:p-4">
                     {/* Status tabs */}
-                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-900 rounded-lg w-full overflow-x-auto custom-scrollbar">
+                    <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
                         {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as LeaveStatus[]).map(status => (
                             <button
                                 key={status}
                                 onClick={() => setStatusFilter(status)}
-                                className={`px-4 py-2 flex-1 sm:flex-none rounded-md text-sm font-medium transition-colors whitespace-nowrap ${statusFilter === status
-                                    ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                                }`}
+                                className={`flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border px-3 text-[14px] font-bold transition-all active:scale-[0.98] ${statusFilter === status
+                                    ? 'border-primary/25 bg-primary text-white shadow-lg shadow-primary/20'
+                                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300 hover:bg-gray-100 hover:text-gray-800 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200'
+                                    }`}
                             >
-                                {status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}
+                                <span className="min-w-0 truncate">
+                                    {status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}
+                                </span>
                                 {status === 'PENDING' && statsData.pending > 0 && (
-                                    <span className="ml-1.5 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400 text-xs px-1.5 py-0.5 rounded-full font-semibold">
+                                    <span className={`flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 text-[12px] font-black ${statusFilter === status
+                                        ? 'bg-white/20 text-white'
+                                        : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+                                        }`}>
                                         {statsData.pending}
                                     </span>
                                 )}
@@ -625,27 +630,36 @@ export default function LeavesPage() {
 
                     {/* Search + month filter (admin only) */}
                     {isAdmin && (
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(220px,1fr)_180px_auto]">
                             <div className="relative flex-1">
-                                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                                <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                 <input
                                     type="text"
                                     placeholder="Search by name..."
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
-                                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    className="h-11 w-full rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                                 />
                             </div>
-                            <input
-                                type="month"
-                                value={monthFilter}
-                                onChange={e => setMonthFilter(e.target.value)}
-                                className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                            />
+                            <div className="relative">
+                                <Calendar size={18} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="month"
+                                    value={monthFilter}
+                                    onChange={e => setMonthFilter(e.target.value)}
+                                    aria-label="Filter by month"
+                                    className={`h-11 w-full rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 ${monthFilter ? 'text-gray-900 dark:text-white' : 'text-transparent dark:text-transparent'}`}
+                                />
+                                {!monthFilter && (
+                                    <span className="pointer-events-none absolute left-10 top-1/2 -translate-y-1/2 text-[15px] text-gray-400">
+                                        Month
+                                    </span>
+                                )}
+                            </div>
                             {(searchQuery || monthFilter) && (
                                 <button
                                     onClick={() => { setSearchQuery(''); setMonthFilter(''); }}
-                                    className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                    className="h-11 rounded-2xl border border-gray-300 px-4 text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                                 >
                                     Clear
                                 </button>
@@ -654,7 +668,7 @@ export default function LeavesPage() {
                     )}
                 </div>
 
-                <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                <div className="space-y-3 p-3 sm:space-y-0 sm:p-0 sm:divide-y sm:divide-gray-200 sm:dark:divide-gray-800">
                     {filteredLeaves.length === 0 ? (
                         <div className="p-10 text-center">
                             <Calendar className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
@@ -671,32 +685,32 @@ export default function LeavesPage() {
                             const isEditing = editingLeaveId === leave.id;
 
                             return (
-                                <div key={leave.id} className="p-3 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <div key={leave.id} className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-[#242426] dark:hover:bg-gray-800/60 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-5 sm:shadow-none sm:dark:bg-transparent">
                                     {/* Employee header — always shown */}
-                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                    <div className="mb-4 flex items-start justify-between gap-3">
                                         <div className="flex items-center gap-3 min-w-0">
-                                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0 ${avatarColor(leave.userId)}`}>
+                                            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${avatarColor(leave.userId)}`}>
                                                 {getInitials(employee?.name, employee?.email)}
                                             </div>
                                             <div className="min-w-0">
-                                                <span className="font-semibold text-gray-900 dark:text-white block truncate">
+                                                <span className="block truncate text-[17px] font-bold leading-tight text-gray-900 dark:text-white sm:text-base">
                                                     {employee?.name || employee?.email || 'Unknown Employee'}
                                                 </span>
-                                                <span className="text-xs text-gray-500">
+                                                <span className="mt-1 block text-xs text-gray-500">
                                                     Applied {format(parseISO(leave.createdAt || new Date().toISOString()), 'MMM d, yyyy')}
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0">
+                                        <div className="flex shrink-0 items-center gap-2">
                                             {getStatusBadge(leave.status)}
                                             {/* Per-card calendar deep-link (admin only) */}
                                             {isAdmin && (
                                                 <Link
                                                     href={`/calendar?user=${leave.userId}`}
                                                     title="View on Calendar"
-                                                    className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                                    className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-primary dark:hover:bg-gray-800"
                                                 >
-                                                    <Calendar size={15} />
+                                                    <Calendar size={17} />
                                                 </Link>
                                             )}
                                         </div>
@@ -756,19 +770,19 @@ export default function LeavesPage() {
                                     ) : (
                                         <>
                                             {/* Date + reason card */}
-                                            <div className="bg-gray-50 dark:bg-[#252528] rounded-lg p-3 sm:px-4 sm:py-3 border border-transparent dark:border-gray-800/60 mb-3">
-                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-2">
-                                                    <div className="flex items-center gap-2 text-gray-900 dark:text-white font-medium text-sm">
-                                                        <Calendar size={14} className="text-gray-500 shrink-0" />
+                                            <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-800/60 dark:bg-[#2c2c2e] sm:bg-gray-50 sm:px-4 sm:py-3 sm:dark:bg-[#252528]">
+                                                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                                    <div className="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-gray-900 dark:text-white">
+                                                        <Calendar size={16} className="shrink-0 text-gray-500" />
                                                         {format(parseISO(leave.startDate), 'MMM d, yyyy')}
-                                                        <span className="text-gray-400">→</span>
+                                                        <span className="text-gray-400">to</span>
                                                         {format(parseISO(leave.endDate), 'MMM d, yyyy')}
                                                     </div>
-                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                                    <span className="rounded-full bg-gray-200 px-2.5 py-1 text-xs font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                                                         {days} {days === 1 ? 'day' : 'days'}
                                                     </span>
                                                 </div>
-                                                <p className="text-sm text-gray-600 dark:text-gray-400">{leave.reason}</p>
+                                                <p className="text-[14px] leading-relaxed text-gray-600 dark:text-gray-400">{leave.reason}</p>
                                             </div>
 
                                             {/* Approver info */}
@@ -781,19 +795,19 @@ export default function LeavesPage() {
                                             )}
 
                                             {/* Action buttons */}
-                                            <div className="flex items-center gap-2 flex-wrap">
+                                            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                                                 {/* Admin approve/reject — compact horizontal pills */}
                                                 {isAdmin && leave.status === 'PENDING' && (
                                                     <>
                                                         <button
                                                             onClick={() => handleStatusUpdate(leave.id, 'APPROVED', leave.userId)}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors"
+                                                            className="flex h-10 items-center justify-center gap-2 rounded-2xl bg-green-500 px-4 text-sm font-bold text-white transition-colors hover:bg-green-600 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                                                         >
                                                             <Check size={13} /> Approve
                                                         </button>
                                                         <button
                                                             onClick={() => handleStatusUpdate(leave.id, 'REJECTED', leave.userId)}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                                                            className="flex h-10 items-center justify-center gap-2 rounded-2xl border border-red-300 px-4 text-sm font-bold text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                                                         >
                                                             <X size={13} /> Reject
                                                         </button>
@@ -804,7 +818,7 @@ export default function LeavesPage() {
                                                 {canEdit && (
                                                     <button
                                                         onClick={() => startEdit(leave)}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                                        className="flex h-10 items-center justify-center gap-2 rounded-2xl border border-gray-300 px-4 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                                                     >
                                                         <Pencil size={13} /> Edit
                                                     </button>
@@ -813,7 +827,7 @@ export default function LeavesPage() {
                                                     <button
                                                         onClick={() => handleCancelLeave(leave.id)}
                                                         disabled={cancellingId === leave.id}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-red-300 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+                                                        className="flex h-10 items-center justify-center gap-2 rounded-2xl border border-gray-300 px-4 text-sm font-bold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-red-400 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                                                     >
                                                         <XCircle size={13} />
                                                         {cancellingId === leave.id ? 'Cancelling...' : 'Cancel Request'}

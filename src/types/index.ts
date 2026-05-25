@@ -16,6 +16,19 @@ export type Condition =
     | 'LOOSE_MOUNT'
     | 'DAMAGED';
 
+export type EquipmentIssueType =
+    | 'PHYSICAL_DAMAGE'
+    | 'NOT_WORKING'
+    | 'MISSING_ITEM_PART'
+    | 'POWER_ISSUE'
+    | 'CONNECTION_ISSUE'
+    | 'OTHER';
+
+export type EquipmentIssueSeverity =
+    | 'MINOR'
+    | 'USABLE_WITH_WARNING'
+    | 'NOT_USABLE';
+
 export interface Department {
     id: string;
     name: string;
@@ -52,13 +65,19 @@ export interface Equipment {
         model?: string;
         serialNumber?: string;
         activeIssue?: {
-            condition: Condition;
+            condition?: Condition;
+            issueType?: EquipmentIssueType;
+            severity?: EquipmentIssueSeverity;
             note: string;
-            source: 'return' | 'verification' | 'manual';
+            source: 'return' | 'verification' | 'manual' | 'crew_report';
             reportedAt?: string;
             reportedBy?: string;
+            reporterName?: string;
             verifiedAt?: string;
             verifiedBy?: string;
+            resolvedAt?: string;
+            resolvedBy?: string;
+            resolutionNote?: string;
         };
         [key: string]: unknown;
     };
@@ -71,6 +90,7 @@ export interface Transaction {
     id: string;
     userId: string;
     items: string[]; // Equipment IDs
+    manualItems?: ManualTransactionItem[];
     timestampOut: string;
     timestampIn?: string;
     project?: string;
@@ -81,6 +101,30 @@ export interface Transaction {
     additionalUsers?: string[]; // IDs of other users involved
     notes?: string;
     departmentId?: string;
+}
+
+export type ManualTransactionItemStatus =
+    | 'OUT'
+    | 'PENDING_VERIFICATION'
+    | 'RETURNED'
+    | 'MISSING';
+
+export interface ManualTransactionItem {
+    id: string;
+    name: string;
+    quantity: number;
+    returnRequired: boolean;
+    notes?: string;
+    status: ManualTransactionItemStatus;
+    returnedQuantity?: number;
+    returnCondition?: Condition;
+    issueType?: EquipmentIssueType;
+    issueSeverity?: EquipmentIssueSeverity;
+    returnNote?: string;
+    returnedAt?: string;
+    returnedBy?: string;
+    verifiedAt?: string;
+    verifiedBy?: string;
 }
 
 export interface ReturnRecord {

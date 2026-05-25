@@ -91,19 +91,13 @@ export default function ShootDetailsPage() {
     const handleSaveFixedExpenses = async () => {
         if (!shoot) return;
 
-        // Check if anything actually changed before making API calls or logging
-        const changedDetails: string[] = [];
+        // Check if anything actually changed before making API calls
         const hasChanges = FIXED_EXPENSE_TYPES.some(type => {
             const existing = shoot.expenses?.find(e => e.type === type);
             const oldVal = existing?.amount || 0;
             const newVal = Number(expenseAmounts[type]) || 0;
             const oldCampaign = existing?.campaign || '';
             const newCampaign = selectedCampaign || '';
-            
-            if (oldVal !== newVal) {
-                changedDetails.push(`${type}: ₹${oldVal} ➔ ₹${newVal}`);
-            }
-
             // If the expense was never recorded, and new amount is 0, it's not a change
             if (!existing && newVal === 0 && newCampaign === '') return false;
             return oldVal !== newVal || oldCampaign !== newCampaign;
@@ -136,22 +130,7 @@ export default function ShootDetailsPage() {
                 throw new Error(data.error || 'Failed to update expenses in DB');
             }
 
-            if (user) {
-                const detailsText = changedDetails.length > 0 
-                    ? `Updated amounts: ${changedDetails.join(', ')}` 
-                    : 'Updated shoot expenses';
-                await storage.addLog({
-                    id: crypto.randomUUID(),
-                    action: 'EDIT',
-                    entityId: shoot.id,
-                    userId: user.id,
-                    timestamp: new Date().toISOString(),
-                    details: detailsText,
-                    oldValue: shoot.expenses || [],
-                    newValue: newExpenses
-                });
-                storage.getLogsByEntity(shoot.id).then(setLogs);
-            }
+            storage.getLogsByEntity(shoot.id).then(setLogs);
 
             queryClient.setQueryData(['shoots', id], updatedShoot);
             await queryClient.invalidateQueries({ queryKey: ['shoots'] });
@@ -181,19 +160,7 @@ export default function ShootDetailsPage() {
                     body: JSON.stringify({ expenses: updatedExpenses })
                 });
                 if (res.ok) {
-                    if (user) {
-                        await storage.addLog({
-                            id: crypto.randomUUID(),
-                            action: 'EDIT',
-                            entityId: shoot.id,
-                            userId: user.id,
-                            timestamp: new Date().toISOString(),
-                            details: `Updated expense category to ${newCampaign || 'None'}`,
-                            oldValue: currentExpenses,
-                            newValue: updatedExpenses
-                        });
-                        storage.getLogsByEntity(shoot.id).then(setLogs);
-                    }
+                    storage.getLogsByEntity(shoot.id).then(setLogs);
                     queryClient.setQueryData(['shoots', id], { ...shoot, expenses: updatedExpenses });
                     await queryClient.invalidateQueries({ queryKey: ['shoots'] });
                     showToast('Campaign updated for all expenses', 'success');
@@ -217,7 +184,7 @@ export default function ShootDetailsPage() {
 
         if (!isConfirmed) return;
 
-        let calendarError = null;
+        let calendarError: string | null = null;
 
         try {
             // Check for Google Calendar Event presence
@@ -227,9 +194,9 @@ export default function ShootDetailsPage() {
                 if (tokens && tokens.accessToken) {
                     try {
                         await deleteGoogleCalendarEvent(shoot.googleEventId, tokens);
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         console.error('Calendar deletion failed:', err);
-                        calendarError = err.message || 'Unknown calendar error';
+                        calendarError = err instanceof Error ? err.message : 'Unknown calendar error';
                         // Continue to cancel locally despite calendar error
                     }
                 } else {
@@ -337,9 +304,10 @@ export default function ShootDetailsPage() {
                 document.body.appendChild(toast);
                 setTimeout(() => toast.remove(), 4000);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to sync to calendar:', error);
-            alert('Wait! Something went wrong: ' + error.message);
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            alert('Wait! Something went wrong: ' + message);
         } finally {
             setIsSyncing(false);
         }

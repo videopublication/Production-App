@@ -14,6 +14,7 @@ import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
 import { useDepartment } from '@/lib/department-context';
 import Link from 'next/link';
+import { areManualItemsComplete } from '@/lib/transaction-manual-items';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -549,7 +550,7 @@ export default function TransactionDetailPage() {
     const canManualClose = transaction?.status === 'OPEN' && transaction.items.every(itemId => {
         const item = equipment.find(e => e.id === itemId);
         return item && item.status !== 'CHECKED_OUT' && item.status !== 'PENDING_VERIFICATION';
-    });
+    }) && areManualItemsComplete(transaction.manualItems);
 
     const handleSaveNotes = async () => {
         if (!transaction) return;
@@ -1108,6 +1109,55 @@ export default function TransactionDetailPage() {
                         })
                     )}
                 </div>
+
+                {(transaction.manualItems || []).length > 0 && (
+                    <div className="space-y-2 pt-3">
+                        <h3 className="px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Manual Items</h3>
+                        {(transaction.manualItems || []).map((item, index) => {
+                            const statusLabel = item.returnRequired
+                                ? item.status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
+                                : 'Consumable';
+                            const statusClass = item.status === 'OUT'
+                                ? 'bg-orange-500 text-white'
+                                : item.status === 'PENDING_VERIFICATION'
+                                    ? 'bg-amber-500 text-black'
+                                    : item.status === 'MISSING'
+                                        ? 'bg-red-500 text-white'
+                                        : 'bg-green-500 text-white';
+
+                            return (
+                                <div key={item.id} className="rounded-xl border border-amber-300/50 bg-card p-3">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-7 h-7 rounded-lg bg-amber-500 text-black flex items-center justify-center text-xs font-bold shrink-0">
+                                            {transaction.items.length + index + 1}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="font-semibold text-sm text-foreground leading-tight">{item.name}</h3>
+                                                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                                                    Manual
+                                                </span>
+                                            </div>
+                                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                                Qty {item.quantity}{item.notes ? ` - ${item.notes}` : ''}
+                                            </p>
+                                            {item.returnNote && (
+                                                <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                    {item.returnNote}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="mt-2.5 flex items-center justify-between border-t border-border/50 pt-2.5">
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${statusClass}`}>
+                                            {statusLabel}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </Card>
 
 

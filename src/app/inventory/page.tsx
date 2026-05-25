@@ -8,7 +8,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { downloadFile } from '@/lib/download';
 import { Badge } from '@/components/Badge';
-import { QRScanner } from '@/components/QRScanner';
+import { MobileScanner, QRScanner } from '@/components/QRScanner';
 import { useAuth } from '@/lib/auth';
 import { ScanLine, Search } from 'lucide-react';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { useEquipment, useUpdateEquipment, useDeleteEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
 import { useTransactions } from '@/hooks/useTransactions';
-import { getEquipmentIssue, hasEquipmentIssue } from '@/lib/equipment-issues';
+import { getEquipmentIssue, getIssueSummary, hasEquipmentIssue } from '@/lib/equipment-issues';
 
 const InlineInput = ({ value, onChange, placeholder }: { value: string, onChange: (v: string) => void, placeholder?: string }) => {
     const [val, setVal] = useState(value);
@@ -611,7 +611,7 @@ function InventoryPageContent() {
 
             <div className="flex flex-col gap-3">
                 <div className="relative w-full">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground sm:h-6 sm:w-6" />
                     <input
                         type="search"
                         placeholder="Search by name, barcode, serial, or category..."
@@ -620,28 +620,57 @@ function InventoryPageContent() {
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') openLookupItem(search);
                         }}
-                        className="h-12 w-full rounded-2xl border border-border bg-secondary/50 py-2 pl-12 pr-16 text-[15px] text-foreground outline-none transition-all duration-200 placeholder:text-muted-foreground focus:border-transparent focus:ring-2 focus:ring-primary"
+                        className="h-14 w-full rounded-2xl border border-border bg-secondary/50 py-2 pl-12 pr-20 text-[15px] text-foreground outline-none transition-all duration-200 placeholder:text-muted-foreground focus:border-transparent focus:ring-2 focus:ring-primary sm:pl-14"
                     />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant={showInventoryScanner ? 'secondary' : 'outline'}
-                            className={`h-8 w-10 rounded-xl p-0 ${showInventoryScanner ? 'text-primary' : ''}`}
-                            onClick={() => setShowInventoryScanner(prev => !prev)}
-                            title={showInventoryScanner ? 'Hide scanner' : 'Scan item'}
-                        >
-                            <ScanLine className="h-4 w-4" />
-                        </Button>
-                    </div>
+                    <button
+                        type="button"
+                        className={`absolute right-2 top-1/2 flex h-11 w-14 -translate-y-1/2 items-center justify-center rounded-2xl border transition-all active:scale-95 ${showInventoryScanner
+                            ? 'border-primary/30 bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                            : 'border-border bg-[#1f2937] text-white hover:bg-[#273449] dark:bg-secondary dark:text-foreground dark:hover:bg-secondary/80'
+                            }`}
+                        onClick={() => setShowInventoryScanner(prev => !prev)}
+                        title={showInventoryScanner ? 'Hide scanner' : 'Scan item'}
+                        aria-label={showInventoryScanner ? 'Hide scanner' : 'Scan item'}
+                    >
+                        <ScanLine className="h-6 w-6" strokeWidth={2.25} />
+                    </button>
                 </div>
 
                 {showInventoryScanner && (
-                    <QRScanner
-                        onScan={handleInventoryScan}
-                        onError={(error) => showToast(error, 'error')}
-                        continuous={false}
-                    />
+                    <div className="overflow-hidden rounded-[28px] border border-border bg-card p-3 shadow-xl shadow-black/10 dark:bg-[#1c1c1e]">
+                        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                            <div className="min-w-0">
+                                <h2 className="text-[18px] font-bold text-foreground">QR Code Scanner</h2>
+                                <p className="truncate text-[13px] text-muted-foreground">Scan an item to open its details.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowInventoryScanner(false)}
+                                className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="md:hidden h-[360px] max-h-[52vh] min-h-[280px] overflow-hidden rounded-[24px] bg-black shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
+                            <MobileScanner
+                                onScan={handleInventoryScan}
+                                onError={(error) => showToast(error, 'error')}
+                                onClose={() => setShowInventoryScanner(false)}
+                                autoStart={true}
+                            />
+                        </div>
+
+                        <div className="hidden md:block">
+                            <QRScanner
+                                onScan={handleInventoryScan}
+                                onError={(error) => showToast(error, 'error')}
+                                continuous={false}
+                                compact
+                                autoStart
+                            />
+                        </div>
+                    </div>
                 )}
 
                 <div className="w-full overflow-hidden -mx-3 px-3">
@@ -848,7 +877,8 @@ function InventoryPageContent() {
 
                                         {issue && (
                                             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                                <span className="block truncate">Issue: {issue.note}</span>
+                                                <span className="block truncate">{getIssueSummary(issue)}</span>
+                                                <span className="block truncate font-medium">{issue.note}</span>
                                             </div>
                                         )}
                                     </div>
@@ -954,7 +984,7 @@ function InventoryPageContent() {
                                                                     <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                                                                     </svg>
-                                                                    <span className="line-clamp-2">Issue: {issue.note}</span>
+                                                                    <span className="line-clamp-2">{getIssueSummary(issue)}: {issue.note}</span>
                                                                 </div>
                                                             )}
                                                         </>

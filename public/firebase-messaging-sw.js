@@ -55,6 +55,11 @@ if (firebase.messaging.isSupported()) {
     messaging.onBackgroundMessage(function (payload) {
         console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
+        if (payload.notification) {
+            console.log('[firebase-messaging-sw.js] Notification payload present; letting the browser display it.');
+            return;
+        }
+
         const notificationTitle = payload.notification?.title || payload.data?.title || 'New Notification';
         const notificationBody = payload.notification?.body || payload.data?.message || payload.data?.body || '';
         const notificationLink = payload.data?.link || '/notifications';

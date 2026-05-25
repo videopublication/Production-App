@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { User, Equipment, Transaction, Log, Shoot, Assignment, Department, Leave } from '@/types';
+import { decodeTransactionNotes, encodeTransactionNotes } from './transaction-manual-items';
 
 class StorageService {
     // Departments
@@ -281,16 +282,20 @@ class StorageService {
             return [];
         }
 
-        return data.map((t: any) => ({
-            ...t,
-            userId: t.user_id,
-            timestampOut: t.timestamp_out,
-            preCheckoutConditions: t.pre_checkout_conditions,
-            postReturnConditions: t.post_return_conditions,
-            additionalUsers: t.additional_users,
-            notes: t.notes,
-            shootId: t.shoot_id
-        })) as Transaction[];
+        return data.map((t: any) => {
+            const decodedNotes = decodeTransactionNotes(t.notes);
+            return {
+                ...t,
+                userId: t.user_id,
+                timestampOut: t.timestamp_out,
+                preCheckoutConditions: t.pre_checkout_conditions,
+                postReturnConditions: t.post_return_conditions,
+                additionalUsers: t.additional_users,
+                notes: decodedNotes.notes,
+                manualItems: decodedNotes.manualItems,
+                shootId: t.shoot_id
+            };
+        }) as Transaction[];
     }
 
     async getTransactionStats(departmentId?: string | null): Promise<{ total: number, active: number, closed: number, outItems: number }> {
@@ -339,6 +344,7 @@ class StorageService {
         }
 
         const t = data;
+        const decodedNotes = decodeTransactionNotes(t.notes);
         return {
             ...t,
             userId: t.user_id,
@@ -346,7 +352,8 @@ class StorageService {
             preCheckoutConditions: t.pre_checkout_conditions,
             postReturnConditions: t.post_return_conditions,
             additionalUsers: t.additional_users,
-            notes: t.notes,
+            notes: decodedNotes.notes,
+            manualItems: decodedNotes.manualItems,
             shootId: t.shoot_id
         } as Transaction;
     }
@@ -362,7 +369,7 @@ class StorageService {
             pre_checkout_conditions: transaction.preCheckoutConditions,
             status: transaction.status,
             additional_users: transaction.additionalUsers,
-            notes: transaction.notes,
+            notes: encodeTransactionNotes(transaction.notes, transaction.manualItems),
             system_id: systemId,   // New UUID
             display_id: displayId, // New Readable ID
             department_id: transaction.departmentId
@@ -378,6 +385,7 @@ class StorageService {
     async updateTransaction(id: string, updates: Partial<Transaction>): Promise<void> {
         const dbUpdates: any = { ...updates };
         delete dbUpdates.id;
+        delete dbUpdates.manualItems;
 
         if (updates.userId !== undefined) { dbUpdates.user_id = updates.userId; }
         delete dbUpdates.userId;
@@ -402,6 +410,19 @@ class StorageService {
 
         if (updates.departmentId !== undefined) { dbUpdates.department_id = updates.departmentId; }
         delete dbUpdates.departmentId;
+
+        if (updates.notes !== undefined || updates.manualItems !== undefined) {
+            const { data: currentTxn } = await supabase
+                .from('transactions')
+                .select('notes')
+                .eq('id', id)
+                .single();
+
+            const current = decodeTransactionNotes(currentTxn?.notes);
+            const nextNotes = updates.notes !== undefined ? updates.notes : current.notes;
+            const nextManualItems = updates.manualItems !== undefined ? updates.manualItems : current.manualItems;
+            dbUpdates.notes = encodeTransactionNotes(nextNotes, nextManualItems);
+        }
 
         const { error } = await supabase
             .from('transactions')

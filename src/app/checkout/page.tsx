@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Equipment, Transaction, User, Shoot } from '@/types';
+import { Equipment, ManualTransactionItem, Transaction, User, Shoot } from '@/types';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card } from '@/components/Card';
@@ -20,7 +20,7 @@ import { useShoots } from '@/hooks/useShoots';
 import { useCheckOut } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
-import { getEquipmentIssue } from '@/lib/equipment-issues';
+import { getEquipmentIssue, getIssueSummary, isEquipmentIssueBlocking } from '@/lib/equipment-issues';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -37,12 +37,17 @@ const IssueWarning = ({ item, compact = false }: { item: Equipment; compact?: bo
     const issue = getEquipmentIssue(item);
     if (!issue) return null;
 
+    const isBlocking = issue.severity === 'NOT_USABLE';
+
     return (
-        <div className={`mt-1 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 ${compact ? 'text-[10px]' : 'text-xs'}`}>
+        <div className={`mt-1 flex items-start gap-1.5 rounded-lg border px-2 py-1 ${isBlocking
+            ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200'
+            : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
+            } ${compact ? 'text-[10px]' : 'text-xs'}`}>
             <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
             </svg>
-            <span className="line-clamp-2 font-semibold">Issue: {issue.note}</span>
+            <span className="line-clamp-2 font-semibold">{getIssueSummary(issue)}: {issue.note}</span>
         </div>
     );
 };
@@ -56,15 +61,22 @@ export default function CheckoutPage() {
 
     const [cart, setCart] = useState<Equipment[]>([]);
     const cartRef = React.useRef<Equipment[]>([]);
+    const [manualItems, setManualItems] = useState<ManualTransactionItem[]>([]);
+    const [manualItemName, setManualItemName] = useState('');
+    const [manualItemQuantity, setManualItemQuantity] = useState(1);
+    const [manualItemReturnRequired, setManualItemReturnRequired] = useState(true);
+    const [manualItemNotes, setManualItemNotes] = useState('');
     const [scanInput, setScanInput] = useState('');
     const [project, setProject] = useState('');
     const [notes, setNotes] = useState('');
     const [selectedShootId, setSelectedShootId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
-    const [showNotes, setShowNotes] = useState(false);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [isNotesFocused, setIsNotesFocused] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [suggestions, setSuggestions] = useState<Equipment[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Handle back button closing scanner
     useEffect(() => {
@@ -114,9 +126,6 @@ export default function CheckoutPage() {
             requestAnimationFrame(() => setShowScanner(true));
         }
     };
-    const [suggestions, setSuggestions] = useState<Equipment[]>([]);
-    const [showSuggestions, setShowSuggestions] = useState(false);
-
     // Data Hooks
     const { equipment: equipmentList, users: allUsers, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
     const { data: shoots = [], isLoading: isShootsLoading, refetch: refetchShoots } = useShoots();
@@ -218,6 +227,14 @@ export default function CheckoutPage() {
         const savedNotes = sessionStorage.getItem('checkout-notes');
         if (savedNotes) setNotes(savedNotes);
 
+        const savedManualItems = sessionStorage.getItem('checkout-manual-items');
+        if (savedManualItems) {
+            try {
+                const parsed = JSON.parse(savedManualItems);
+                if (Array.isArray(parsed)) setManualItems(parsed);
+            } catch { sessionStorage.removeItem('checkout-manual-items'); }
+        }
+
         const savedShootId = sessionStorage.getItem('checkout-shoot');
         if (savedShootId) setSelectedShootId(savedShootId);
 
@@ -263,6 +280,11 @@ export default function CheckoutPage() {
     }, [notes]);
 
     useEffect(() => {
+        if (manualItems.length > 0) sessionStorage.setItem('checkout-manual-items', JSON.stringify(manualItems));
+        else sessionStorage.removeItem('checkout-manual-items');
+    }, [manualItems]);
+
+    useEffect(() => {
         if (selectedUserIds.length > 0) sessionStorage.setItem('checkout-users', JSON.stringify(selectedUserIds));
     }, [selectedUserIds]);
 
@@ -295,7 +317,9 @@ export default function CheckoutPage() {
 
     const playSuccessSound = () => {
         try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const AudioContextClass = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+            if (!AudioContextClass) return;
+            const ctx = new AudioContextClass();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
@@ -306,12 +330,14 @@ export default function CheckoutPage() {
             osc.start();
             osc.stop(ctx.currentTime + 0.1);
             if (navigator.vibrate) navigator.vibrate(200);
-        } catch (e) { }
+        } catch { }
     };
 
     const playErrorSound = () => {
         try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const AudioContextClass = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+            if (!AudioContextClass) return;
+            const ctx = new AudioContextClass();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
@@ -322,7 +348,7 @@ export default function CheckoutPage() {
             osc.start();
             osc.stop(ctx.currentTime + 0.2);
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        } catch (e) { }
+        } catch { }
     };
 
     const processBarcode = (barcode: string, keepSearchOpen = false) => {
@@ -361,6 +387,13 @@ export default function CheckoutPage() {
             return;
         }
 
+        const issue = getEquipmentIssue(item);
+        if (isEquipmentIssueBlocking(item)) {
+            showToast(`Cannot checkout "${item.name}": ${getIssueSummary(issue!)}.`, 'error');
+            playErrorSound();
+            return;
+        }
+
         if (cartRef.current.find(i => i.id === item.id)) {
             const serialInfo = item.serialNumber ? ` (S/N: ${item.serialNumber})` : '';
             showToast(`Item "${item.name}"${serialInfo} is already in cart`, 'info');
@@ -372,8 +405,7 @@ export default function CheckoutPage() {
         cartRef.current = newCart;
         setCart(newCart);
 
-        const issue = getEquipmentIssue(item);
-        showToast(issue ? `Added with warning: ${issue.note}` : `Added "${item.name}"`, issue ? 'warning' : 'success');
+        showToast(issue ? `Added with warning: ${getIssueSummary(issue)}` : `Added "${item.name}"`, issue ? 'warning' : 'success');
         playSuccessSound();
 
         if (!keepSearchOpen) {
@@ -434,6 +466,35 @@ export default function CheckoutPage() {
         setCart(newCart);
     };
 
+    const addManualItem = () => {
+        const name = manualItemName.trim();
+        const quantity = Math.max(1, Math.floor(Number(manualItemQuantity) || 1));
+        if (!name) {
+            showToast('Enter a manual item name', 'error');
+            return;
+        }
+
+        setManualItems(prev => [
+            ...prev,
+            {
+                id: crypto.randomUUID(),
+                name,
+                quantity,
+                returnRequired: manualItemReturnRequired,
+                notes: manualItemNotes.trim() || undefined,
+                status: manualItemReturnRequired ? 'OUT' as const : 'RETURNED' as const
+            }
+        ].sort(compareByName));
+        setManualItemName('');
+        setManualItemQuantity(1);
+        setManualItemReturnRequired(true);
+        setManualItemNotes('');
+    };
+
+    const removeManualItem = (id: string) => {
+        setManualItems(prev => prev.filter(item => item.id !== id));
+    };
+
     const handleConfirmClear = async () => {
         const isConfirmed = await confirm({
             title: 'Clear Cart?',
@@ -445,7 +506,9 @@ export default function CheckoutPage() {
         if (isConfirmed) {
             cartRef.current = [];
             setCart([]);
+            setManualItems([]);
             sessionStorage.removeItem('checkout-cart');
+            sessionStorage.removeItem('checkout-manual-items');
             showToast('Cart cleared', 'info');
         }
     };
@@ -458,8 +521,10 @@ export default function CheckoutPage() {
     const handleSuccess = () => {
         cartRef.current = [];
         setCart([]);
+        setManualItems([]);
         setSelectedShootId('');
         sessionStorage.removeItem('checkout-cart');
+        sessionStorage.removeItem('checkout-manual-items');
         sessionStorage.removeItem('checkout-project');
         sessionStorage.removeItem('checkout-notes');
         sessionStorage.removeItem('checkout-users');
@@ -472,7 +537,7 @@ export default function CheckoutPage() {
 
     const handleCheckout = async () => {
         // Prevent double submission using Ref (immediate) and State (render-cycle)
-        if (isSubmittingRef.current || !user || cart.length === 0 || isLoading || isCheckoutLoading) return;
+        if (isSubmittingRef.current || !user || (cart.length === 0 && manualItems.length === 0) || isLoading || isCheckoutLoading) return;
 
         if (!project.trim()) {
             showToast('Project Name is required', 'error');
@@ -500,6 +565,7 @@ export default function CheckoutPage() {
             await checkout({
                 id: transactionIdRef.current, // Pass the idempotent ID
                 items: cart,
+                manualItems,
                 shootId: selectedShootId || undefined,
                 userId: selectedUserIds[0], // Primary user
                 additionalUsers: selectedUserIds.slice(1), // All other selected users
@@ -513,14 +579,15 @@ export default function CheckoutPage() {
 
             handleSuccess();
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Checkout error:', err);
+            const checkoutError = err as { code?: string; message?: string; details?: string };
 
             // ERROR RECOVERY STRATEGY
 
             // 1. Check for Duplicate Key (Retry Scenario)
             // If error is "duplicate key value", it means the previous attempt actually succeeded.
-            if (err?.code === '23505' || err?.message?.includes('duplicate key') || err?.details?.includes('already exists')) {
+            if (checkoutError.code === '23505' || checkoutError.message?.includes('duplicate key') || checkoutError.details?.includes('already exists')) {
                 console.log('Transaction key collision detected (Idempotent Success)');
                 handleSuccess();
                 return;
@@ -549,6 +616,99 @@ export default function CheckoutPage() {
             isSubmittingRef.current = false; // Reset lock on failure to allow retry
         }
     };
+
+
+    const renderManualItemsEditor = () => (
+        <div className="rounded-2xl border border-border bg-muted/30 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                    <p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Manual Items</p>
+                    <p className="text-xs text-muted-foreground">Use for cables, wires, and items without QR.</p>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                    {manualItems.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-[1fr_90px]">
+                <input
+                    type="text"
+                    value={manualItemName}
+                    onChange={(e) => setManualItemName(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addManualItem();
+                        }
+                    }}
+                    placeholder="e.g. XLR cable, HDMI wire"
+                    className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                />
+                <input
+                    type="number"
+                    min={1}
+                    value={manualItemQuantity}
+                    onChange={(e) => setManualItemQuantity(Number(e.target.value))}
+                    className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                    aria-label="Quantity"
+                />
+            </div>
+
+            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                <input
+                    type="text"
+                    value={manualItemNotes}
+                    onChange={(e) => setManualItemNotes(e.target.value)}
+                    placeholder="Optional note"
+                    className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                />
+                <button
+                    type="button"
+                    onClick={() => setManualItemReturnRequired(prev => !prev)}
+                    className={`h-11 rounded-xl px-3 text-sm font-bold transition-colors ${manualItemReturnRequired
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-orange-500/15 text-orange-600 dark:text-orange-300'
+                        }`}
+                >
+                    {manualItemReturnRequired ? 'Return required' : 'Consumable'}
+                </button>
+            </div>
+
+            <button
+                type="button"
+                onClick={addManualItem}
+                className="mt-2 h-11 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-transform active:scale-[0.98]"
+            >
+                Add Manual Item
+            </button>
+
+            {manualItems.length > 0 && (
+                <div className="mt-3 space-y-2">
+                    {manualItems.map(item => (
+                        <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2">
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-foreground">{item.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Qty {item.quantity} - {item.returnRequired ? 'Return required' : 'Consumable'}
+                                    {item.notes ? ` - ${item.notes}` : ''}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => removeManualItem(item.id)}
+                                className="shrink-0 rounded-lg p-1.5 text-destructive hover:bg-destructive/10"
+                                aria-label={`Remove ${item.name}`}
+                            >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 
 
     if (authLoading || isDataLoading) {
@@ -680,7 +840,7 @@ export default function CheckoutPage() {
                                                         )}
                                                         <p className="font-medium text-sm truncate text-foreground">{item.name}</p>
                                                         <IssueWarning item={item} compact />
-                                                        <p className="text-xs text-muted-foreground truncate">{item.barcode} • {item.category}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{item.category} • {item.barcode}</p>
                                                     </div>
                                                     <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded shrink-0">{item.location}</span>
                                                 </button>
@@ -692,8 +852,8 @@ export default function CheckoutPage() {
 
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between px-2">
-                                    <h2 className="text-xl font-semibold">Cart ({cart.length})</h2>
-                                    {cart.length > 0 && (
+                                    <h2 className="text-xl font-semibold">Cart ({cart.length + manualItems.length})</h2>
+                                    {(cart.length > 0 || manualItems.length > 0) && (
                                         <button
                                             onClick={handleConfirmClear}
                                             className="text-sm font-medium text-[#ff3b30] hover:underline"
@@ -703,7 +863,7 @@ export default function CheckoutPage() {
                                     )}
                                 </div>
 
-                                {cart.length === 0 ? (
+                                {cart.length === 0 && manualItems.length === 0 ? (
                                     <div className="text-center py-16 border-2 border-dashed border-border rounded-3xl bg-muted/50">
                                         <svg className="w-12 h-12 mx-auto mb-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
@@ -723,10 +883,31 @@ export default function CheckoutPage() {
                                                     )}
                                                     <h3 className="font-semibold truncate text-foreground text-[14px] leading-tight">{item.name}</h3>
                                                     <IssueWarning item={item} compact />
-                                                    <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.barcode} • {item.category}</p>
+                                                    <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category} • {item.barcode}</p>
                                                 </div>
                                                 <button
                                                     onClick={() => removeFromCart(item.id)}
+                                                    className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all rounded-full"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {manualItems.map((item, index) => (
+                                            <div key={item.id} className="bg-card px-3 py-2.5 rounded-2xl flex items-center gap-3 shadow-sm border border-amber-300/50 group hover:border-amber-400 transition-all">
+                                                <div className="w-8 h-8 bg-amber-500 text-black rounded-lg flex items-center justify-center font-bold text-sm shadow-md shrink-0">
+                                                    {cart.length + index + 1}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h3 className="font-semibold truncate text-foreground text-[14px] leading-tight">{item.name}</h3>
+                                                    <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">
+                                                        Manual • Qty {item.quantity} • {item.returnRequired ? 'Return required' : 'Consumable'}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => removeManualItem(item.id)}
                                                     className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all rounded-full"
                                                 >
                                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -834,10 +1015,12 @@ export default function CheckoutPage() {
                                         />
                                     </div>
 
+                                    {renderManualItemsEditor()}
+
                                     <div>
-                                        <label className="text-[13px] font-semibold text-muted-foreground mb-2 block">Notes / Other Items</label>
+                                        <label className="text-[13px] font-semibold text-muted-foreground mb-2 block">Transaction Notes</label>
                                         <textarea
-                                            placeholder="Any additional items or notes..."
+                                            placeholder="Optional notes about this checkout..."
                                             value={notes}
                                             onChange={(e) => setNotes(e.target.value)}
                                             className="w-full h-24 p-4 bg-muted text-foreground border-0 rounded-xl text-[15px] focus:ring-2 focus:ring-primary transition-all resize-none placeholder:text-muted-foreground/70"
@@ -847,11 +1030,11 @@ export default function CheckoutPage() {
                                     <div className="pt-4 border-t border-border">
                                         <div className="flex justify-between items-center mb-4 px-1">
                                             <span className="text-muted-foreground font-medium">Items</span>
-                                            <span className="text-xl font-bold text-foreground">{cart.length}</span>
+                                            <span className="text-xl font-bold text-foreground">{cart.length + manualItems.length}</span>
                                         </div>
                                         <Button
                                             onClick={handleCheckout}
-                                            disabled={cart.length === 0 || isLoading}
+                                            disabled={(cart.length === 0 && manualItems.length === 0) || isLoading}
                                             className="w-full h-12 rounded-2xl"
                                             isLoading={isLoading}
                                         >
@@ -960,19 +1143,29 @@ export default function CheckoutPage() {
                                 />
 
 
+                                {renderManualItemsEditor()}
+
                                 {/* Notes Section - Always Open */}
                                 <div className="mt-2">
                                     <div className="mb-2 pl-1">
                                         <label className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">
-                                            Notes / Other Items
+                                            Transaction Notes
                                         </label>
                                     </div>
-                                    <textarea
-                                        placeholder="List any items not in inventory..."
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                        className="w-full h-14 p-3 bg-muted text-foreground border-0 rounded-2xl text-[16px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all shadow-inner resize-none appearance-none"
-                                    />
+                                    <div className={`rounded-2xl border bg-muted shadow-inner transition-all ${isNotesFocused
+                                        ? 'border-primary bg-background ring-2 ring-primary'
+                                        : 'border-border/60'
+                                        }`}>
+                                        <textarea
+                                            placeholder="Optional notes about this checkout..."
+                                            value={notes}
+                                            onChange={(e) => setNotes(e.target.value)}
+                                            onFocus={() => setIsNotesFocused(true)}
+                                            onBlur={() => setIsNotesFocused(false)}
+                                            rows={5}
+                                            className="block min-h-[132px] w-full resize-y appearance-none rounded-2xl border-0 bg-transparent px-4 py-3 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1014,7 +1207,7 @@ export default function CheckoutPage() {
                                             )}
                                             <p className="font-bold truncate text-[16px] text-foreground">{item.name}</p>
                                             <IssueWarning item={item} compact />
-                                            <p className="text-sm text-muted-foreground truncate">{item.barcode}</p>
+                                            <p className="text-sm text-muted-foreground truncate">{item.category} • {item.barcode}</p>
                                         </div>
                                         <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
                                             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -1028,10 +1221,10 @@ export default function CheckoutPage() {
 
                         {!isSearchFocused && (
                             <div className="space-y-2 mt-4">
-                                {cart.length > 0 && (
+                                {(cart.length > 0 || manualItems.length > 0) && (
                                     <div className="flex items-center justify-between px-1 mb-2">
                                         <h3 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider">
-                                            Added Items ({cart.length})
+                                            Added Items ({cart.length + manualItems.length})
                                         </h3>
                                         <button
                                             onClick={handleConfirmClear}
@@ -1052,10 +1245,31 @@ export default function CheckoutPage() {
                                             )}
                                             <p className="font-bold truncate text-foreground text-[14px] leading-tight">{item.name}</p>
                                             <IssueWarning item={item} compact />
-                                            <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.barcode}</p>
+                                            <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category} • {item.barcode}</p>
                                         </div>
                                         <button
                                             onClick={() => removeFromCart(item.id)}
+                                            className="w-8 h-8 flex items-center justify-center text-destructive active:scale-90 transition-all rounded-full hover:bg-destructive/10"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                <path d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                ))}
+                                {manualItems.map((item, index) => (
+                                    <div key={item.id} className="bg-card px-3 py-2.5 rounded-2xl flex items-center gap-3 shadow-sm border border-amber-300/50">
+                                        <div className="w-8 h-8 bg-amber-500 text-black rounded-lg flex items-center justify-center font-bold text-sm shadow-md shrink-0">
+                                            {cart.length + index + 1}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold truncate text-foreground text-[14px] leading-tight">{item.name}</p>
+                                            <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">
+                                                Manual • Qty {item.quantity} • {item.returnRequired ? 'Return required' : 'Consumable'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => removeManualItem(item.id)}
                                             className="w-8 h-8 flex items-center justify-center text-destructive active:scale-90 transition-all rounded-full hover:bg-destructive/10"
                                         >
                                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1071,7 +1285,7 @@ export default function CheckoutPage() {
             </PullToRefresh>
 
             {/* Mobile Bottom Bar */}
-            {!isSearchFocused && (
+            {!isSearchFocused && !isNotesFocused && (
                 <div 
                     className="md:hidden fixed left-0 right-0 p-4 bg-background border-t border-border shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30"
                     style={{ bottom: 'var(--mobile-tab-height)' }}
@@ -1079,11 +1293,11 @@ export default function CheckoutPage() {
                     <div className="flex items-center gap-4">
                         <div>
                             <p className="text-[10px] font-bold text-muted-foreground uppercase">Total</p>
-                            <p className="text-[24px] font-bold text-foreground leading-none">{cart.length}</p>
+                            <p className="text-[24px] font-bold text-foreground leading-none">{cart.length + manualItems.length}</p>
                         </div>
                         <button
                             onClick={handleCheckout}
-                            disabled={cart.length === 0 || isLoading}
+                            disabled={(cart.length === 0 && manualItems.length === 0) || isLoading}
                             className="flex-1 h-[48px] bg-[var(--primary)] text-white rounded-xl text-[16px] font-bold shadow-xl shadow-[var(--primary)]/20 disabled:opacity-40 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
                         >
                             {isLoading ? (

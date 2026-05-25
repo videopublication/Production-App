@@ -9,6 +9,8 @@ interface QRScannerProps {
     onScan: (decodedText: string) => void;
     onError?: (error: string) => void;
     continuous?: boolean;
+    compact?: boolean;
+    autoStart?: boolean;
 }
 
 type ZoomCapabilities = { min: number; max: number; step: number };
@@ -183,7 +185,13 @@ const configureRunningTrack = async (
     return { zoomCapabilities, zoomVal };
 };
 
-export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuous = true }) => {
+export const QRScanner: React.FC<QRScannerProps> = ({
+    onScan,
+    onError,
+    continuous = true,
+    compact = false,
+    autoStart = false
+}) => {
     const latestOnScan = useRef(onScan);
     useEffect(() => { latestOnScan.current = onScan; }, [onScan]);
     const [isScanning, setIsScanning] = useState(false);
@@ -297,16 +305,29 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
     };
 
     useEffect(() => {
+        if (!autoStart) return;
+
+        const startDelay = isAppleTouchDevice() ? 250 : 100;
+        const timer = setTimeout(() => {
+            requestAnimationFrame(() => startScanning());
+        }, startDelay);
+
+        return () => clearTimeout(timer);
+        // Auto-start should only run when the scanner opens; rerunning restarts the camera.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoStart]);
+
+    useEffect(() => {
         return () => {
             stopScanning();
         };
     }, []);
 
     return (
-        <Card className="p-6">
-            <div className="space-y-4">
+        <Card className={compact ? 'p-4' : 'p-6'}>
+            <div className={compact ? 'space-y-3' : 'space-y-4'}>
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <h3 className="text-lg font-semibold w-full sm:w-auto text-center sm:text-left">QR Code Scanner</h3>
+                    <h3 className={`${compact ? 'text-base' : 'text-lg'} font-semibold w-full sm:w-auto text-center sm:text-left`}>QR Code Scanner</h3>
                     {isScanning ? (
                         <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
                             <Button
@@ -337,10 +358,11 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
 
                 <div
                     id={scannerId}
-                    className={`w-full rounded-lg bg-muted ${isScanning ? 'block' : 'hidden'}`}
+                    className={`w-full ${compact ? 'rounded-2xl' : 'rounded-lg'} bg-muted ${isScanning ? 'block' : 'hidden'}`}
                     style={{
                         width: '100%',
-                        minHeight: '300px',
+                        minHeight: compact ? '240px' : '300px',
+                        height: compact ? 'min(52vh, 360px)' : undefined,
                         position: 'relative',
                         overflow: 'hidden'
                     }}
@@ -395,8 +417,8 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onError, continuou
                 `}</style>
 
                 {!isScanning && !error && (
-                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                        <svg className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className={`${compact ? 'py-6' : 'py-8'} text-center text-muted-foreground border-2 border-dashed border-border rounded-lg`}>
+                        <svg className={`${compact ? 'w-12 h-12 mb-3' : 'w-16 h-16 mb-4'} mx-auto text-muted-foreground/50`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                         </svg>
                         <p className="text-sm">Click &quot;Start Camera&quot; to scan QR codes</p>
@@ -556,6 +578,8 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             }, startDelay);
             return () => clearTimeout(timer);
         }
+        // Auto-start should only run when the scanner opens; rerunning restarts the camera.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoStart]);
 
     useEffect(() => {
