@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Option {
     value: string;
@@ -38,6 +39,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
 
     // Get selected option objects to display labels
     const selectedOptions = options.filter(opt => value.includes(opt.value));
@@ -48,7 +50,10 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            const insideContainer = containerRef.current?.contains(target);
+            const insidePanel = panelRef.current?.contains(target);
+            if (!insideContainer && !insidePanel) {
                 setIsOpen(false);
                 setSearch('');
             }
@@ -71,57 +76,51 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         if (!isOpen || !isMobilePicker) return;
 
         const updatePosition = () => {
-            const trigger = triggerRef.current;
-            if (!trigger) return;
-
-            const rect = trigger.getBoundingClientRect();
-            const visualViewport = window.visualViewport;
-            const viewportWidth = visualViewport?.width ?? window.innerWidth;
-            const viewportHeight = visualViewport?.height ?? window.innerHeight;
-            const offsetLeft = visualViewport?.offsetLeft ?? 0;
-            const offsetTop = visualViewport?.offsetTop ?? 0;
-            const margin = 12;
-            const gap = 8;
+            const vv = window.visualViewport;
+            const viewportWidth = vv?.width ?? window.innerWidth;
+            const viewportHeight = vv?.height ?? window.innerHeight;
+            const offsetLeft = vv?.offsetLeft ?? 0;
+            const offsetTop = vv?.offsetTop ?? 0;
+            const margin = 8;
             const searchHeight = 64;
-            const minOptionsHeight = 140;
-            const minPanelHeight = searchHeight + minOptionsHeight;
-            const maxPanelHeight = 360;
-            const availableBelow = viewportHeight - rect.bottom - gap - margin;
-            const availableAbove = rect.top - gap - margin;
-            const shouldOpenBelow = availableBelow >= minPanelHeight || availableBelow >= availableAbove;
-            const availableSpace = shouldOpenBelow ? availableBelow : availableAbove;
-            const panelHeight = Math.max(minPanelHeight, Math.min(maxPanelHeight, availableSpace));
-            const width = Math.min(rect.width, viewportWidth - margin * 2);
-            const left = Math.max(
-                margin + offsetLeft,
-                Math.min(rect.left + offsetLeft, viewportWidth + offsetLeft - width - margin)
-            );
-            const top = shouldOpenBelow
-                ? rect.bottom + gap + offsetTop
-                : Math.max(margin + offsetTop, rect.top - gap - panelHeight + offsetTop);
+            const handleHeight = 20;
+            const minOptionsHeight = 180;
+            const minSheetHeight = handleHeight + searchHeight + minOptionsHeight;
+            const maxSheetHeight = Math.min(viewportHeight - margin * 2, 520);
+            const sheetHeight = Math.max(minSheetHeight, maxSheetHeight);
+            const top = offsetTop + viewportHeight - sheetHeight - margin;
 
             setMobileDropdownStyle({
+                position: 'fixed',
                 top,
-                left,
-                width,
-                maxHeight: panelHeight,
-                boxShadow: '0 18px 50px rgba(0, 0, 0, 0.28)'
+                left: offsetLeft + margin,
+                width: viewportWidth - margin * 2,
+                height: sheetHeight,
+                boxShadow: '0 -8px 40px rgba(0, 0, 0, 0.25)'
             });
-            setMobileOptionsMaxHeight(Math.max(minOptionsHeight, panelHeight - searchHeight));
+            setMobileOptionsMaxHeight(sheetHeight - searchHeight - handleHeight);
         };
 
         const frame = window.requestAnimationFrame(updatePosition);
         window.addEventListener('resize', updatePosition);
-        window.addEventListener('scroll', updatePosition, true);
         window.visualViewport?.addEventListener('resize', updatePosition);
         window.visualViewport?.addEventListener('scroll', updatePosition);
 
         return () => {
             window.cancelAnimationFrame(frame);
             window.removeEventListener('resize', updatePosition);
-            window.removeEventListener('scroll', updatePosition, true);
             window.visualViewport?.removeEventListener('resize', updatePosition);
             window.visualViewport?.removeEventListener('scroll', updatePosition);
+        };
+    }, [isOpen, isMobilePicker]);
+
+    // Lock body scroll when mobile sheet open
+    useEffect(() => {
+        if (!isOpen || !isMobilePicker) return;
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prevOverflow;
         };
     }, [isOpen, isMobilePicker]);
 
@@ -154,6 +153,47 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
     const dropdownStyle: React.CSSProperties = isMobilePicker
         ? mobileDropdownStyle
         : { boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)' };
+
+    const renderOptionsList = () => {
+        if (filteredOptions.length === 0) {
+            return (
+                <div className="py-6 text-center text-[14px] text-muted-foreground">
+                    {search ? 'No matches found.' : 'No options available.'}
+                </div>
+            );
+        }
+        return filteredOptions.map((option, index) => {
+            const isSelected = value.includes(option.value);
+            return (
+                <div
+                    key={option.value}
+                    onClick={() => {
+                        toggleOption(option.value);
+                        if (!isMobilePicker) {
+                            searchInputRef.current?.focus();
+                        }
+                    }}
+                    className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[15px] transition-colors ${index < filteredOptions.length - 1 ? 'mb-1' : ''
+                        } ${isSelected
+                            ? 'bg-primary/5 dark:bg-primary/20 text-primary font-semibold'
+                            : 'text-foreground hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e]'
+                        }`}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-border bg-white dark:bg-black'
+                            }`}>
+                            {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                            )}
+                        </div>
+                        <span>{option.label}</span>
+                    </div>
+                </div>
+            );
+        });
+    };
 
     return (
         <div className={`${className}`} ref={containerRef}>
@@ -234,90 +274,72 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                     </div>
                 </div>
 
-                {/* Dropdown Panel */}
-                {isOpen && (
+                {/* Desktop Dropdown Panel (inline) */}
+                {isOpen && !isMobilePicker && (
                     <div
-                        className={isMobilePicker
-                            ? 'fixed z-[160] overflow-hidden rounded-[22px] border border-border bg-white dark:bg-[#1c1c1e]'
-                            : 'absolute z-[100] mt-2 w-full overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] border border-border'
-                        }
+                        ref={panelRef}
+                        className="absolute z-[100] mt-2 w-full overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] border border-border"
                         style={dropdownStyle}
                     >
-                        {isMobilePicker && (
-                            <div className="border-b border-border p-2">
-                                <div className="flex h-11 items-center gap-2 rounded-2xl bg-[#f5f5f7] px-3 dark:bg-[#2c2c2e]">
-                                    <svg className="h-4 w-4 shrink-0 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                    </svg>
-                                    <input
-                                        type="text"
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search people..."
-                                        className="min-w-0 flex-1 bg-transparent text-[16px] text-foreground outline-none placeholder:text-muted-foreground"
-                                    />
-                                    {search && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setSearch('')}
-                                            className="rounded-full p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
-                                            aria-label="Clear search"
-                                        >
-                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                        {/* Options list */}
-                        <div
-                            className={`${isMobilePicker ? '' : 'max-h-64'} overflow-auto p-2`}
-                            style={isMobilePicker ? { maxHeight: mobileOptionsMaxHeight } : undefined}
-                        >
-                            {filteredOptions.length === 0 ? (
-                                <div className="py-6 text-center text-[14px] text-muted-foreground">
-                                    {search ? 'No matches found.' : 'No options available.'}
-                                </div>
-                            ) : (
-                                filteredOptions.map((option, index) => {
-                                    const isSelected = value.includes(option.value);
-                                    return (
-                                        <div
-                                            key={option.value}
-                                            onClick={() => {
-                                                toggleOption(option.value);
-                                                // Keep focus on input for continued typing/selecting
-                                                if (!isMobilePicker) {
-                                                    searchInputRef.current?.focus();
-                                                }
-                                            }}
-                                            className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[15px] transition-colors ${index < filteredOptions.length - 1 ? 'mb-1' : ''
-                                                } ${isSelected
-                                                    ? 'bg-primary/5 dark:bg-primary/20 text-primary font-semibold'
-                                                    : 'text-foreground hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e]'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-primary border-primary' : 'border-border bg-white dark:bg-black'
-                                                    }`}>
-                                                    {isSelected && (
-                                                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                                        </svg>
-                                                    )}
-                                                </div>
-                                                <span>{option.label}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
+                        <div className="max-h-64 overflow-auto p-2">
+                            {renderOptionsList()}
                         </div>
                     </div>
                 )}
             </div>
+
+            {/* Mobile Bottom Sheet (portaled to body to escape transformed ancestors) */}
+            {isOpen && isMobilePicker && typeof document !== 'undefined' && createPortal(
+                <>
+                    <div
+                        className="fixed inset-0 z-[155] bg-black/40 backdrop-blur-sm"
+                        onClick={() => window.history.back()}
+                    />
+                    <div
+                        ref={panelRef}
+                        className="z-[160] flex flex-col overflow-hidden rounded-[22px] border border-border bg-white dark:bg-[#1c1c1e]"
+                        style={dropdownStyle}
+                    >
+                        <div className="flex justify-center pt-2 pb-1 shrink-0">
+                            <div className="h-1 w-9 rounded-full bg-muted-foreground/30" />
+                        </div>
+                        <div className="border-b border-border px-2 pb-2 shrink-0">
+                            <div className="flex h-11 items-center gap-2 rounded-2xl bg-[#f5f5f7] px-3 dark:bg-[#2c2c2e]">
+                                <svg className="h-4 w-4 shrink-0 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search people..."
+                                    autoFocus
+                                    className="min-w-0 flex-1 bg-transparent text-[16px] text-foreground outline-none placeholder:text-muted-foreground"
+                                />
+                                {search && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearch('')}
+                                        className="rounded-full p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+                                        aria-label="Clear search"
+                                    >
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div
+                            className="flex-1 min-h-0 overflow-auto p-2"
+                            style={{ maxHeight: mobileOptionsMaxHeight }}
+                        >
+                            {renderOptionsList()}
+                        </div>
+                    </div>
+                </>,
+                document.body
+            )}
         </div>
     );
 };

@@ -1297,7 +1297,7 @@ export default function CheckoutPage() {
             </PullToRefresh>
 
             {/* Mobile Bottom Bar */}
-            {!isSearchFocused && !isNotesFocused && (
+            {!isSearchFocused && !isNotesFocused && !isDropdownOpen && (
                 <div 
                     className="md:hidden fixed left-0 right-0 p-4 bg-background border-t border-border shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] z-30"
                     style={{ bottom: 'var(--mobile-tab-height)' }}
