@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { Shoot, Assignment, User } from '@/types';
+import { getRoleLabel } from '@/lib/roles';
 import {
     ChevronLeft,
     ChevronRight,
@@ -940,7 +941,7 @@ export default function CalendarPage() {
                                                                                     {member.user?.name || member.user?.email || 'Unknown'}
                                                                                 </p>
                                                                                 <p className="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-500">
-                                                                                    {member.role === 'Incharge' ? 'Lead' : member.user?.role || 'Crew'}
+                                                                                    {member.role === 'Incharge' ? 'Lead' : getRoleLabel(member.user?.role || 'Crew')}
                                                                                 </p>
                                                                             </div>
                                                                         </div>

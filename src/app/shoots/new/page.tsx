@@ -10,6 +10,7 @@ import { Shoot, Assignment } from '@/types';
 import { generateUUID } from '@/lib/id';
 import { useDepartment } from '@/lib/department-context';
 import { sendPushNotification } from '@/lib/push-notifications';
+import { getRoleLabel } from '@/lib/roles';
 
 export default function NewShootPage() {
     const router = useRouter();
@@ -73,7 +74,7 @@ export default function NewShootPage() {
                     if (assignment.userId === user?.id) return;
                     
                     const title = 'New Shoot Assignment';
-                    const message = `You have been assigned to shoot "${newShoot.title}" as ${assignment.role}.`;
+                    const message = `You have been assigned to shoot "${newShoot.title}" as ${getRoleLabel(assignment.role)}.`;
                     
                     await storage.addNotification({
                         userId: assignment.userId,

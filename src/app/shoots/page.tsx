@@ -14,6 +14,7 @@ import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOf
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { getRoleLabel } from '@/lib/roles';
 
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'CONFIRMED' | 'CANCELLED';
@@ -818,7 +819,7 @@ export default function ShootList() {
                                                             <div className="space-y-1.5">
                                                                 {getShootCrew(shoot.id).map((member, idx) => (
                                                                     <div key={idx} className="flex justify-between items-center text-xs">
-                                                                        <span className="text-gray-500 dark:text-gray-400 capitalize">{member.role.toLowerCase()}</span>
+                                                                        <span className="text-gray-500 dark:text-gray-400">{getRoleLabel(member.role)}</span>
                                                                         <span className="font-medium text-gray-900 dark:text-white truncate max-w-[120px] text-right" title={member.name}>{member.name}</span>
                                                                     </div>
                                                                 ))}
@@ -1074,7 +1075,7 @@ export default function ShootList() {
                                                         <div className="space-y-1.5">
                                                             {getShootCrew(shoot.id).map((member, idx) => (
                                                                 <div key={idx} className="flex justify-between items-center text-xs">
-                                                                    <span className="text-gray-500 dark:text-gray-400 capitalize">{member.role.toLowerCase()}</span>
+                                                                    <span className="text-gray-500 dark:text-gray-400">{getRoleLabel(member.role)}</span>
                                                                     <span className="font-medium text-gray-900 dark:text-white truncate max-w-[120px] text-right" title={member.name}>{member.name}</span>
                                                                 </div>
                                                             ))}

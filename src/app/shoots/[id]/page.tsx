@@ -25,6 +25,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { getGoogleProviderToken, deleteGoogleCalendarEvent, createGoogleCalendarEvent } from '@/lib/google-calendar';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { getRoleLabel } from '@/lib/roles';
 
 export default function ShootDetailsPage() {
     const router = useRouter();
@@ -637,7 +638,7 @@ export default function ShootDetailsPage() {
                                     const getRoleClasses = (role: string) => {
                                         switch (role) {
                                             case 'ADMIN': return 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700';
-                                            case 'SUPER_ADMIN': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 border-red-300 dark:border-red-700';
+                                            case 'SUPER_ADMIN': return 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700';
                                             case 'MANAGER': return 'bg-primary/20 text-primary border-primary/30';
                                             default: return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700';
                                         }
@@ -676,7 +677,7 @@ export default function ShootDetailsPage() {
                                                         <span
                                                             className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide border ${roleClass}`}
                                                         >
-                                                            {isIncharge ? 'Shoot Incharge' : assignedUser.role.replace('_', ' ')}
+                                                            {isIncharge ? 'Shoot Incharge' : getRoleLabel(assignedUser.role)}
                                                         </span>
                                                     </div>
                                                 </div>

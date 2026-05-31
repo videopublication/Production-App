@@ -8,6 +8,7 @@ import { ActiveSessions } from '@/components/ActiveSessions';
 
 import { APP_CONFIG } from '@/lib/config';
 import { useToast } from '@/lib/toast-context';
+import { getRoleLabel } from '@/lib/roles';
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -29,7 +30,7 @@ Version: ${APP_CONFIG.version}
 Environment: ${APP_CONFIG.build}
 User ID: ${user.id}
 Email: ${user.email}
-Role: ${user.role}
+Role: ${getRoleLabel(user.role)}
 User Agent: ${navigator.userAgent}
         `.trim();
 
@@ -72,7 +73,7 @@ User Agent: ${navigator.userAgent}
                     </div>
                 )}
                 <h1 className="text-xl font-semibold text-[#1d1d1f] dark:text-white">{user.name}</h1>
-                <p className="text-[15px] text-[#86868b] dark:text-gray-400">{user.role}</p>
+                <p className="text-[15px] text-[#86868b] dark:text-gray-400">{getRoleLabel(user.role)}</p>
             </div>
 
             {/* Account Section */}
@@ -103,7 +104,7 @@ User Agent: ${navigator.userAgent}
 
                     <div className="list-item-native flex items-center justify-between">
                         <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Role</span>
-                        <span className="text-[15px] text-[#86868b] dark:text-gray-400">{user.role}</span>
+                        <span className="text-[15px] text-[#86868b] dark:text-gray-400">{getRoleLabel(user.role)}</span>
                     </div>
                     <div
                         className="list-item-native flex items-center justify-between active:bg-gray-100 dark:active:bg-[#2c2c2e] cursor-pointer"

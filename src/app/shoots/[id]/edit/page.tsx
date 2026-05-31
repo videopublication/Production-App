@@ -13,6 +13,7 @@ import { Shoot, Assignment } from '@/types';
 import { generateUUID } from '@/lib/id';
 import { format, parseISO } from 'date-fns';
 import { sendPushNotification } from '@/lib/push-notifications';
+import { getRoleLabel } from '@/lib/roles';
 
 export default function EditShootPage() {
     const router = useRouter();
@@ -77,7 +78,7 @@ export default function EditShootPage() {
                     if (assignment.userId === user?.id) return;
                     
                     const title = 'New Shoot Assignment';
-                    const message = `You have been added to shoot "${updatedShoot.title}" as ${assignment.role}.`;
+                    const message = `You have been added to shoot "${updatedShoot.title}" as ${getRoleLabel(assignment.role)}.`;
                     
                     await storage.addNotification({
                         userId: assignment.userId,
@@ -120,7 +121,7 @@ export default function EditShootPage() {
                     if (assignment.userId === user?.id) return;
                     
                     const title = 'Shoot Role Updated';
-                    const message = `Your role in shoot "${updatedShoot.title}" has been updated to ${assignment.role}.`;
+                    const message = `Your role in shoot "${updatedShoot.title}" has been updated to ${getRoleLabel(assignment.role)}.`;
                     
                     await storage.addNotification({
                         userId: assignment.userId,

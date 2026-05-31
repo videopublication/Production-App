@@ -21,6 +21,7 @@ import { useCheckOut } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
 import { getEquipmentIssue, getIssueSummary, isEquipmentIssueBlocking } from '@/lib/equipment-issues';
+import { getRoleLabel } from '@/lib/roles';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -32,6 +33,8 @@ const compareShootsByDateDesc = (a: Shoot, b: Shoot) => {
     const dateDiff = new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
     return dateDiff || a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
 };
+
+const RETURNABLE_ITEM_NOTE_PATTERN = /\b(cables?|wires?|chargers?|adapters?|batter(?:y|ies)|mics?|microphones?|connectors?|stands?|tripods?|cards?|readers?|mounts?|bags?|cases?|lights?|lenses?)\b/i;
 
 const IssueWarning = ({ item, compact = false }: { item: Equipment; compact?: boolean }) => {
     const issue = getEquipmentIssue(item);
@@ -69,6 +72,7 @@ export default function CheckoutPage() {
     const [scanInput, setScanInput] = useState('');
     const [project, setProject] = useState('');
     const [notes, setNotes] = useState('');
+    const notesMayContainReturnableItems = RETURNABLE_ITEM_NOTE_PATTERN.test(notes);
     const [selectedShootId, setSelectedShootId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
@@ -1010,7 +1014,7 @@ export default function CheckoutPage() {
                                                 .filter(u => u.status !== 'SUSPENDED')
                                                 .map(u => ({
                                                     value: u.id,
-                                                    label: `${u.name} (${u.role})`
+                                                    label: `${u.name} (${getRoleLabel(u.role)})`
                                                 }))
                                                 .sort(compareByLabel)}
                                         />
@@ -1037,6 +1041,14 @@ export default function CheckoutPage() {
                                             onChange={(e) => setNotes(e.target.value)}
                                             className="w-full h-24 p-4 bg-muted text-foreground border-0 rounded-xl text-[15px] focus:ring-2 focus:ring-primary transition-all resize-none placeholder:text-muted-foreground/70"
                                         />
+                                        <p className="mt-1.5 text-xs font-medium text-muted-foreground">
+                                            Use Manual Items for anything that must be returned. Notes are only for general instructions.
+                                        </p>
+                                        {notesMayContainReturnableItems && (
+                                            <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                Looks like this note mentions returnable items. Add cables, chargers, adapters, or similar items as Manual Items so they appear in Returns and Verification.
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="pt-4 border-t border-border">
@@ -1134,7 +1146,7 @@ export default function CheckoutPage() {
                                                     .filter(u => u.status !== 'SUSPENDED')
                                                     .map(u => ({
                                                         value: u.id,
-                                                        label: `${u.name} (${u.role})`
+                                                        label: `${u.name} (${getRoleLabel(u.role)})`
                                                     }))
                                                     .sort(compareByLabel)}
                                                 onOpenChange={setIsDropdownOpen}
@@ -1178,6 +1190,14 @@ export default function CheckoutPage() {
                                             className="block min-h-[132px] w-full resize-y appearance-none rounded-2xl border-0 bg-transparent px-4 py-3 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
                                         />
                                     </div>
+                                    <p className="mt-1.5 px-1 text-[12px] font-medium leading-snug text-muted-foreground">
+                                        Use Manual Items for anything that must be returned. Notes are only for general instructions.
+                                    </p>
+                                    {notesMayContainReturnableItems && (
+                                        <div className="mt-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                            Looks like this note mentions returnable items. Add cables, chargers, adapters, or similar items as Manual Items so they appear in Returns and Verification.
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { User } from '@/types';
 import { sendPushNotification } from '@/lib/push-notifications';
+import { getRoleLabel } from '@/lib/roles';
 
 export default function SendNotificationPage() {
     const router = useRouter();
@@ -176,7 +177,7 @@ export default function SendNotificationPage() {
                                     <option value="">Select a user...</option>
                                     {users.map(u => (
                                         <option key={u.id} value={u.id}>
-                                            {u.name} ({u.role})
+                                            {u.name} ({getRoleLabel(u.role)})
                                         </option>
                                     ))}
                                 </select>

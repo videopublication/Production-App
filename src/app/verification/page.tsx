@@ -18,7 +18,7 @@ import {
     isIssueCondition,
     withActiveIssue,
 } from '@/lib/equipment-issues';
-import { areManualItemsComplete } from '@/lib/transaction-manual-items';
+import { areManualItemsComplete, decodeTransactionNotes } from '@/lib/transaction-manual-items';
 
 type SortField = 'item' | 'project' | 'user' | 'date';
 type SortDirection = 'asc' | 'desc';
@@ -37,6 +37,11 @@ type VerificationGroup = {
     transactionIds: string[];
     items: Equipment[];
     manualItems: PendingManualItem[];
+    notes: Array<{
+        transactionId: string;
+        label: string;
+        text: string;
+    }>;
 };
 
 import { Skeleton } from '@/components/Skeleton';
@@ -162,6 +167,10 @@ export default function VerificationPage() {
         return values.some(value => normalizeSearch(value).includes(query));
     }, [normalizeSearch]);
 
+    const getCleanTransactionNotes = React.useCallback((txn?: Transaction) => {
+        return decodeTransactionNotes(txn?.notes).notes || '';
+    }, []);
+
     const itemMatchesSearch = React.useCallback((item: Equipment, query: string) => {
         if (!query) return true;
 
@@ -179,12 +188,13 @@ export default function VerificationPage() {
             activeIssue ? getIssueSummary(activeIssue) : '',
             activeIssue?.note,
             txn?.project,
+            getCleanTransactionNotes(txn),
             txn?.id,
             txn ? formatTxnId(txn.id) : '',
             getUserName(item.assignedTo),
             item.lastActivity,
         ]);
-    }, [formatTxnId, getItemTransaction, getUserName, textMatchesSearch]);
+    }, [formatTxnId, getCleanTransactionNotes, getItemTransaction, getUserName, textMatchesSearch]);
 
     const manualItemMatchesSearch = React.useCallback((row: PendingManualItem, query: string) => {
         if (!query) return true;
@@ -195,13 +205,14 @@ export default function VerificationPage() {
             row.item.returnNote,
             row.item.status,
             row.transaction.project,
+            getCleanTransactionNotes(row.transaction),
             row.transaction.id,
             formatTxnId(row.transaction.id),
             getUserName(row.transaction.userId),
             row.transaction.timestampOut,
             row.transaction.timestampIn,
         ]);
-    }, [formatTxnId, getUserName, textMatchesSearch]);
+    }, [formatTxnId, getCleanTransactionNotes, getUserName, textMatchesSearch]);
 
     // Sorted items for table view
     const sortedItems = useMemo(() => {
@@ -271,11 +282,23 @@ export default function VerificationPage() {
                     transactionIds: [],
                     items: [],
                     manualItems: [],
+                    notes: [],
                 };
             }
 
             if (txn && !groups[key].transactionIds.includes(txn.id)) {
                 groups[key].transactionIds.push(txn.id);
+            }
+
+            if (txn) {
+                const cleanNotes = getCleanTransactionNotes(txn);
+                if (cleanNotes && !groups[key].notes.some(note => note.transactionId === txn.id)) {
+                    groups[key].notes.push({
+                        transactionId: txn.id,
+                        label: formatTxnId(txn.id),
+                        text: cleanNotes,
+                    });
+                }
             }
 
             if (!Number.isNaN(timestamp) && timestamp > groups[key].timestamp) {
@@ -308,7 +331,7 @@ export default function VerificationPage() {
                 if (dateComparison !== 0) return dateComparison;
                 return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
             });
-    }, [pendingItems, pendingManualItems, shoots, getItemTransaction, formatTxnId, formatDate, compareByName]);
+    }, [pendingItems, pendingManualItems, shoots, getItemTransaction, getCleanTransactionNotes, formatTxnId, formatDate, compareByName]);
 
     const normalizedSearchQuery = useMemo(() => normalizeSearch(searchQuery), [normalizeSearch, searchQuery]);
 
@@ -333,6 +356,7 @@ export default function VerificationPage() {
                     group.date,
                     ...group.transactionIds,
                     ...group.transactionIds.map(id => formatTxnId(id)),
+                    ...group.notes.map(note => note.text),
                 ]);
 
                 const items = groupMatches
@@ -1317,6 +1341,15 @@ export default function VerificationPage() {
                                                 </span>
                                             )}
                                         </div>
+                                        {group.notes.length > 0 && (
+                                            <div className="mt-2 ml-6 max-w-3xl rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-200">
+                                                <span className="font-bold">Checkout notes: </span>
+                                                <span className="font-medium line-clamp-2">
+                                                    {group.notes[0].text}
+                                                    {group.notes.length > 1 ? ` (+${group.notes.length - 1} more)` : ''}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                     <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
                                         {isExpanded ? 'Hide' : 'Open'}
@@ -1325,6 +1358,26 @@ export default function VerificationPage() {
 
                                 {isExpanded && (
                                     <div className="border-t border-gray-100 p-4 dark:border-gray-800">
+                                        {group.notes.length > 0 && (
+                                            <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
+                                                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m8-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                                    </svg>
+                                                    Checkout Notes
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {group.notes.map(note => (
+                                                        <div key={note.transactionId} className="rounded-xl bg-white/70 px-3 py-2 dark:bg-black/20">
+                                                            {group.notes.length > 1 && (
+                                                                <p className="mb-1 font-mono text-[11px] font-bold text-sky-600 dark:text-sky-300">{note.label}</p>
+                                                            )}
+                                                            <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed">{note.text}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                         {group.items.length > 0 && (
                                             <div className="mb-3 flex justify-end">
                                                 <button

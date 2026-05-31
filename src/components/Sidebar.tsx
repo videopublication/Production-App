@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
 import { useDepartment } from '@/lib/department-context';
+import { getRoleLabel } from '@/lib/roles';
 
 export const Sidebar = () => {
     const pathname = usePathname();
@@ -123,7 +124,7 @@ export const Sidebar = () => {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="font-medium text-[14px] text-foreground truncate group-hover:text-primary transition-colors">{user.name}</p>
-                                <p className="text-[12px] text-muted-foreground">{user.role}</p>
+                                <p className="text-[12px] text-muted-foreground">{getRoleLabel(user.role)}</p>
                             </div>
                         </Link>
                         <button

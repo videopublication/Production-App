@@ -9,6 +9,7 @@ import { Button } from './Button';
 import { storage } from '@/lib/storage';
 import { Notification as AppNotification } from '@/types';
 import { useDepartment } from '@/lib/department-context';
+import { getRoleLabel } from '@/lib/roles';
 
 export const Navbar = () => {
     const pathname = usePathname();
@@ -214,7 +215,7 @@ export const Navbar = () => {
                                 <div className="flex items-center space-x-4">
                                     <div className="text-sm text-right">
                                         <p className="font-medium leading-none">{user.name}</p>
-                                        <p className="text-xs text-muted-foreground mt-1">{user.role}</p>
+                                        <p className="text-xs text-muted-foreground mt-1">{getRoleLabel(user.role)}</p>
                                     </div>
                                     <Button variant="outline" size="sm" onClick={logout}>
                                         Logout
@@ -275,7 +276,7 @@ export const Navbar = () => {
                                 <div className="flex items-center justify-between px-2">
                                     <div>
                                         <p className="font-medium">{user.name}</p>
-                                        <p className="text-xs text-muted-foreground">{user.role}</p>
+                                        <p className="text-xs text-muted-foreground">{getRoleLabel(user.role)}</p>
                                     </div>
                                     <Button variant="outline" size="sm" onClick={() => { logout(); setIsMobileMenuOpen(false); }}>
                                         Logout
