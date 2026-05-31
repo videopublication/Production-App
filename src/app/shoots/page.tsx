@@ -314,7 +314,7 @@ export default function ShootList() {
                                 variant="outline"
                                 onClick={() => {
                                     const headers = [
-                                        'Shoot ID', 'Title', 'Date', 'Time', 'Location', 'Status', 
+                                        'Shoot ID', 'Title', 'Start Date', 'Start Time', 'End Date', 'End Time', 'Location', 'POC Name', 'Status', 
                                         'Crew Count', 'Crew Names', 
                                         'Total Expenses', 'Category', 
                                         'Boarding', 'Travel', 'Equipment', 'Manpower', 'Other',
@@ -322,8 +322,10 @@ export default function ShootList() {
                                     ];
                                     const rows = filteredShoots.map(shoot => {
                                         const crew = getShootCrew(shoot.id);
-                                        const date = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
-                                        const time = shoot.startTime ? format(parseISO(shoot.startTime), 'HH:mm') : '';
+                                        const startDate = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
+                                        const startTime = shoot.startTime ? format(parseISO(shoot.startTime), 'HH:mm') : '';
+                                        const endDate = shoot.endTime ? format(parseISO(shoot.endTime), 'yyyy-MM-dd') : '';
+                                        const endTime = shoot.endTime ? format(parseISO(shoot.endTime), 'HH:mm') : '';
                                         const crewNames = crew.map(c => c.name).join(', ');
                                         const totalExpenses = getShootTotalExpense(shoot);
                                         const category = shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || '';
@@ -336,9 +338,12 @@ export default function ShootList() {
                                         return [
                                             shoot.shootNumber || '',
                                             `"${shoot.title.replace(/"/g, '""')}"`, // Escape quotes
-                                            date,
-                                            time,
+                                            startDate,
+                                            startTime,
+                                            endDate,
+                                            endTime,
                                             `"${(shoot.location || '').replace(/"/g, '""')}"`,
+                                            `"${(shoot.pocName || '').replace(/"/g, '""')}"`,
                                             shoot.status,
                                             crew.length,
                                             `"${crewNames}"`,

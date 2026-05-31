@@ -1,4 +1,4 @@
-import { Shoot, ShootExpense } from '@/types';
+import { Assignment, Shoot, ShootExpense, User } from '@/types';
 
 /**
  * Calculates the total expense for a given shoot.
@@ -11,12 +11,16 @@ export const getShootTotalExpense = (shoot: Shoot): number => {
 /**
  * Generates a CSV blob containing shoot and expense data for reporting.
  */
-export const generateShootsCSV = (shoots: Shoot[], assignments: any[], users: any[]): Blob => {
+export const generateShootsCSV = (shoots: Shoot[], assignments: Assignment[], users: User[]): Blob => {
     const headers = [
         'Shoot Number',
         'Title',
-        'Date',
+        'Start Date',
+        'Start Time',
+        'End Date',
+        'End Time',
         'Location',
+        'POC Name',
         'Status',
         'Category',
         'Total Expenses (₹)',
@@ -29,7 +33,12 @@ export const generateShootsCSV = (shoots: Shoot[], assignments: any[], users: an
     ];
 
     const rows = shoots.map(shoot => {
-        const shootDate = shoot.startTime ? new Date(shoot.startTime).toLocaleDateString() : 'N/A';
+        const start = shoot.startTime ? new Date(shoot.startTime) : null;
+        const end = shoot.endTime ? new Date(shoot.endTime) : null;
+        const startDate = start ? start.toLocaleDateString() : 'N/A';
+        const startTime = start ? start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+        const endDate = end ? end.toLocaleDateString() : 'N/A';
+        const endTime = end ? end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
         const totalExpense = getShootTotalExpense(shoot);
         
         // Extract category (assuming it's stored in campaign field of first expense or similar, as per existing logic)
@@ -58,8 +67,12 @@ export const generateShootsCSV = (shoots: Shoot[], assignments: any[], users: an
         return [
             shoot.shootNumber || 'N/A',
             `"${shoot.title.replace(/"/g, '""')}"`,
-            shootDate,
+            startDate,
+            startTime,
+            endDate,
+            endTime,
             `"${(shoot.location || '').replace(/"/g, '""')}"`,
+            `"${(shoot.pocName || '').replace(/"/g, '""')}"`,
             shoot.status,
             `"${category}"`,
             totalExpense,
@@ -80,7 +93,6 @@ export const generateShootsCSV = (shoots: Shoot[], assignments: any[], users: an
  * Triggers a download of the provided CSV Blob.
  */
 export const downloadCSV = (blob: Blob, filename: string) => {
-    const link = document.createElement('url');
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

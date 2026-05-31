@@ -654,7 +654,7 @@ export default function CheckoutPage() {
                 />
             </div>
 
-            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_260px]">
+            <div className="mt-2 grid gap-2">
                 <input
                     type="text"
                     value={manualItemNotes}
@@ -662,7 +662,7 @@ export default function CheckoutPage() {
                     placeholder="Manual item note (optional)"
                     className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
                 />
-                <div className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1 border border-border" aria-label="Manual item type">
+                <div className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1 border border-border w-full" aria-label="Manual item type">
                     <button
                         type="button"
                         onClick={() => setManualItemReturnRequired(true)}

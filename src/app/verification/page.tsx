@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { Search, ScanLine } from 'lucide-react';
 import { storage } from '@/lib/storage';
 import { Condition, Equipment, ManualTransactionItem, Shoot, Transaction, User } from '@/types';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useDepartment } from '@/lib/department-context';
+import { MobileScanner, QRScanner } from '@/components/QRScanner';
 import {
     CONDITION_LABELS,
     conditionToIssueSeverity,
@@ -55,6 +57,8 @@ export default function VerificationPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [shoots, setShoots] = useState<Shoot[]>([]);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showVerificationScanner, setShowVerificationScanner] = useState(false);
     const [viewMode, setViewMode] = useState<'card' | 'table'>(() => {
         if (typeof window !== 'undefined') {
             return (sessionStorage.getItem('verificationViewMode') as 'card' | 'table') || 'card';
@@ -139,6 +143,65 @@ export default function VerificationPage() {
     const compareByName = React.useCallback((a: Equipment, b: Equipment) => {
         return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
     }, []);
+
+    const parseVerificationScanCode = (decodedText: string) => {
+        try {
+            const data = JSON.parse(decodedText);
+            return String(data.barcode || data.id || decodedText).trim();
+        } catch {
+            return decodedText.trim();
+        }
+    };
+
+    const normalizeSearch = React.useCallback((value?: string | number | null) => {
+        return String(value ?? '').toLowerCase().trim();
+    }, []);
+
+    const textMatchesSearch = React.useCallback((query: string, values: Array<string | number | null | undefined>) => {
+        if (!query) return true;
+        return values.some(value => normalizeSearch(value).includes(query));
+    }, [normalizeSearch]);
+
+    const itemMatchesSearch = React.useCallback((item: Equipment, query: string) => {
+        if (!query) return true;
+
+        const txn = getItemTransaction(item.id);
+        const activeIssue = getEquipmentIssue(item);
+
+        return textMatchesSearch(query, [
+            item.name,
+            item.barcode,
+            item.serialNumber,
+            item.category,
+            item.location,
+            item.condition,
+            CONDITION_LABELS[item.condition],
+            activeIssue ? getIssueSummary(activeIssue) : '',
+            activeIssue?.note,
+            txn?.project,
+            txn?.id,
+            txn ? formatTxnId(txn.id) : '',
+            getUserName(item.assignedTo),
+            item.lastActivity,
+        ]);
+    }, [formatTxnId, getItemTransaction, getUserName, textMatchesSearch]);
+
+    const manualItemMatchesSearch = React.useCallback((row: PendingManualItem, query: string) => {
+        if (!query) return true;
+
+        return textMatchesSearch(query, [
+            row.item.name,
+            row.item.notes,
+            row.item.returnNote,
+            row.item.status,
+            row.transaction.project,
+            row.transaction.id,
+            formatTxnId(row.transaction.id),
+            getUserName(row.transaction.userId),
+            row.transaction.timestampOut,
+            row.transaction.timestampIn,
+        ]);
+    }, [formatTxnId, getUserName, textMatchesSearch]);
 
     // Sorted items for table view
     const sortedItems = useMemo(() => {
@@ -247,16 +310,66 @@ export default function VerificationPage() {
             });
     }, [pendingItems, pendingManualItems, shoots, getItemTransaction, formatTxnId, formatDate, compareByName]);
 
+    const normalizedSearchQuery = useMemo(() => normalizeSearch(searchQuery), [normalizeSearch, searchQuery]);
+
+    const filteredPendingItems = useMemo(() => {
+        if (!normalizedSearchQuery) return pendingItems;
+        return pendingItems.filter(item => itemMatchesSearch(item, normalizedSearchQuery));
+    }, [itemMatchesSearch, normalizedSearchQuery, pendingItems]);
+
+    const filteredPendingManualItems = useMemo(() => {
+        if (!normalizedSearchQuery) return pendingManualItems;
+        return pendingManualItems.filter(row => manualItemMatchesSearch(row, normalizedSearchQuery));
+    }, [manualItemMatchesSearch, normalizedSearchQuery, pendingManualItems]);
+
+    const filteredVerificationGroups = useMemo<VerificationGroup[]>(() => {
+        if (!normalizedSearchQuery) return verificationGroups;
+
+        return verificationGroups
+            .map(group => {
+                const groupMatches = textMatchesSearch(normalizedSearchQuery, [
+                    group.title,
+                    group.txnId,
+                    group.date,
+                    ...group.transactionIds,
+                    ...group.transactionIds.map(id => formatTxnId(id)),
+                ]);
+
+                const items = groupMatches
+                    ? group.items
+                    : group.items.filter(item => itemMatchesSearch(item, normalizedSearchQuery));
+                const manualItems = groupMatches
+                    ? group.manualItems
+                    : group.manualItems.filter(row => manualItemMatchesSearch(row, normalizedSearchQuery));
+
+                return {
+                    ...group,
+                    items,
+                    manualItems,
+                };
+            })
+            .filter(group => group.items.length > 0 || group.manualItems.length > 0);
+    }, [formatTxnId, itemMatchesSearch, manualItemMatchesSearch, normalizedSearchQuery, textMatchesSearch, verificationGroups]);
+
+    const visibleSortedItems = useMemo(() => {
+        if (!normalizedSearchQuery) return sortedItems;
+        const visibleIds = new Set(filteredPendingItems.map(item => item.id));
+        return sortedItems.filter(item => visibleIds.has(item.id));
+    }, [filteredPendingItems, normalizedSearchQuery, sortedItems]);
+
     useEffect(() => {
         setExpandedGroups(prev => {
-            const validKeys = new Set(verificationGroups.map(group => group.key));
+            const activeGroups = normalizedSearchQuery ? filteredVerificationGroups : verificationGroups;
+            const validKeys = new Set(activeGroups.map(group => group.key));
             const next = new Set([...prev].filter(key => validKeys.has(key)));
-            if (verificationGroups.length === 1) {
-                next.add(verificationGroups[0].key);
+            if (normalizedSearchQuery) {
+                activeGroups.forEach(group => next.add(group.key));
+            } else if (activeGroups.length === 1) {
+                next.add(activeGroups[0].key);
             }
             return next;
         });
-    }, [verificationGroups]);
+    }, [filteredVerificationGroups, normalizedSearchQuery, verificationGroups]);
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
@@ -291,10 +404,15 @@ export default function VerificationPage() {
     };
 
     const selectAll = () => {
-        if (selectedItems.size === pendingItems.length) {
-            setSelectedItems(new Set());
+        const visibleItemIds = filteredPendingItems.map(item => item.id);
+        const allVisibleSelected = visibleItemIds.length > 0 && visibleItemIds.every(id => selectedItems.has(id));
+
+        if (allVisibleSelected) {
+            const next = new Set(selectedItems);
+            visibleItemIds.forEach(id => next.delete(id));
+            setSelectedItems(next);
         } else {
-            setSelectedItems(new Set(pendingItems.map(item => item.id)));
+            setSelectedItems(new Set([...selectedItems, ...visibleItemIds]));
         }
     };
 
@@ -312,6 +430,14 @@ export default function VerificationPage() {
             }
             return next;
         });
+    };
+
+    const handleVerificationScan = (decodedText: string) => {
+        const code = parseVerificationScanCode(decodedText);
+        if (!code) return;
+
+        setSearchQuery(code);
+        setShowVerificationScanner(false);
     };
 
     const handleVerify = async (
@@ -739,7 +865,7 @@ export default function VerificationPage() {
                             </span>
                         </div>
 
-                        {!selectionMode && (
+                        {!selectionMode && pendingItems.length > 0 && (
                             <button
                                 onClick={selectAll}
                                 className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
@@ -747,6 +873,91 @@ export default function VerificationPage() {
                                 Select All
                             </button>
                         )}
+                    </div>
+                )}
+            </div>
+
+            <div className="space-y-3">
+                <div className="flex h-14 w-full items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 shadow-sm transition-all duration-200 focus-within:border-transparent focus-within:ring-2 focus-within:ring-primary dark:border-gray-800 dark:bg-[#1c1c1e]">
+                    <Search className="h-5 w-5 shrink-0 text-gray-400" />
+                    <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search item, QR, serial, shoot, transaction, user..."
+                        className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
+                    />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                            aria-label="Clear search"
+                        >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className={`flex h-11 w-12 shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95 ${showVerificationScanner
+                            ? 'border-primary/30 bg-primary text-white shadow-lg shadow-primary/20'
+                            : 'border-gray-200 bg-[#1f2937] text-white hover:bg-[#273449] dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800'
+                            }`}
+                        onClick={() => setShowVerificationScanner(prev => !prev)}
+                        title={showVerificationScanner ? 'Hide scanner' : 'Scan item'}
+                        aria-label={showVerificationScanner ? 'Hide scanner' : 'Scan item'}
+                    >
+                        <ScanLine className="h-6 w-6" strokeWidth={2.25} />
+                    </button>
+                </div>
+
+                {normalizedSearchQuery && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="rounded-full bg-primary/10 px-2.5 py-1 font-semibold text-primary">
+                            {filteredPendingItems.length + filteredPendingManualItems.length} match{filteredPendingItems.length + filteredPendingManualItems.length !== 1 ? 'es' : ''}
+                        </span>
+                        <span>
+                            from {pendingItems.length + pendingManualItems.length} pending items
+                        </span>
+                    </div>
+                )}
+
+                {showVerificationScanner && (
+                    <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white p-3 shadow-xl shadow-black/10 dark:border-gray-800 dark:bg-[#1c1c1e]">
+                        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                            <div className="min-w-0">
+                                <h2 className="text-[18px] font-bold text-gray-900 dark:text-white">QR Code Scanner</h2>
+                                <p className="truncate text-[13px] text-gray-500 dark:text-gray-400">Scan a returned item to find it for verification.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowVerificationScanner(false)}
+                                className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="md:hidden h-[360px] max-h-[52vh] min-h-[280px] overflow-hidden rounded-[24px] bg-black shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
+                            <MobileScanner
+                                onScan={handleVerificationScan}
+                                onError={(error) => showToast(error, 'error')}
+                                onClose={() => setShowVerificationScanner(false)}
+                                autoStart
+                            />
+                        </div>
+
+                        <div className="hidden md:block">
+                            <QRScanner
+                                onScan={handleVerificationScan}
+                                onError={(error) => showToast(error, 'error')}
+                                continuous={false}
+                                compact
+                                autoStart
+                            />
+                        </div>
                     </div>
                 )}
             </div>
@@ -770,7 +981,7 @@ export default function VerificationPage() {
                         </button>
                     </div>
 
-                    {selectedItems.size < pendingItems.length && (
+                    {filteredPendingItems.some(item => !selectedItems.has(item.id)) && (
                         <button
                             onClick={selectAll}
                             className="rounded-xl px-3 py-2 text-sm font-semibold text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
@@ -852,14 +1063,14 @@ export default function VerificationPage() {
                 </div>
             )}
 
-            {!isLoading && viewMode === 'table' && pendingItems.length > 0 && pendingManualItems.length > 0 && (
+            {!isLoading && viewMode === 'table' && visibleSortedItems.length > 0 && filteredPendingManualItems.length > 0 && (
                 <section className="space-y-3">
                     <div>
                         <h2 className="text-sm font-bold text-gray-900 dark:text-white">Manual Items</h2>
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Items without QR waiting for manager verification</p>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {pendingManualItems.map(row => (
+                        {filteredPendingManualItems.map(row => (
                             <div key={row.key} className="rounded-xl border border-amber-300/60 bg-white p-4 shadow-sm dark:bg-[#1c1c1e]">
                                 <div className="mb-3 flex items-start justify-between gap-3">
                                     <div className="min-w-0">
@@ -918,7 +1129,17 @@ export default function VerificationPage() {
                         There are no items pending verification. Great job!
                     </p>
                 </div>
-            ) : viewMode === 'table' && pendingItems.length > 0 ? (
+            ) : normalizedSearchQuery && filteredPendingItems.length === 0 && filteredPendingManualItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-[#1c1c1e] rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                    <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                        <Search className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">No Matching Items</h3>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
+                        No pending verification item matches this search or QR code.
+                    </p>
+                </div>
+            ) : viewMode === 'table' && visibleSortedItems.length > 0 ? (
                 /* ========== TABLE VIEW ========== */
                 <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
@@ -929,7 +1150,7 @@ export default function VerificationPage() {
                                         <div className="flex items-center justify-center">
                                             <input
                                                 type="checkbox"
-                                                checked={selectedItems.size === pendingItems.length && pendingItems.length > 0}
+                                                checked={filteredPendingItems.length > 0 && filteredPendingItems.every(item => selectedItems.has(item.id))}
                                                 onChange={selectAll}
                                                 className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer transition-all"
                                             />
@@ -943,7 +1164,7 @@ export default function VerificationPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                {sortedItems.map((item) => {
+                                {visibleSortedItems.map((item) => {
                                     const txn = getItemTransaction(item.id);
                                     const isSelected = selectedItems.has(item.id);
                                     const activeIssue = getEquipmentIssue(item);
@@ -1006,14 +1227,14 @@ export default function VerificationPage() {
             ) : (
                 /* ========== CARD VIEW ========== */
                 <div className="space-y-3 pb-[calc(var(--mobile-tab-height)+5rem)] md:pb-0">
-                    {pendingManualItems.length > 0 && verificationGroups.length === 0 && (
+                    {filteredPendingManualItems.length > 0 && filteredVerificationGroups.length === 0 && (
                         <section className="space-y-3">
                             <div>
                                 <h2 className="text-sm font-bold text-gray-900 dark:text-white">Manual Items</h2>
                                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Items without QR waiting for manager verification</p>
                             </div>
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                {pendingManualItems.map(row => (
+                                {filteredPendingManualItems.map(row => (
                                     <div key={row.key} className="rounded-xl border border-amber-300/60 bg-white p-5 shadow-sm dark:bg-[#1c1c1e]">
                                         <div className="mb-3 flex items-start justify-between gap-3">
                                             <div className="min-w-0">
@@ -1054,7 +1275,7 @@ export default function VerificationPage() {
                         </section>
                     )}
 
-                    {verificationGroups.map((group) => {
+                    {filteredVerificationGroups.map((group) => {
                         const groupSelected = group.items.length > 0 && group.items.every(item => selectedItems.has(item.id));
                         const isExpanded = expandedGroups.has(group.key);
                         const totalItems = group.items.length + group.manualItems.length;
