@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Shoot, User } from '@/types';
+import { DepartmentLabels, getDepartmentLabels } from '@/lib/department-labels';
 
 export const GOOGLE_CALENDAR_SCOPES = 'https://www.googleapis.com/auth/calendar.events';
 
@@ -55,10 +56,11 @@ async function callCalendarApi(method: 'POST' | 'PUT' | 'DELETE', payload: any) 
 export async function createGoogleCalendarEvent(
     shoot: Partial<Shoot>,
     crew: User[],
-    tokens: { accessToken: string; refreshToken?: string | null }
+    tokens: { accessToken: string; refreshToken?: string | null },
+    labels: DepartmentLabels = getDepartmentLabels(null)
 ) {
     if (!shoot.startTime || !shoot.endTime) {
-        throw new Error('Shoot must have start and end times');
+        throw new Error(`${labels.workSingular} must have start and end times`);
     }
 
     const descriptionParts = [];
@@ -75,10 +77,10 @@ export async function createGoogleCalendarEvent(
     const appUrl = shoot.id
         ? `${window.location.origin}/shoots/${shoot.id}`
         : `${window.location.origin}/shoots`;
-    descriptionParts.push(`\n🔗 View Shoot Details:\n${appUrl}`);
+    descriptionParts.push(`\n🔗 View ${labels.workSingular} Details:\n${appUrl}`);
 
     const event: CalendarEvent = {
-        summary: `🎥 SHOOT: ${shoot.title}`, // Added emoji for visibility
+        summary: `🎥 ${labels.workSingular.toUpperCase()}: ${shoot.title}`, // Added emoji for visibility
         description: descriptionParts.join('\n\n'),
         location: shoot.location || '',
         start: {
@@ -108,10 +110,11 @@ export async function updateGoogleCalendarEvent(
     eventId: string,
     shoot: Partial<Shoot>,
     crew: User[],
-    tokens: { accessToken: string; refreshToken?: string | null }
+    tokens: { accessToken: string; refreshToken?: string | null },
+    labels: DepartmentLabels = getDepartmentLabels(null)
 ) {
     if (!shoot.startTime || !shoot.endTime) {
-        throw new Error('Shoot must have start and end times');
+        throw new Error(`${labels.workSingular} must have start and end times`);
     }
 
     const descriptionParts = [];
@@ -125,10 +128,10 @@ export async function updateGoogleCalendarEvent(
     const appUrl = shoot.id
         ? `${window.location.origin}/shoots/${shoot.id}`
         : `${window.location.origin}/shoots`;
-    descriptionParts.push(`\n🔗 View Shoot Details:\n${appUrl}`);
+    descriptionParts.push(`\n🔗 View ${labels.workSingular} Details:\n${appUrl}`);
 
     const event: CalendarEvent = {
-        summary: `🎥 SHOOT: ${shoot.title}`,
+        summary: `🎥 ${labels.workSingular.toUpperCase()}: ${shoot.title}`,
         description: descriptionParts.join('\n\n'),
         location: shoot.location || '',
         start: {

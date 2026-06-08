@@ -15,6 +15,8 @@ import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { getRoleLabel } from '@/lib/roles';
+import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'CONFIRMED' | 'CANCELLED';
@@ -30,6 +32,8 @@ type SortDirection = 'asc' | 'desc';
 export default function ShootList() {
     const router = useRouter();
     const { user } = useAuth();
+    const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
 
     // React Query Hooks
     const { data: shoots = [], isLoading: shootsLoading, refetch: refetchShoots } = useShoots();
@@ -305,8 +309,8 @@ export default function ShootList() {
                 {/* Header */}
                 <div className="flex items-center justify-between gap-4 px-2 sm:px-0">
                     <div>
-                        <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white">Shoots</h1>
-                        <p className="text-xs sm:text-sm mt-0.5 sm:mt-1 text-gray-500 dark:text-gray-400">Manage upcoming productions</p>
+                        <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white">{labels.workPlural}</h1>
+                        <p className="text-xs sm:text-sm mt-0.5 sm:mt-1 text-gray-500 dark:text-gray-400">Manage upcoming {labels.workPluralLower}</p>
                     </div>
 
                     <div className="flex gap-2">
@@ -315,8 +319,8 @@ export default function ShootList() {
                                 variant="outline"
                                 onClick={() => {
                                     const headers = [
-                                        'Shoot ID', 'Title', 'Start Date', 'Start Time', 'End Date', 'End Time', 'Location', 'POC Name', 'Status', 
-                                        'Crew Count', 'Crew Names', 
+                                        labels.workIdLabel, 'Title', 'Start Date', 'Start Time', 'End Date', 'End Time', 'Location', 'POC Name', 'Status', 
+                                        `${labels.teamPlural} Count`, `${labels.teamPlural} Names`, 
                                         'Total Expenses', 'Category', 
                                         'Boarding', 'Travel', 'Equipment', 'Manpower', 'Other',
                                         'Description'
@@ -364,7 +368,7 @@ export default function ShootList() {
                                     const url = URL.createObjectURL(blob);
                                     const link = document.createElement('a');
                                     link.setAttribute('href', url);
-                                    link.setAttribute('download', `shoots_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+                                    link.setAttribute('download', `${labels.workPluralLower}_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
                                     document.body.appendChild(link);
                                     link.click();
                                     document.body.removeChild(link);
@@ -380,7 +384,7 @@ export default function ShootList() {
                             <Link href="/shoots/new" className="shrink-0">
                                 <Button variant="primary" className="gap-2 shadow-lg rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold">
                                     <Plus size={16} strokeWidth={2.5} />
-                                    <span className="hidden xs:inline">New Shoot</span>
+                                    <span className="hidden xs:inline">New {labels.workSingular}</span>
                                     <span className="xs:hidden">New</span>
                                 </Button>
                             </Link>
@@ -450,8 +454,8 @@ export default function ShootList() {
                             className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-primary"
                         >
                             <option value="date">Date</option>
-                            <option value="shootNumber">Shoot ID</option>
-                            <option value="title">Shoot Name</option>
+                            <option value="shootNumber">{labels.workIdLabel}</option>
+                            <option value="title">{labels.workSingular} Name</option>
                             <option value="status">Status</option>
                             <option value="expenses">Expenses</option>
                         </select>
@@ -538,8 +542,8 @@ export default function ShootList() {
                                         className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-xs sm:text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shadow-sm hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                                     >
                                         <option value="date">Date</option>
-                                        <option value="shootNumber">Shoot ID</option>
-                                        <option value="title">Shoot Name</option>
+                                        <option value="shootNumber">{labels.workIdLabel}</option>
+                                        <option value="title">{labels.workSingular} Name</option>
                                         <option value="status">Status</option>
                                         <option value="expenses">Expenses</option>
                                     </select>
@@ -566,7 +570,7 @@ export default function ShootList() {
                                             className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-md border text-sm transition-all cursor-pointer bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 min-w-[140px] justify-between group"
                                         >
                                             <span className={`truncate max-w-[100px] ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-primary font-medium'}`}>
-                                                {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
+                                                {crewFilter === 'ALL' ? `All ${labels.teamPlural}` : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
                                             </span>
                                             <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isCrewFilterOpen ? 'rotate-180' : ''}`} />
                                         </button>
@@ -595,7 +599,7 @@ export default function ShootList() {
                                                             : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                                                             } ${crewSearchQuery ? 'hidden' : ''}`}
                                                     >
-                                                        All Crew
+                                                        All {labels.teamPlural}
                                                     </button>
                                                     {users
                                                         .filter(u => u.name.toLowerCase().includes(crewSearchQuery.toLowerCase()))
@@ -692,7 +696,7 @@ export default function ShootList() {
                 {/* Results Count */}
                 <div className="flex items-center justify-between px-1">
                     <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        Showing <span className="font-semibold text-gray-900 dark:text-white">{filteredShoots.length}</span> of {shoots.length} shoots
+                        Showing <span className="font-semibold text-gray-900 dark:text-white">{filteredShoots.length}</span> of {shoots.length} {labels.workPluralLower}
                     </p>
                 </div>
 
@@ -704,16 +708,16 @@ export default function ShootList() {
                             <Calendar size={28} className="text-gray-400 dark:text-gray-500" />
                         </div>
                         <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-                            {searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL' ? 'No shoots found' : 'No shoots yet'}
+                            {searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL' ? `No ${labels.workPluralLower} found` : `No ${labels.workPluralLower} yet`}
                         </h3>
                         <p className="max-w-sm mx-auto mb-4 text-gray-500 dark:text-gray-400">
                             {searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL'
                                 ? 'Try adjusting your search or filters'
-                                : 'Create your first shoot to start tracking productions'}
+                                : `Create your first ${labels.workLower} to start tracking work`}
                         </p>
                         {!(searchQuery || statusFilter !== 'ALL' || timeFilter !== 'ALL') && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                             <Link href="/shoots/new">
-                                <Button size="sm">Create Shoot</Button>
+                                <Button size="sm">Create {labels.workSingular}</Button>
                             </Link>
                         )}
                     </div>
@@ -812,10 +816,10 @@ export default function ShootList() {
                                                         {crewCount}
                                                     </span>
                                                     
-                                                    {/* Hover Tooltip for Crew Members */}
+                                                    {/* Hover Tooltip for Team Members */}
                                                     {crewCount > 0 && (
                                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 opacity-0 invisible group-hover/crew:opacity-100 group-hover/crew:visible transition-all z-50 pointer-events-none">
-                                                            <p className="text-xs font-bold text-gray-900 dark:text-white mb-2 border-b border-gray-100 dark:border-gray-700 pb-1">Assigned Crew</p>
+                                                            <p className="text-xs font-bold text-gray-900 dark:text-white mb-2 border-b border-gray-100 dark:border-gray-700 pb-1">Assigned {labels.teamPlural}</p>
                                                             <div className="space-y-1.5">
                                                                 {getShootCrew(shoot.id).map((member, idx) => (
                                                                     <div key={idx} className="flex justify-between items-center text-xs">
@@ -870,7 +874,8 @@ export default function ShootList() {
                                                         const text = formatWhatsAppMessage(
                                                             shoot,
                                                             assignments.filter(a => a.shootId === shoot.id),
-                                                            users
+                                                            users,
+                                                            labels
                                                         );
                                                         openWhatsApp(text);
                                                     }}
@@ -889,7 +894,8 @@ export default function ShootList() {
                                                         const text = formatWhatsAppMessage(
                                                             shoot,
                                                             assignments.filter(a => a.shootId === shoot.id),
-                                                            users
+                                                            users,
+                                                            labels
                                                         );
 
                                                         const showToast = () => {
@@ -960,7 +966,7 @@ export default function ShootList() {
                                 onClick={() => handleSort('title')}
                                 className={`col-span-3 flex items-center gap-1.5 transition-colors text-left ${sortField === 'title' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                             >
-                                Shoot <SortIndicator field="title" />
+                                {labels.workSingular} <SortIndicator field="title" />
                             </button>
                             <button
                                 onClick={() => handleSort('date')}
@@ -978,7 +984,7 @@ export default function ShootList() {
                                 onClick={() => handleSort('crew')}
                                 className={`col-span-2 flex items-center gap-1.5 transition-colors text-left ${sortField === 'crew' ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary'}`}
                             >
-                                Crew <SortIndicator field="crew" />
+                                {labels.teamPlural} <SortIndicator field="crew" />
                             </button>
                             {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
                                 <button
@@ -1013,7 +1019,7 @@ export default function ShootList() {
                                                 : ''
                                             }`}
                                     >
-                                        {/* Shoot Info */}
+                                        {/* Work Info */}
                                         <div className="col-span-3 min-w-0 pr-4">
                                             <div className="flex items-start gap-2">
                                                 {shoot.shootNumber && (
@@ -1059,7 +1065,7 @@ export default function ShootList() {
                                             </span>
                                         </div>
 
-                                        {/* Crew */}
+                                        {/* Team */}
                                         <div className="col-span-2 flex items-center">
                                             <div className="flex items-center gap-2 relative z-10 group/crew cursor-pointer w-fit">
                                                 <div className="flex items-center gap-1.5">
@@ -1068,10 +1074,10 @@ export default function ShootList() {
                                                         {crewCount} members
                                                     </span>
                                                 </div>
-                                                {/* Hover Tooltip for Crew Members */}
+                                                {/* Hover Tooltip for Team Members */}
                                                 {crewCount > 0 && (
                                                     <div className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 opacity-0 invisible group-hover/crew:opacity-100 group-hover/crew:visible transition-all z-50 pointer-events-none">
-                                                        <p className="text-xs font-bold text-gray-900 dark:text-white mb-2 border-b border-gray-100 dark:border-gray-700 pb-1">Assigned Crew</p>
+                                                        <p className="text-xs font-bold text-gray-900 dark:text-white mb-2 border-b border-gray-100 dark:border-gray-700 pb-1">Assigned {labels.teamPlural}</p>
                                                         <div className="space-y-1.5">
                                                             {getShootCrew(shoot.id).map((member, idx) => (
                                                                 <div key={idx} className="flex justify-between items-center text-xs">

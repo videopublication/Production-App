@@ -11,12 +11,14 @@ import { generateUUID } from '@/lib/id';
 import { useDepartment } from '@/lib/department-context';
 import { sendPushNotification } from '@/lib/push-notifications';
 import { getRoleLabel } from '@/lib/roles';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export default function NewShootPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
     const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
     const { data: users = [] } = useUsers();
     const [isLoading, setIsLoading] = useState(false);
@@ -73,8 +75,8 @@ export default function NewShootPage() {
                     // Don't notify the person creating the shoot about their own assignment
                     if (assignment.userId === user?.id) return;
                     
-                    const title = 'New Shoot Assignment';
-                    const message = `You have been assigned to shoot "${newShoot.title}" as ${getRoleLabel(assignment.role)}.`;
+                    const title = `New ${labels.workSingular} Assignment`;
+                    const message = `You have been assigned to ${labels.workLower} "${newShoot.title}" as ${getRoleLabel(assignment.role)}.`;
                     
                     await storage.addNotification({
                         userId: assignment.userId,
@@ -102,7 +104,7 @@ export default function NewShootPage() {
                         entityId: shootId,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: `Created shoot "${newShoot.title}"`,
+                        details: `Created ${labels.workLower} "${newShoot.title}"`,
                         departmentId: activeDepartmentId || undefined
                     });
                 }
@@ -113,7 +115,7 @@ export default function NewShootPage() {
             // Redirect to the new shoot details page
             router.push(`/shoots/${shootId}`);
         } catch (error) {
-            console.error('Failed to create shoot:', error);
+            console.error(`Failed to create ${labels.workLower}:`, error);
             isSubmittingRef.current = false;
         } finally {
             setIsLoading(false);
@@ -123,7 +125,7 @@ export default function NewShootPage() {
     return (
         <div className="px-2 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">New Shoot</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">New {labels.workSingular}</h1>
             </div>
 
             <div className="w-full">
@@ -132,7 +134,7 @@ export default function NewShootPage() {
                     initialData={initialData}
                     onSubmit={handleSubmit}
                     isLoading={isLoading}
-                    buttonLabel="Create Shoot"
+                    buttonLabel={`Create ${labels.workSingular}`}
                 />
             </div>
         </div>

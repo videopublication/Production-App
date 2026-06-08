@@ -13,6 +13,7 @@ import Image from 'next/image';
 import { useEquipmentItem, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
 import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 import {
     EQUIPMENT_ISSUE_SEVERITY_LABELS,
     EQUIPMENT_ISSUE_SEVERITY_OPTIONS,
@@ -46,6 +47,7 @@ export default function ItemDetailsPage() {
     const [historyLoading, setHistoryLoading] = useState(true);
     const [showAllHistory, setShowAllHistory] = useState(false);
     const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const effectiveDeptId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
         ? user.departmentId
         : (department?.id || null);
@@ -591,7 +593,7 @@ export default function ItemDetailsPage() {
                     <div className="min-w-0">
                         <p className="text-sm font-bold text-foreground">Item Issue Status</p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                            Crew can report problems here. Active issues appear in Needs Attention and during checkout.
+                            {labels.teamPlural} can report problems here. Active issues appear in Needs Attention and during checkout.
                         </p>
                     </div>
                     {!activeIssue && (

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 interface TabItem {
     name: string;
@@ -20,7 +21,8 @@ const MAX_VISIBLE_TABS = 5;
 export const BottomTabBar = () => {
     const pathname = usePathname();
     const { user } = useAuth();
-    const { hasFeature } = useDepartment();
+    const { hasFeature, department } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const moreMenuRef = useRef<HTMLDivElement>(null);
 
@@ -46,7 +48,7 @@ export const BottomTabBar = () => {
             feature: 'inventory',
         },
         {
-            name: 'Shoots',
+            name: labels.workPlural,
             path: '/shoots',
             icon: (
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

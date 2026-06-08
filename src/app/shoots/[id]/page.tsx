@@ -26,10 +26,13 @@ import { supabase } from '@/lib/supabase';
 import { getGoogleProviderToken, deleteGoogleCalendarEvent, createGoogleCalendarEvent } from '@/lib/google-calendar';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { getRoleLabel } from '@/lib/roles';
+import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export default function ShootDetailsPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { department, allDepartments } = useDepartment();
     const { showToast } = useToast();
     const params = useParams();
     const confirm = useConfirm();
@@ -41,6 +44,8 @@ export default function ShootDetailsPage() {
     const { data: allAssignments = [], isLoading: assignmentsLoading } = useAssignments();
     const { data: users = [], isLoading: usersLoading } = useUsers();
     const { data: allTransactions = [], isLoading: transactionsLoading } = useTransactions();
+    const pageDepartment = allDepartments.find(dept => dept.id === shoot?.departmentId) || department;
+    const labels = getDepartmentLabels(pageDepartment);
 
     const [logs, setLogs] = useState<Log[]>([]);
     const { mutateAsync: saveShoot } = useSaveShoot();
@@ -177,8 +182,8 @@ export default function ShootDetailsPage() {
         if (!shoot) return;
 
         const isConfirmed = await confirm({
-            title: 'Cancel Shoot?',
-            message: 'Are you sure you want to cancel this shoot? This action cannot be undone.',
+            title: `Cancel ${labels.workSingular}?`,
+            message: `Are you sure you want to cancel this ${labels.workLower}? This action cannot be undone.`,
             confirmLabel: 'Yes, Cancel',
             variant: 'danger'
         });
@@ -224,7 +229,7 @@ export default function ShootDetailsPage() {
                     entityId: shoot.id,
                     userId: user.id,
                     timestamp: new Date().toISOString(),
-                    details: 'Cancelled shoot'
+                    details: `Cancelled ${labels.workLower}`
                 });
                 // update logs locally for immediate feedback
                 storage.getLogsByEntity(shoot.id).then(setLogs);
@@ -243,14 +248,14 @@ export default function ShootDetailsPage() {
                 `;
             } else {
                 toast.className = 'fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-full font-medium z-50 animate-in fade-in slide-in-from-bottom-2';
-                toast.textContent = 'Shoot cancelled successfully';
+                toast.textContent = `${labels.workSingular} cancelled successfully`;
             }
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 4000);
 
         } catch (error) {
-            console.error('Failed to cancel shoot:', error);
-            alert('Failed to cancel shoot. Please try again.');
+            console.error(`Failed to cancel ${labels.workLower}:`, error);
+            alert(`Failed to cancel ${labels.workLower}. Please try again.`);
         }
     };
 
@@ -276,7 +281,7 @@ export default function ShootDetailsPage() {
             }
 
             const assignedCrew = users.filter(u => assignments.some(a => a.userId === u.id));
-            const event = await createGoogleCalendarEvent(shoot, assignedCrew, tokens);
+            const event = await createGoogleCalendarEvent(shoot, assignedCrew, tokens, labels);
 
             if (event?.id) {
                 // Update shoot with the new googleEventId
@@ -299,7 +304,7 @@ export default function ShootDetailsPage() {
                     </div>
                     <div>
                         <p class="font-bold">Successfully Synced!</p>
-                        <p class="text-xs opacity-90">Invites sent to ${assignedCrew.filter(c => c.email).length} crew members.</p>
+                        <p class="text-xs opacity-90">Invites sent to ${assignedCrew.filter(c => c.email).length} ${labels.teamPluralLower} members.</p>
                     </div>
                 `;
                 document.body.appendChild(toast);
@@ -324,7 +329,7 @@ export default function ShootDetailsPage() {
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="text-center">
                     <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Loading shoot details...</p>
+                    <p className="text-muted-foreground">Loading {labels.workLower} details...</p>
                 </div>
             </div>
         );
@@ -343,10 +348,10 @@ export default function ShootDetailsPage() {
                     </div>
                     <h1 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
                     <p className="text-gray-500 max-w-md mb-6">
-                        You are not assigned to this shoot. Only assigned crew members can view the details.
+                        You are not assigned to this {labels.workLower}. Only assigned {labels.teamPluralLower} members can view the details.
                     </p>
                     <Link href="/shoots">
-                        <Button>Back to Shoots</Button>
+                        <Button>Back to {labels.workPlural}</Button>
                     </Link>
                 </div>
             );
@@ -403,7 +408,7 @@ export default function ShootDetailsPage() {
                 <div className="grid grid-cols-6 sm:flex sm:items-center gap-2 sm:gap-3 pt-4">
                     <button
                         onClick={() => {
-                            const message = formatWhatsAppMessage(shoot, assignments, users);
+                            const message = formatWhatsAppMessage(shoot, assignments, users, labels);
                             openWhatsApp(message);
                         }}
                         className="col-span-2 flex items-center justify-center gap-1.5 sm:gap-2 px-2 py-2 sm:px-5 sm:py-2.5 rounded-xl font-bold transition-all shadow-sm hover:shadow-green-500/20 active:scale-95 bg-[#25D366] hover:bg-[#22bf5b] text-white text-xs sm:text-sm whitespace-nowrap lg:min-w-[140px]"
@@ -419,7 +424,7 @@ export default function ShootDetailsPage() {
                         onClick={async (e) => {
                             const btn = e.currentTarget;
                             const originalContent = btn.innerHTML;
-                            const message = formatWhatsAppMessage(shoot, assignments, users);
+                            const message = formatWhatsAppMessage(shoot, assignments, users, labels);
                             try {
                                 await navigator.clipboard.writeText(message);
                                 btn.innerHTML = `<svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> Copied`;
@@ -486,7 +491,7 @@ export default function ShootDetailsPage() {
                         </div>
                         <div>
                             <p className="text-sm font-semibold text-gray-900 dark:text-white">Sync with Google Calendar</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Automatically invite crew and track this shoot.</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Automatically invite {labels.teamPluralLower} and track this {labels.workLower}.</p>
                         </div>
                     </div>
                     <Button
@@ -594,7 +599,7 @@ export default function ShootDetailsPage() {
                             <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            About this Shoot
+                            About this {labels.workSingular}
                         </h3>
                         <p className="leading-relaxed max-w-4xl text-[15px] text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
                             {shoot.description}
@@ -606,10 +611,10 @@ export default function ShootDetailsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Content Column */}
                 <div className="lg:col-span-2 space-y-8">
-                    {/* Crew List - Main Content */}
+                    {/* Team List - Main Content */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between px-1 mb-4">
-                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Crew Assignments</h2>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">{labels.teamPlural} Assignments</h2>
                             <span className="px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{assignments.length} Members</span>
                         </div>
 
@@ -621,11 +626,11 @@ export default function ShootDetailsPage() {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                         </svg>
                                     </div>
-                                    <p className="font-medium text-gray-700 dark:text-gray-300">No crew assigned yet</p>
-                                    <p className="text-sm mb-4 text-gray-500 dark:text-gray-400">Add members to organize this shoot</p>
+                                    <p className="font-medium text-gray-700 dark:text-gray-300">No {labels.teamPluralLower} assigned yet</p>
+                                    <p className="text-sm mb-4 text-gray-500 dark:text-gray-400">Add members to organize this {labels.workLower}</p>
                                     {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                                         <Link href={`/shoots/${id}/edit`}>
-                                            <Button size="sm">Add Crew Member</Button>
+                                            <Button size="sm">Add {labels.teamSingular}</Button>
                                         </Link>
                                     )}
                                 </div>
@@ -677,7 +682,7 @@ export default function ShootDetailsPage() {
                                                         <span
                                                             className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide border ${roleClass}`}
                                                         >
-                                                            {isIncharge ? 'Shoot Incharge' : getRoleLabel(assignedUser.role)}
+                                                            {isIncharge ? labels.leadLabel : getRoleLabel(assignedUser.role)}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -798,7 +803,7 @@ export default function ShootDetailsPage() {
                             {linkedTransactions.length === 0 ? (
                                 <div className="text-center py-8 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-700">
                                     <p className="font-medium text-gray-700 dark:text-gray-300">No transactions linked</p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Equipment checkouts linked to this shoot will appear here.</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Equipment checkouts linked to this {labels.workLower} will appear here.</p>
                                 </div>
                             ) : (
                                 linkedTransactions.map((txn) => {

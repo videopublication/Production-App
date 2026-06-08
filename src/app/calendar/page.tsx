@@ -59,10 +59,14 @@ import { useShoots } from '@/hooks/useShoots';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useUsers } from '@/hooks/useUsers';
 import { useLeaves } from '@/hooks/useLeaves';
+import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export default function CalendarPage() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
+    const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
 
     // React Query Hooks
     const { data: shoots = [], isLoading: shootsLoading, refetch: refetchShoots } = useShoots();
@@ -288,7 +292,7 @@ export default function CalendarPage() {
                             Calendar
                         </h1>
                         <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">
-                            {shootsThisMonth} shoot{shootsThisMonth !== 1 ? 's' : ''} scheduled in {format(currentMonth, 'MMMM yyyy')}
+                            {shootsThisMonth} {shootsThisMonth === 1 ? labels.workLower : labels.workPluralLower} scheduled in {format(currentMonth, 'MMMM yyyy')}
                         </p>
                     </div>
 
@@ -305,7 +309,7 @@ export default function CalendarPage() {
                                 <div className="flex items-center gap-2 overflow-hidden">
                                     <Users size={16} className="text-gray-400 dark:text-gray-500 group-hover:text-primary dark:group-hover:text-primary transition-colors shrink-0" />
                                     <span className={`text-sm font-medium truncate ${crewFilter === 'ALL' ? 'text-gray-700 dark:text-gray-300' : 'text-primary dark:text-primary'}`}>
-                                        {crewFilter === 'ALL' ? 'All Crew' : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
+                                        {crewFilter === 'ALL' ? `All ${labels.teamPlural}` : users.find(u => u.id === crewFilter)?.name || users.find(u => u.id === crewFilter)?.email || 'Unknown'}
                                     </span>
                                 </div>
                                 <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
@@ -326,7 +330,7 @@ export default function CalendarPage() {
                                             type="text"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder="Search crew..."
+                                            placeholder={`Search ${labels.teamPluralLower}...`}
                                             className="w-full text-xs pl-8 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-lg focus:ring-1 focus:ring-primary text-gray-900 dark:text-white placeholder-gray-500"
                                             onClick={(e) => e.stopPropagation()}
                                         />
@@ -341,7 +345,7 @@ export default function CalendarPage() {
                                             : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                                             } ${searchQuery ? 'hidden' : ''}`}
                                     >
-                                        All Crew
+                                        All {labels.teamPlural}
                                     </button>
                                     {users
                                         .filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -363,7 +367,7 @@ export default function CalendarPage() {
                                         ))}
                                     {users.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
                                         <div className="px-4 py-3 text-xs text-center text-gray-500">
-                                            No crew found
+                                            No {labels.teamPluralLower} found
                                         </div>
                                     )}
                                 </div>
@@ -706,7 +710,7 @@ export default function CalendarPage() {
                                     </h3>
                                     {selectedDate && (
                                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            {shootsForSelectedDate.length} shoot{shootsForSelectedDate.length !== 1 ? 's' : ''}
+                                            {shootsForSelectedDate.length} {shootsForSelectedDate.length === 1 ? labels.workLower : labels.workPluralLower}
                                             {leavesForSelectedDate.length > 0 && ` • ${leavesForSelectedDate.length} leave${leavesForSelectedDate.length !== 1 ? 's' : ''}`} scheduled
                                         </p>
                                     )}
@@ -717,7 +721,7 @@ export default function CalendarPage() {
                                             <button
                                                 onClick={() => setIsAdminModalOpen(true)}
                                                 className="p-2 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                                                title="Mark Crew Absent"
+                                                title={`Mark ${labels.teamSingular} Absent`}
                                             >
                                                 <UserX size={20} />
                                             </button>
@@ -725,7 +729,7 @@ export default function CalendarPage() {
                                         <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
                                             <button
                                                 className="p-2 rounded-full bg-primary text-primary dark:bg-primary/20 dark:text-primary hover:bg-primary dark:hover:bg-primary/20 transition-colors"
-                                                title="Schedule another shoot"
+                                                title={`Schedule another ${labels.workLower}`}
                                             >
                                                 <Plus size={20} />
                                             </button>
@@ -739,7 +743,7 @@ export default function CalendarPage() {
                                 {!selectedDate ? (
                                     <div className="text-center py-8">
                                         <CalendarIcon size={40} className="mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">Click on a date to see shoots</p>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">Click on a date to see {labels.workPluralLower}</p>
                                     </div>
                                 ) : shootsForSelectedDate.length === 0 && leavesForSelectedDate.length === 0 ? (
                                     <div className="text-center py-8">
@@ -749,7 +753,7 @@ export default function CalendarPage() {
                                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No events on this day</p>
                                         {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                                             <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`} className="mt-3 inline-block">
-                                                <Button size="sm" variant="secondary">Schedule Shoot</Button>
+                                                <Button size="sm" variant="secondary">Schedule {labels.workSingular}</Button>
                                             </Link>
                                         )}
                                     </div>
@@ -827,7 +831,7 @@ export default function CalendarPage() {
                                                             <div className="flex items-center gap-2">
                                                                 <Users size={12} className="text-gray-400 dark:text-gray-500" />
                                                                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                    {crew.length} crew member{crew.length !== 1 ? 's' : ''}
+                                                                    {crew.length} {labels.teamLower} member{crew.length !== 1 ? 's' : ''}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -910,12 +914,12 @@ export default function CalendarPage() {
                                                                 </div>
                                                             )}
 
-                                                            {/* Crew List */}
+                                                            {/* Team List */}
                                                             <h5 className="text-xs font-bold uppercase tracking-wider mb-3 text-gray-700 dark:text-gray-300">
-                                                                Assigned Crew
+                                                                Assigned {labels.teamPlural}
                                                             </h5>
                                                             {crew.length === 0 ? (
-                                                                <p className="text-xs italic text-gray-400 dark:text-gray-500">No crew assigned</p>
+                                                                <p className="text-xs italic text-gray-400 dark:text-gray-500">No {labels.teamPluralLower} assigned</p>
                                                             ) : (
                                                                 <div className="space-y-2">
                                                                     {crew.map(member => (
@@ -941,7 +945,7 @@ export default function CalendarPage() {
                                                                                     {member.user?.name || member.user?.email || 'Unknown'}
                                                                                 </p>
                                                                                 <p className="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-500">
-                                                                                    {member.role === 'Incharge' ? 'Lead' : getRoleLabel(member.user?.role || 'Crew')}
+                                                                                    {member.role === 'Incharge' ? labels.leadLabel : getRoleLabel(member.user?.role || 'Crew')}
                                                                                 </p>
                                                                             </div>
                                                                         </div>

@@ -22,6 +22,7 @@ import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
 import { getEquipmentIssue, getIssueSummary, isEquipmentIssueBlocking } from '@/lib/equipment-issues';
 import { getRoleLabel } from '@/lib/roles';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -59,6 +60,7 @@ export default function CheckoutPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const { showToast } = useToast();
     const confirm = useConfirm();
 
@@ -211,8 +213,8 @@ export default function CheckoutPage() {
             label: `${shoot.title} - ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
         }));
 
-        return [{ value: '', label: 'Select a shoot...' }, ...baseOptions];
-    }, [availableShoots, selectedShootId, shoots]);
+        return [{ value: '', label: `Select a ${labels.workLower}...` }, ...baseOptions];
+    }, [availableShoots, selectedShootId, shoots, labels.workLower]);
 
     // Initialize/Load State (Session Persistence)
     useEffect(() => {
@@ -311,11 +313,11 @@ export default function CheckoutPage() {
 
                 if (!isSame) {
                     setSelectedUserIds(uniqueIds);
-                    showToast(`Auto-selected ${uniqueIds.length} crew members`, 'info');
+                    showToast(`Auto-selected ${uniqueIds.length} ${labels.teamPluralLower} members`, 'info');
                 }
             }
         }
-    }, [selectedShootId, assignments, selectedUserIds, showToast]);
+    }, [selectedShootId, assignments, selectedUserIds, showToast, labels.teamPluralLower]);
 
     const lastProcessedRef = React.useRef<{ code: string; time: number } | null>(null);
 
@@ -942,7 +944,7 @@ export default function CheckoutPage() {
                                 <h3 className="text-[17px] font-bold text-foreground mb-5">Flow Details</h3>
 
                                 <div className="space-y-5">
-                                    {/* Shoot Selector - Premium Card (Moved to Top) */}
+                                    {/* Work Selector - Premium Card (Moved to Top) */}
                                     <div className="relative bg-muted/40 rounded-2xl p-4 border border-border shadow-sm">
                                         <div className="flex items-center gap-3 mb-3">
                                             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -951,7 +953,7 @@ export default function CheckoutPage() {
                                                 </svg>
                                             </div>
                                             <div>
-                                                <p className="text-[14px] font-semibold text-foreground">Link to Shoot</p>
+                                                <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
                                             </div>
                                         </div>
 
@@ -971,7 +973,7 @@ export default function CheckoutPage() {
                                                 }
                                             }}
                                             options={activeShootOptions}
-                                            placeholder="Select a shoot..."
+                                            placeholder={`Select a ${labels.workLower}...`}
                                             className="w-full"
                                         />
                                         {selectedShootId && (
@@ -999,7 +1001,7 @@ export default function CheckoutPage() {
                                                     </svg>
                                                 </div>
                                                 <p className="text-xs font-medium text-green-700 dark:text-green-400">
-                                                    Values linked to shoot
+                                                    Values linked to {labels.workLower}
                                                 </p>
                                             </div>
                                         )}
@@ -1024,7 +1026,7 @@ export default function CheckoutPage() {
                                         <label className="text-[13px] font-semibold text-muted-foreground mb-2 block">Project Name *</label>
                                         <input
                                             type="text"
-                                            placeholder="Shoot / Project Title"
+                                            placeholder={`${labels.workSingular} / Project Title`}
                                             value={project}
                                             onChange={(e) => setProject(e.target.value)}
                                             className="w-full h-11 px-4 bg-muted text-foreground border-0 rounded-xl text-[15px] focus:ring-2 focus:ring-primary transition-all"
@@ -1083,7 +1085,7 @@ export default function CheckoutPage() {
                         }`}>
                         <div className="bg-card rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-border">
                             <div className="p-4">
-                                {/* Shoot Selector for Mobile - Premium Card */}
+                                {/* Work Selector for Mobile - Premium Card */}
                                 <div className="relative bg-muted/40 rounded-2xl p-4 border border-border mb-4">
                                     <div className="flex items-center gap-3 mb-3">
                                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -1092,7 +1094,7 @@ export default function CheckoutPage() {
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-[14px] font-semibold text-foreground">Link to Shoot</p>
+                                            <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
                                         </div>
                                     </div>
 
@@ -1112,7 +1114,7 @@ export default function CheckoutPage() {
                                             }
                                         }}
                                         options={activeShootOptions}
-                                        placeholder="Select a shoot..."
+                                        placeholder={`Select a ${labels.workLower}...`}
                                         className="w-full"
                                         onOpenChange={setIsDropdownOpen}
                                     />
@@ -1156,11 +1158,11 @@ export default function CheckoutPage() {
                                 )}
 
                                 <label className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-2 block pl-1">
-                                    Project / Shoot Name <span className="text-red-500">*</span>
+                                    Project / {labels.workSingular} Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Documentary Shoot A"
+                                    placeholder={`e.g. Documentary ${labels.workSingular} A`}
                                     value={project}
                                     onChange={(e) => setProject(e.target.value)}
                                     className="w-full h-12 px-4 bg-muted text-foreground border-0 rounded-2xl text-[16px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all shadow-inner mb-4"

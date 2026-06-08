@@ -14,10 +14,13 @@ import { generateUUID } from '@/lib/id';
 import { format, parseISO } from 'date-fns';
 import { sendPushNotification } from '@/lib/push-notifications';
 import { getRoleLabel } from '@/lib/roles';
+import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export default function EditShootPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { department, allDepartments } = useDepartment();
     const params = useParams();
     const id = params?.id as string;
     const queryClient = useQueryClient();
@@ -25,6 +28,8 @@ export default function EditShootPage() {
     const { data: shoot, isLoading: isShootLoading } = useShoot(id);
     const { data: allUsers = [] } = useUsers();
     const { data: allAssignments = [] } = useAssignments();
+    const pageDepartment = allDepartments.find(dept => dept.id === shoot?.departmentId) || department;
+    const labels = getDepartmentLabels(pageDepartment);
 
     const [isLoading, setIsLoading] = useState(false);
 
@@ -77,8 +82,8 @@ export default function EditShootPage() {
                 await Promise.all(newAssignments.map(async (assignment) => {
                     if (assignment.userId === user?.id) return;
                     
-                    const title = 'New Shoot Assignment';
-                    const message = `You have been added to shoot "${updatedShoot.title}" as ${getRoleLabel(assignment.role)}.`;
+                    const title = `New ${labels.workSingular} Assignment`;
+                    const message = `You have been added to ${labels.workLower} "${updatedShoot.title}" as ${getRoleLabel(assignment.role)}.`;
                     
                     await storage.addNotification({
                         userId: assignment.userId,
@@ -120,8 +125,8 @@ export default function EditShootPage() {
                 await Promise.all(assignmentsToUpdate.map(async (assignment) => {
                     if (assignment.userId === user?.id) return;
                     
-                    const title = 'Shoot Role Updated';
-                    const message = `Your role in shoot "${updatedShoot.title}" has been updated to ${getRoleLabel(assignment.role)}.`;
+                    const title = `${labels.workSingular} Role Updated`;
+                    const message = `Your role in ${labels.workLower} "${updatedShoot.title}" has been updated to ${getRoleLabel(assignment.role)}.`;
                     
                     await storage.addNotification({
                         userId: assignment.userId,
@@ -153,8 +158,8 @@ export default function EditShootPage() {
                 }
 
                 const details = changes.length > 0
-                    ? `Updated shoot${updatedShoot.shootNumber ? ` #${updatedShoot.shootNumber}` : ''}: ${changes.join(', ')}`
-                    : 'Updated shoot details';
+                    ? `Updated ${labels.workLower}${updatedShoot.shootNumber ? ` #${updatedShoot.shootNumber}` : ''}: ${changes.join(', ')}`
+                    : `Updated ${labels.workLower} details`;
 
                 if (user) {
                     await storage.addLog({
@@ -176,7 +181,7 @@ export default function EditShootPage() {
 
             router.push(`/shoots/${shoot.id}`);
         } catch (error) {
-            console.error('Failed to update shoot:', error);
+            console.error(`Failed to update ${labels.workLower}:`, error);
             isSubmittingRef.current = false;
         } finally {
             setIsLoading(false);
@@ -196,7 +201,7 @@ export default function EditShootPage() {
         <div className="px-2 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-3">
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-                    Edit Shoot {shoot?.shootNumber ? <span className="text-gray-500 dark:text-gray-400">#{shoot.shootNumber}</span> : ''}
+                    Edit {labels.workSingular} {shoot?.shootNumber ? <span className="text-gray-500 dark:text-gray-400">#{shoot.shootNumber}</span> : ''}
                 </h1>
             </div>
 

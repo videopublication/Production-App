@@ -15,6 +15,7 @@ import { useConfirm } from '@/lib/dialog-context';
 import { useDepartment } from '@/lib/department-context';
 import Link from 'next/link';
 import { areManualItemsComplete, decodeTransactionNotes } from '@/lib/transaction-manual-items';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -112,6 +113,7 @@ export default function TransactionDetailPage() {
     const { showToast } = useToast();
     const confirm = useConfirm();
     const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const transactionId = params.id as string;
 
     // Enforce department isolation
@@ -857,7 +859,7 @@ export default function TransactionDetailPage() {
                 changes.push(`name from "${currentProject || 'Unspecified'}" to "${nextProject}"`);
             }
             if (nextShootId !== currentShootId) {
-                changes.push(`linked shoot from "${oldShoot?.title || 'None'}" to "${newShoot?.title || 'None'}"`);
+                changes.push(`linked ${labels.workLower} from "${oldShoot?.title || 'None'}" to "${newShoot?.title || 'None'}"`);
             }
 
             await storage.addLog({
@@ -997,12 +999,12 @@ export default function TransactionDetailPage() {
                                 <Link href={`/shoots/${linkedShoot.id}`} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium">
                                     <span className="flex items-center gap-1">
                                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                        Linked Shoot: {linkedShoot.title} {linkedShoot.shootNumber ? `(#${linkedShoot.shootNumber})` : ''}
+                                        Linked {labels.workSingular}: {linkedShoot.title} {linkedShoot.shootNumber ? `(#${linkedShoot.shootNumber})` : ''}
                                     </span>
                                 </Link>
                             ) : (
                                 <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md font-medium">
-                                    No linked shoot
+                                    No linked {labels.workLower}
                                 </span>
                             )}
                             {canEditTransactionDetails && (
@@ -1044,7 +1046,7 @@ export default function TransactionDetailPage() {
                         <div>
                             <h2 className="text-base font-bold">Edit Transaction Details</h2>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                                Fix the transaction name or attach it to the correct shoot.
+                                Fix the transaction name or attach it to the correct {labels.workLower}.
                             </p>
                         </div>
                         <button
@@ -1075,7 +1077,7 @@ export default function TransactionDetailPage() {
 
                         <div className="w-full">
                             <label className="block text-sm font-medium text-foreground mb-2">
-                                Linked Shoot
+                                Linked {labels.workSingular}
                             </label>
                             <select
                                 value={editShootId}
@@ -1083,7 +1085,7 @@ export default function TransactionDetailPage() {
                                 disabled={saving}
                                 className="flex h-12 w-full rounded-2xl border border-input bg-background px-4 py-2 text-[15px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                <option value="">No linked shoot</option>
+                                <option value="">No linked {labels.workLower}</option>
                                 {shootOptions.map((shoot) => (
                                     <option key={shoot.id} value={shoot.id}>
                                         {formatShootOption(shoot)}
@@ -1096,7 +1098,7 @@ export default function TransactionDetailPage() {
                     {selectedEditShoot && (
                         <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-2xl bg-background/80 border border-border px-4 py-3">
                             <div className="min-w-0">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected shoot</p>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected {labels.workLower}</p>
                                 <p className="text-sm font-medium truncate">
                                     {formatShootOption(selectedEditShoot)}
                                 </p>
@@ -1106,7 +1108,7 @@ export default function TransactionDetailPage() {
                                 onClick={() => setEditProject(selectedEditShoot.title)}
                                 className="text-xs font-semibold text-primary hover:text-primary/80 self-start sm:self-auto"
                             >
-                                Use shoot name
+                                Use {labels.workLower} name
                             </button>
                         </div>
                     )}
@@ -1149,12 +1151,12 @@ export default function TransactionDetailPage() {
                         {additionalUserNames.map((name, index) => (
                             <div key={index} className="flex items-center gap-2">
                                 <span className="text-sm text-muted-foreground">
-                                    {name} {linkedShoot ? '(Crew)' : ''}
+                                    {name} {linkedShoot ? `(${labels.teamPlural})` : ''}
                                 </span>
                             </div>
                         ))}
                         {additionalUserNames.length === 0 && linkedShoot && (
-                            <span className="text-xs text-muted-foreground italic">No other crew assigned</span>
+                            <span className="text-xs text-muted-foreground italic">No other {labels.teamPluralLower} assigned</span>
                         )}
                     </div>
                 </Card>

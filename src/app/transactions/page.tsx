@@ -14,6 +14,7 @@ import { useTransactions } from '@/hooks/useTransactions';
 import { useInventory } from '@/hooks/useInventory';
 import { useShoots } from '@/hooks/useShoots';
 import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export default function TransactionsPage() {
     const router = useRouter();
@@ -35,6 +36,7 @@ export default function TransactionsPage() {
     const { equipment, users, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
     const { data: shoots = [] } = useShoots();
     const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -184,7 +186,7 @@ export default function TransactionsPage() {
 
         return `🎥 *Equipment Checkout Details*
 
-*Project:* ${txn.project || 'Unspecified'}${txn.shootId && shoots.find(s => s.id === txn.shootId) ? `\n*Linked Shoot:* ${shoots.find(s => s.id === txn.shootId)?.title} ${shoots.find(s => s.id === txn.shootId)?.shootNumber ? `(#${shoots.find(s => s.id === txn.shootId)?.shootNumber})` : ''}` : ''}
+*Project:* ${txn.project || 'Unspecified'}${txn.shootId && shoots.find(s => s.id === txn.shootId) ? `\n*Linked ${labels.workSingular}:* ${shoots.find(s => s.id === txn.shootId)?.title} ${shoots.find(s => s.id === txn.shootId)?.shootNumber ? `(#${shoots.find(s => s.id === txn.shootId)?.shootNumber})` : ''}` : ''}
 *ID:* ${txn.id}
 *Taken By:* ${allNames}
 *Date:* ${date}

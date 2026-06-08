@@ -10,6 +10,7 @@ import { ChevronLeft } from 'lucide-react';
 
 import { SettingsDrawer } from './SettingsDrawer';
 import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 const pageNames: Record<string, string> = {
     '/dashboard': 'Dashboard',
@@ -27,6 +28,7 @@ const pageNames: Record<string, string> = {
 export const MobileHeader = () => {
     const { user } = useAuth();
     const { department, allDepartments, switchDepartment } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const pathname = usePathname();
     const router = useRouter();
     const { notificationPermission, enableNotifications } = useFcmToken();
@@ -44,7 +46,7 @@ export const MobileHeader = () => {
         for (const [path, name] of Object.entries(pageNames)) {
             if (pathname.startsWith(path + '/')) {
                 if (pathname.includes('/inventory/')) return 'Item Details';
-                if (pathname.startsWith('/shoots/')) return 'Shoot Details';
+                if (pathname.startsWith('/shoots/')) return `${labels.workSingular} Details`;
                 if (pathname.startsWith('/transactions/')) return 'Transaction Details';
                 return name;
             }

@@ -161,6 +161,7 @@ import { useInventory } from '@/hooks/useInventory';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useLeaves } from '@/hooks/useLeaves';
 import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 // ... (other imports remain)
 
@@ -168,6 +169,7 @@ export default function DashboardPage() {
     const router = useRouter();
     const { user, isLoading: authLoading } = useAuth();
     const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
 
     // Use the hook instead of manual fetching
     const { equipment, isLoading: inventoryLoading, refresh: refreshInventory } = useInventory();
@@ -204,8 +206,10 @@ export default function DashboardPage() {
 
     // Filter actions available to this user's role
     const availableActions = useMemo(() => {
-        return ALL_QUICK_ACTIONS.filter(action => action.roles.includes(userRole));
-    }, [userRole]);
+        return ALL_QUICK_ACTIONS
+            .map(action => action.id === 'shoots' ? { ...action, label: labels.workPlural } : action)
+            .filter(action => action.roles.includes(userRole));
+    }, [userRole, labels.workPlural]);
 
     // Get default actions for this role
     const defaultActionsForRole = useMemo(() => {

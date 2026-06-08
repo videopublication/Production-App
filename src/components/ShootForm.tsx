@@ -12,6 +12,8 @@ import { format, parse } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { createGoogleCalendarEvent, getGoogleProviderToken, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from '@/lib/google-calendar';
 import { useToast } from '@/lib/toast-context';
+import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 interface ShootFormProps {
     initialData?: Partial<Shoot>;
@@ -30,9 +32,12 @@ export const ShootForm: React.FC<ShootFormProps> = ({
     users,
     onSubmit,
     isLoading = false,
-    buttonLabel = 'Save Shoot'
+    buttonLabel
 }) => {
     const { showToast } = useToast();
+    const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
+    const submitLabel = buttonLabel || `Save ${labels.workSingular}`;
     const [formData, setFormData] = useState<Partial<Shoot>>({
         title: '',
         description: '',
@@ -125,7 +130,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                 setSelectedCrewIds(prev => Array.from(new Set([...prev, ...matchedCrewIds])));
             }
 
-            showToast('Shoot details fetched from Jira!', 'success');
+            showToast(`${labels.workSingular} details fetched from Jira!`, 'success');
             if (data.description && !showDescription) setShowDescription(true);
             if (data.pocName && !showPOC) setShowPOC(true);
             if (data.endTime && !showEndTime) setShowEndTime(true);
@@ -291,13 +296,13 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                             if (googleEventId) {
                                 // UPDATE existing event
                                 try {
-                                    await updateGoogleCalendarEvent(googleEventId, submissionData, assignedCrew, tokens);
+                                    await updateGoogleCalendarEvent(googleEventId, submissionData, assignedCrew, tokens, labels);
                                 } catch (error) {
                                     console.warn('Failed to update event:', error);
                                 }
                             } else {
                                 // CREATE new event
-                                const event = await createGoogleCalendarEvent(submissionData, assignedCrew, tokens);
+                                const event = await createGoogleCalendarEvent(submissionData, assignedCrew, tokens, labels);
                                 googleEventId = event.id;
 
                                 // Show success toast
@@ -314,7 +319,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                     </div>
                                     <div>
                                         <p class="text-sm font-semibold">Calendar Event Created</p>
-                                        <p class="text-xs text-gray-500">Invites sent to crew members</p>
+                                        <p class="text-xs text-gray-500">Invites sent to ${labels.teamPluralLower} members</p>
                                     </div>
                                 `;
                                 document.body.appendChild(toast);
@@ -331,7 +336,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                     }
                 } catch (error: any) {
                     console.error('Calendar Error:', error);
-                    alert('Shoot saved, but failed to sync with Calendar: ' + error.message);
+                    alert(`${labels.workSingular} saved, but failed to sync with Calendar: ` + error.message);
                 }
             }
 
@@ -367,14 +372,14 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-6 w-full">
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 sm:gap-6">
 
-                {/* Shoot Details Card */}
+                {/* Work Details Card */}
                 <Card className="xl:col-span-2 space-y-4 dark:bg-[#1c1c1e] border-0">
                     <div className="flex items-center justify-between bg-primary/10 dark:bg-[var(--primary)]/10 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-primary/30 dark:border-[var(--primary)]/20 rounded-t-3xl">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-primary dark:bg-[var(--primary)]/20 flex items-center justify-center">
                                 <FileText size={16} className="text-primary dark:text-[var(--primary)]" />
                             </div>
-                            <h3 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white">Shoot Details</h3>
+                            <h3 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white">{labels.workSingular} Details</h3>
                         </div>
                         <Button
                             type="button"
@@ -418,7 +423,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div className="w-full">
                                 <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">
-                                    Shoot Title <span className="text-red-500">*</span>
+                                    {labels.workSingular} Title <span className="text-red-500">*</span>
                                 </label>
                                 <textarea
                                     value={formData.title}
@@ -450,7 +455,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                     value={formData.description}
                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                                     className="flex min-h-[100px] w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y transition-all duration-200"
-                                    placeholder="Brief description of the shoot..."
+                                    placeholder={`Brief description of the ${labels.workLower}...`}
                                 />
                             </div>
                         )}
@@ -652,38 +657,38 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                     )}
                 </Card>
 
-                {/* Crew Assignments Card */}
+                {/* Team Assignments Card */}
                 <Card className="xl:col-span-2 space-y-3 dark:bg-[#2c2c2e] border-0">
                     <div className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/40 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-gray-100/30 dark:border-[#3a3a3c] rounded-t-3xl">
-                        <h3 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white">Crew Assignments</h3>
+                        <h3 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white">{labels.teamPlural} Assignments</h3>
                     </div>
 
                     <div className="space-y-4 pt-1 text-foreground">
                         <div className="space-y-2">
-                            <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">Select Crew Members</label>
+                            <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">Select {labels.teamPlural} Members</label>
                             <MultiSelect
                                 options={crewOptions}
                                 value={selectedCrewIds}
                                 onChange={setSelectedCrewIds}
-                                placeholder="Search & add crew..."
+                                placeholder={`Search & add ${labels.teamPluralLower}...`}
                             />
                         </div>
 
                         {selectedCrewIds.length > 0 && (
                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">Select Shoot Incharge</label>
+                                <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">Select {labels.leadLabel}</label>
                                 <Select
                                     value={inchargeId}
                                     onChange={setInchargeId}
                                     options={inchargeOptions}
-                                    placeholder="Choose incharge from selected crew"
+                                    placeholder={`Choose incharge from selected ${labels.teamPluralLower}`}
                                 />
                             </div>
                         )}
 
                         {selectedCrewIds.length > 0 && (
                             <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-4 border border-gray-100 dark:border-gray-800 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">Selected Crew ({selectedCrewIds.length})</h4>
+                                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">Selected {labels.teamPlural} ({selectedCrewIds.length})</h4>
                                 <div className="flex flex-wrap gap-2">
                                     {selectedCrewIds.map(id => {
                                         const user = users.find(u => u.id === id);
@@ -714,7 +719,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
             <div className="flex justify-end gap-4 pt-4">
                 <Button type="submit" isLoading={isLoading} size="lg">
-                    {buttonLabel}
+                    {submitLabel}
                 </Button>
             </div>
         </form>

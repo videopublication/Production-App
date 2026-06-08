@@ -7,12 +7,14 @@ import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
 import { useDepartment } from '@/lib/department-context';
 import { getRoleLabel } from '@/lib/roles';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export const Sidebar = () => {
     const pathname = usePathname();
     const { user, logout } = useAuth();
     const { isCollapsed, toggleCollapsed } = useSidebar();
     const { hasFeature, department } = useDepartment();
+    const labels = getDepartmentLabels(department);
 
     // Dynamically update document title based on department
     React.useEffect(() => {
@@ -32,7 +34,7 @@ export const Sidebar = () => {
         { name: 'Returns', path: '/returns', icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
         { name: 'Transactions', path: '/transactions', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
         { name: 'Verification', path: '/verification', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', roles: ['MANAGER', 'ADMIN', 'SUPER_ADMIN'], feature: 'inventory' },
-        { name: 'Shoots', path: '/shoots', icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z', roles: ['ADMIN', 'MANAGER', 'CREW', 'SUPER_ADMIN', 'FINANCE_MANAGER'], feature: 'shoots' },
+        { name: labels.workPlural, path: '/shoots', icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z', roles: ['ADMIN', 'MANAGER', 'CREW', 'SUPER_ADMIN', 'FINANCE_MANAGER'], feature: 'shoots' },
         { name: 'Calendar', path: '/calendar', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'], feature: 'calendar' },
         { name: 'Leaves', path: '/leaves', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'], feature: 'leaves' },
         { name: 'Users', path: '/admin/users', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', roles: ['ADMIN', 'SUPER_ADMIN'], feature: 'crew_management' },

@@ -1,4 +1,5 @@
 import { Assignment, Shoot, ShootExpense, User } from '@/types';
+import { DepartmentLabels, getDepartmentLabels } from '@/lib/department-labels';
 
 /**
  * Calculates the total expense for a given shoot.
@@ -11,9 +12,9 @@ export const getShootTotalExpense = (shoot: Shoot): number => {
 /**
  * Generates a CSV blob containing shoot and expense data for reporting.
  */
-export const generateShootsCSV = (shoots: Shoot[], assignments: Assignment[], users: User[]): Blob => {
+export const generateShootsCSV = (shoots: Shoot[], assignments: Assignment[], users: User[], labels: DepartmentLabels = getDepartmentLabels(null)): Blob => {
     const headers = [
-        'Shoot Number',
+        labels.workIdLabel,
         'Title',
         'Start Date',
         'Start Time',
@@ -29,7 +30,7 @@ export const generateShootsCSV = (shoots: Shoot[], assignments: Assignment[], us
         'Equipment (₹)',
         'Manpower (₹)',
         'Other (₹)',
-        'Assigned Crew'
+        `Assigned ${labels.teamPlural}`
     ];
 
     const rows = shoots.map(shoot => {

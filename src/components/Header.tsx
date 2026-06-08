@@ -11,12 +11,14 @@ import { useNotifications } from '@/hooks/useNotifications';
 import useFcmToken from '@/hooks/useFcmToken';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
 import { ArrowLeft } from 'lucide-react';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export const Header = () => {
     const { user } = useAuth();
     const { isCollapsed } = useSidebar();
     const { notificationPermission, enableNotifications } = useFcmToken();
     const { department, allDepartments, switchDepartment } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const router = useRouter();
     const pathname = usePathname();
 
@@ -51,7 +53,7 @@ export const Header = () => {
                     (() => {
                         const isEditPage = pathname.endsWith('/edit');
                         const backLink = isEditPage ? pathname.replace('/edit', '') : '/shoots';
-                        const backText = isEditPage ? 'Back to Shoot' : 'Back to Shoots';
+                        const backText = isEditPage ? `Back to ${labels.workSingular}` : `Back to ${labels.workPlural}`;
 
                         return (
                             <Link

@@ -1,7 +1,8 @@
 import { format, parseISO } from 'date-fns';
 import { Shoot, Assignment, User } from '@/types';
+import { DepartmentLabels, getDepartmentLabels } from '@/lib/department-labels';
 
-export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], users: User[]) => {
+export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], users: User[], labels: DepartmentLabels = getDepartmentLabels(null)) => {
     const startDate = shoot.startTime ? parseISO(shoot.startTime) : null;
     const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
 
@@ -22,7 +23,7 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
     let message = `Namaskaram,\n\n🎬 *${shoot.title.toUpperCase()}* 🎬\n\n`;
 
     if (shoot.shootNumber) {
-        message += `*Shoot ID:* #${shoot.shootNumber}\n`;
+        message += `*${labels.workIdLabel}:* #${shoot.shootNumber}\n`;
     }
     
     // Add Jira Ticket if available
@@ -51,9 +52,9 @@ export const formatWhatsAppMessage = (shoot: Shoot, assignments: Assignment[], u
         message += `👤 *POC:* ${shoot.pocName} ${shoot.pocContact ? `(${shoot.pocContact})` : ''}\n`;
     }
 
-    // Only show crew section if there are assignments
+    // Only show team section if there are assignments
     if (assignments.length > 0) {
-        message += `\n📋 *CREW ASSIGNED:*\n`;
+        message += `\n📋 *${labels.teamPlural.toUpperCase()} ASSIGNED:*\n`;
         assignments.forEach(assignment => {
             const user = users.find(u => u.id === assignment.userId);
             if (user) {

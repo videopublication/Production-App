@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { User } from '@/types';
 import { X, Search, ChevronDown, Check } from 'lucide-react';
+import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 interface AdminLeaveModalProps {
     isOpen: boolean;
@@ -32,6 +34,8 @@ function avatarColor(id: string) {
 }
 
 export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUserId, prefilledDate }: AdminLeaveModalProps) {
+    const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
     const [userId, setUserId] = useState(prefilledUserId || '');
     const [startDate, setStartDate] = useState(prefilledDate || '');
     const [endDate, setEndDate] = useState(prefilledDate || '');
@@ -106,7 +110,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {/* Searchable user picker */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Crew Member</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{labels.teamSingular}</label>
                         <div className="relative" ref={dropdownRef}>
                             <button
                                 type="button"
@@ -127,7 +131,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
                                         </span>
                                     </>
                                 ) : (
-                                    <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Select a crew member</span>
+                                    <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Select a {labels.teamLower} member</span>
                                 )}
                                 <ChevronDown size={16} className={`text-gray-400 transition-transform duration-200 shrink-0 ${isDropdownOpen ? 'rotate-180' : ''}`} />
                             </button>
@@ -153,7 +157,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
                                     {/* User list */}
                                     <div className="max-h-52 overflow-y-auto py-1">
                                         {filteredUsers.length === 0 ? (
-                                            <div className="px-4 py-3 text-sm text-center text-gray-400">No crew members found</div>
+                                            <div className="px-4 py-3 text-sm text-center text-gray-400">No {labels.teamPluralLower} members found</div>
                                         ) : (
                                             filteredUsers.map(u => (
                                                 <button

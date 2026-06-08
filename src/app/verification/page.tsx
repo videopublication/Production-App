@@ -8,6 +8,7 @@ import { Condition, Equipment, ManualTransactionItem, Shoot, Transaction, User }
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
 import { useDepartment } from '@/lib/department-context';
+import { getDepartmentLabels } from '@/lib/department-labels';
 import { MobileScanner, QRScanner } from '@/components/QRScanner';
 import {
     CONDITION_LABELS,
@@ -51,6 +52,7 @@ export default function VerificationPage() {
     const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const { department } = useDepartment();
+    const labels = getDepartmentLabels(department);
 
     // Enforce department isolation: regular users see only their dept
     const effectiveDeptId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
@@ -908,7 +910,7 @@ export default function VerificationPage() {
                         type="search"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search item, QR, serial, shoot, transaction, user..."
+                        placeholder={`Search item, QR, serial, ${labels.workLower}, transaction, user...`}
                         className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
                     />
                     {searchQuery && (
