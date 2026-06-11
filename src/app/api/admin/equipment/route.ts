@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+type EquipmentPayload = Record<string, unknown> & {
+    department_id?: string | null;
+};
+
 // Service role client - bypasses RLS for admin operations
 const getSupabaseAdmin = () => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,7 +19,7 @@ const getSupabaseAdmin = () => {
     });
 };
 
-// Verify the calling user is an authenticated Admin or Super Admin
+// Verify the calling user can manage equipment inventory
 async function ensureAdmin() {
     const cookieStore = await cookies();
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -52,14 +56,22 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { items } = await request.json();
+        const { items } = await request.json() as { items?: unknown };
         if (!Array.isArray(items) || items.length === 0) {
             return NextResponse.json({ error: 'No items provided' }, { status: 400 });
         }
 
+        if (!items.every((item): item is EquipmentPayload => typeof item === 'object' && item !== null && !Array.isArray(item))) {
+            return NextResponse.json({ error: 'Invalid equipment payload' }, { status: 400 });
+        }
+
+        if (caller.role !== 'SUPER_ADMIN' && !caller.departmentId) {
+            return NextResponse.json({ error: 'User is not assigned to a department' }, { status: 403 });
+        }
+
         // Security: for non-Super Admins, enforce that all items belong to their department
-        const processedItems = items.map((item: any) => {
-            if (caller.role !== 'SUPER_ADMIN' && caller.departmentId) {
+        const processedItems = items.map((item) => {
+            if (caller.role !== 'SUPER_ADMIN') {
                 // Override department_id to always be the caller's department
                 return { ...item, department_id: caller.departmentId };
             }
@@ -77,8 +89,9 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({ success: true, count: processedItems.length });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Equipment POST error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        const message = err instanceof Error ? err.message : 'Failed to save equipment';
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

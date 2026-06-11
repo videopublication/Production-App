@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
                     return request.cookies.getAll()
                 },
                 setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) => {
+                    cookiesToSet.forEach(({ name, value }) => {
                         request.cookies.set(name, value)
                     })
                     response = NextResponse.next({
@@ -103,7 +103,11 @@ export async function middleware(request: NextRequest) {
             // Admin protection for /admin and /api/admin routes
             // Note: Shoots are now at /shoots and accessible to all roles
             const isAdminRoute = path.startsWith('/admin') || path.startsWith('/api/admin');
-            const hasAdminAccess = role === 'ADMIN' || role === 'SUPER_ADMIN';
+            const isManagerEquipmentApi = path === '/api/admin/equipment';
+            const hasAdminAccess =
+                role === 'ADMIN' ||
+                role === 'SUPER_ADMIN' ||
+                (role === 'MANAGER' && isManagerEquipmentApi);
 
             if (isAdminRoute && !hasAdminAccess) {
                 if (path.startsWith('/api/')) {

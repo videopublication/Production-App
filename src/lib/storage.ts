@@ -163,7 +163,10 @@ class StorageService {
             .from('equipment')
             .insert(dbItem);
 
-        if (error) console.error('Error adding equipment:', error);
+        if (error) {
+            console.error('Error adding equipment:', error);
+            throw error;
+        }
     }
 
     async updateEquipment(id: string, updates: Partial<Equipment>): Promise<void> {

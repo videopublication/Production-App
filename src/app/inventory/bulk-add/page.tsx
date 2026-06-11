@@ -9,45 +9,13 @@ import { downloadFile } from '@/lib/download';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
-
-const getSuffix = (index: number): string => {
-    let s = '';
-    let i = index;
-    while (i >= 0) {
-        s = String.fromCharCode((i % 26) + 65) + s;
-        i = Math.floor(i / 26) - 1;
-    }
-    return s;
-};
-
-const guessModelCode = (name: string): string => {
-    let s = name || '';
-    s = s.replace(/\bIII\b/gi, '3').replace(/\bII\b/gi, '2').replace(/\bI\b/gi, '1');
-    s = s.replace(/sony|canon|nikon|panasonic|fuji(film)?|blackmagic/gi, '');
-    s = s.replace(/[^a-zA-Z0-9]/g, '');
-    return s.toUpperCase().substring(0, 12);
-};
+import { EQUIPMENT_CATEGORY_PREFIXES, getEquipmentBarcodeBase } from '@/lib/equipment-barcodes';
 
 const uuid = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
     }
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
-};
-
-const CATEGORY_PREFIXES: Record<string, string> = {
-    'Camera': 'CAM',
-    'Lens': 'LENSE',
-    'Tripod': 'TRI',
-    'Audio': 'AUD',
-    'Lighting': 'LIGHT',
-    'Monitor': 'MON',
-    'Accessory': 'ACC',
-    'Cable': 'CBL',
-    'Battery': 'BAT',
-    'Storage': 'STR',
-    'Grip': 'GRIP',
-    'Drone': 'DRN',
 };
 
 interface BulkRow {
@@ -88,7 +56,7 @@ export default function BulkAddPage() {
             }
         };
         loadItems();
-    }, []);
+    }, [effectiveDeptId]);
 
     const addRow = () => {
         setRows([...rows, {
@@ -114,17 +82,10 @@ export default function BulkAddPage() {
         }));
     };
 
-    // Normalize model string for barcode (remove spaces, special chars, limit length)
-    const normalizeModel = (model: string): string => {
-        return guessModelCode(model).substring(0, 10);
-    };
-
     const getPreviewBarcode = (row: BulkRow, rowIndex: number) => {
         if (!row.category && !row.company && !row.model && !row.serialNumber) return '';
 
-        const prefix = CATEGORY_PREFIXES[row.category] || (row.category ? row.category.substring(0, 3).toUpperCase() : 'ITM');
-        const normalizedModel = normalizeModel(row.model || row.serialNumber || 'GEN');
-        const baseBarcode = `${prefix}-${normalizedModel}`;
+        const baseBarcode = getEquipmentBarcodeBase(row.category, row.model || row.serialNumber || 'GEN');
 
         // Count existing items with this base barcode
         const existingCount = existingItems.filter(i =>
@@ -135,9 +96,7 @@ export default function BulkAddPage() {
         let pendingCount = 0;
         for (let i = 0; i < rowIndex; i++) {
             const prevRow = rows[i];
-            const prevPrefix = CATEGORY_PREFIXES[prevRow.category] || (prevRow.category ? prevRow.category.substring(0, 3).toUpperCase() : 'ITM');
-            const prevNormalizedModel = prevRow.model ? normalizeModel(prevRow.model) : (prevRow.serialNumber ? normalizeModel(prevRow.serialNumber) : 'GEN');
-            const prevBase = `${prevPrefix}-${prevNormalizedModel}`;
+            const prevBase = getEquipmentBarcodeBase(prevRow.category, prevRow.model || prevRow.serialNumber || 'GEN');
             if (prevBase === baseBarcode) pendingCount++;
         }
 
@@ -258,12 +217,10 @@ export default function BulkAddPage() {
                 // Skip completely empty rows
                 if (!row.category && !row.company && !row.model && !row.serialNumber) continue;
 
-                const prefix = CATEGORY_PREFIXES[row.category] || (row.category ? row.category.substring(0, 3).toUpperCase() : 'ITM');
                 // Fallback: If no model, use full Serial Number or 'GEN' (Generic)
                 // We use the full serial to ensure each item gets its own unique base barcode (1-to-1)
                 const modelStr = row.model || row.serialNumber || 'GEN';
-                const normalizedModel = normalizeModel(modelStr);
-                const baseBarcode = `${prefix}-${normalizedModel}`;
+                const baseBarcode = getEquipmentBarcodeBase(row.category, modelStr);
 
                 if (!baseCounts.has(baseBarcode)) {
                     const count = existingItems.filter(i => i.barcode.startsWith(baseBarcode + '-')).length;
@@ -275,11 +232,9 @@ export default function BulkAddPage() {
                 // Skip completely empty rows
                 if (!row.category && !row.company && !row.model && !row.serialNumber) continue;
 
-                const prefix = CATEGORY_PREFIXES[row.category] || (row.category ? row.category.substring(0, 3).toUpperCase() : 'ITM');
                 // Fallback: Use model OR Serial Number for barcode uniqueness
                 const modelStr = row.model || row.serialNumber || 'GEN';
-                const normalizedModel = normalizeModel(modelStr);
-                const baseBarcode = `${prefix}-${normalizedModel}`;
+                const baseBarcode = getEquipmentBarcodeBase(row.category, modelStr);
 
                 const currentCount = (baseCounts.get(baseBarcode) || 0) + 1;
                 baseCounts.set(baseBarcode, currentCount);
@@ -385,7 +340,7 @@ export default function BulkAddPage() {
                 <div>
                     <span className="font-semibold block sm:inline">{!effectiveDeptId ? "Error: " : "Import Destination: "}</span>
                     {!effectiveDeptId ? (
-                        <span className="text-red-600 dark:text-red-400 font-medium">Please select a specific department from the top Navigation Bar. Cannot import to "All Organizations".</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">Please select a specific department from the top Navigation Bar. Cannot import to &quot;All Organizations&quot;.</span>
                     ) : (
                         <>
                             <span>Items will be added permanently to </span>
@@ -589,7 +544,7 @@ export default function BulkAddPage() {
             </div>
 
             <datalist id="categories">
-                {Object.keys(CATEGORY_PREFIXES).map(cat => (
+                {Object.keys(EQUIPMENT_CATEGORY_PREFIXES).map(cat => (
                     <option key={cat} value={cat} />
                 ))}
             </datalist>

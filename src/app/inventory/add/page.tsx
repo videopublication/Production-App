@@ -9,6 +9,7 @@ import { Input } from '@/components/Input';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
+import { getNextEquipmentBarcode } from '@/lib/equipment-barcodes';
 
 export default function AddItemPage() {
     const router = useRouter();
@@ -31,12 +32,6 @@ export default function AddItemPage() {
         serialNumber: '',
     });
 
-    const generateId = () => {
-        const prefix = formData.category.substring(0, 3).toUpperCase() || 'EQP';
-        const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-        return `${prefix}-${random}`;
-    };
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -46,7 +41,12 @@ export default function AddItemPage() {
 
         try {
             const id = crypto.randomUUID();
-            const barcode = generateId();
+            const existingItems = await storage.getEquipment(activeDepartmentId);
+            const barcode = getNextEquipmentBarcode({
+                category: formData.category,
+                model: formData.model || formData.name,
+                serialNumber: formData.serialNumber,
+            }, existingItems);
 
             const newItem: Equipment = {
                 id,
@@ -56,6 +56,7 @@ export default function AddItemPage() {
                 status: 'AVAILABLE',
                 location: formData.location,
                 condition: 'OK',
+                serialNumber: formData.serialNumber || undefined,
                 metadata: {
                     brand: formData.brand,
                     model: formData.model,
