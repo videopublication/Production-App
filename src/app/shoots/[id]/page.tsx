@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
-import { Shoot, User, Assignment, Log } from '@/types';
+import { Shoot, User, Assignment, Log, PlannerDraftAssignment } from '@/types';
 import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
 import { isSameDay } from 'date-fns';
 import { Button } from '@/components/Button';
@@ -14,7 +14,6 @@ import { Badge } from '@/components/Badge';
 import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
-import { useConfirm } from '@/lib/dialog-context';
 import { useToast } from '@/lib/toast-context';
 
 import { useShoot, useSaveShoot } from '@/hooks/useShoots';
@@ -35,8 +34,12 @@ export default function ShootDetailsPage() {
     const { department, allDepartments } = useDepartment();
     const { showToast } = useToast();
     const params = useParams();
-    const confirm = useConfirm();
+    const searchParams = useSearchParams();
     const id = params?.id as string;
+    const returnTo = searchParams.get('returnTo');
+    const safeReturnTo = returnTo?.startsWith('/') ? returnTo : null;
+    const withReturnTo = (href: string) =>
+        safeReturnTo ? `${href}?returnTo=${encodeURIComponent(safeReturnTo)}` : href;
     const queryClient = useQueryClient();
 
     // React Query Hooks
@@ -48,10 +51,14 @@ export default function ShootDetailsPage() {
     const labels = getDepartmentLabels(pageDepartment);
 
     const [logs, setLogs] = useState<Log[]>([]);
+    const [shootDraftAssignments, setShootDraftAssignments] = useState<PlannerDraftAssignment[]>([]);
     const { mutateAsync: saveShoot } = useSaveShoot();
 
     const loading = shootLoading || assignmentsLoading || usersLoading;
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
+    const [isCancelling, setIsCancelling] = useState(false);
     
     const FIXED_EXPENSE_TYPES = ['Boarding', 'Travel', 'Equipment', 'Manpower', 'Other'] as const;
     const [expenseAmounts, setExpenseAmounts] = useState<Record<string, string>>({});
@@ -85,7 +92,11 @@ export default function ShootDetailsPage() {
     }, [shoot?.expenses]);
 
     // Derived State
-    const assignments = shoot ? allAssignments.filter(a => a.shootId === shoot.id) : [];
+    const liveAssignments = shoot ? allAssignments.filter(a => a.shootId === shoot.id) : [];
+    const assignments = shoot?.status === 'DRAFT' ? shootDraftAssignments : liveAssignments;
+    const assignmentsForMessage: Assignment[] = assignments.map(assignment => (
+        'status' in assignment ? assignment : { ...assignment, status: 'PENDING' }
+    ));
     const linkedTransactions = shoot ? allTransactions.filter(t => t.shootId === shoot.id) : [];
 
     useEffect(() => {
@@ -93,6 +104,20 @@ export default function ShootDetailsPage() {
             storage.getLogsByEntity(shoot.id).then(setLogs);
         }
     }, [shoot?.id]);
+
+    useEffect(() => {
+        if (!shoot?.id || shoot.status !== 'DRAFT') {
+            setShootDraftAssignments([]);
+            return;
+        }
+
+        storage.getPlannerDraftAssignments(shoot.departmentId)
+            .then(drafts => setShootDraftAssignments(drafts.filter(draft => draft.shootId === shoot.id)))
+            .catch(error => {
+                console.error('Failed to load draft shoot assignments:', error);
+                setShootDraftAssignments([]);
+            });
+    }, [shoot?.departmentId, shoot?.id, shoot?.status]);
 
     const handleSaveFixedExpenses = async () => {
         if (!shoot) return;
@@ -178,19 +203,19 @@ export default function ShootDetailsPage() {
     };
 
 
-    const handleCancelShoot = async () => {
+    const handleCancelShoot = () => {
         if (!shoot) return;
 
-        const isConfirmed = await confirm({
-            title: `Cancel ${labels.workSingular}?`,
-            message: `Are you sure you want to cancel this ${labels.workLower}? This action cannot be undone.`,
-            confirmLabel: 'Yes, Cancel',
-            variant: 'danger'
-        });
+        setCancelReason(shoot.cancellationReason || '');
+        setIsCancelModalOpen(true);
+    };
 
-        if (!isConfirmed) return;
+    const handleConfirmCancelShoot = async () => {
+        if (!shoot || isCancelling) return;
 
+        setIsCancelling(true);
         let calendarError: string | null = null;
+        const reason = cancelReason.trim();
 
         try {
             // Check for Google Calendar Event presence
@@ -215,7 +240,8 @@ export default function ShootDetailsPage() {
             const updatedShoot: Shoot = {
                 ...shoot,
                 status: 'CANCELLED',
-                googleEventId: undefined
+                googleEventId: undefined,
+                cancellationReason: reason
             };
 
             await saveShoot(updatedShoot);
@@ -229,7 +255,8 @@ export default function ShootDetailsPage() {
                     entityId: shoot.id,
                     userId: user.id,
                     timestamp: new Date().toISOString(),
-                    details: `Cancelled ${labels.workLower}`
+                    details: `Cancelled ${labels.workLower}${reason ? `: ${reason}` : ''}`,
+                    departmentId: shoot.departmentId
                 });
                 // update logs locally for immediate feedback
                 storage.getLogsByEntity(shoot.id).then(setLogs);
@@ -252,10 +279,13 @@ export default function ShootDetailsPage() {
             }
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 4000);
+            setIsCancelModalOpen(false);
 
         } catch (error) {
             console.error(`Failed to cancel ${labels.workLower}:`, error);
             alert(`Failed to cancel ${labels.workLower}. Please try again.`);
+        } finally {
+            setIsCancelling(false);
         }
     };
 
@@ -364,6 +394,16 @@ export default function ShootDetailsPage() {
             <div className="flex flex-col gap-4">
                 {/* Title Section */}
                 <div className="space-y-3 min-w-0 flex-1">
+                    {safeReturnTo && (
+                        <Link
+                            href={safeReturnTo}
+                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:opacity-80 transition-opacity"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            Back to Planner
+                        </Link>
+                    )}
+
                     <div className="flex flex-wrap items-center gap-3">
                         {shoot.shootNumber && (
                             <span className="font-mono text-[11px] sm:text-sm font-bold text-muted-foreground bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded shrink-0">
@@ -408,7 +448,7 @@ export default function ShootDetailsPage() {
                 <div className="grid grid-cols-6 sm:flex sm:items-center gap-2 sm:gap-3 pt-4">
                     <button
                         onClick={() => {
-                            const message = formatWhatsAppMessage(shoot, assignments, users, labels);
+                            const message = formatWhatsAppMessage(shoot, assignmentsForMessage, users, labels);
                             openWhatsApp(message);
                         }}
                         className="col-span-2 flex items-center justify-center gap-1.5 sm:gap-2 px-2 py-2 sm:px-5 sm:py-2.5 rounded-xl font-bold transition-all shadow-sm hover:shadow-green-500/20 active:scale-95 bg-[#25D366] hover:bg-[#22bf5b] text-white text-xs sm:text-sm whitespace-nowrap lg:min-w-[140px]"
@@ -424,7 +464,7 @@ export default function ShootDetailsPage() {
                         onClick={async (e) => {
                             const btn = e.currentTarget;
                             const originalContent = btn.innerHTML;
-                            const message = formatWhatsAppMessage(shoot, assignments, users, labels);
+                            const message = formatWhatsAppMessage(shoot, assignmentsForMessage, users, labels);
                             try {
                                 await navigator.clipboard.writeText(message);
                                 btn.innerHTML = `<svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> Copied`;
@@ -463,7 +503,7 @@ export default function ShootDetailsPage() {
 
                     {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                         <>
-                            <Link href={`/shoots/${shoot.id}/edit`} className="col-span-3 sm:col-span-auto sm:w-auto">
+                            <Link href={withReturnTo(`/shoots/${shoot.id}/edit`)} className="col-span-3 sm:col-span-auto sm:w-auto">
                                 <Button variant="outline" className="w-full gap-1.5 sm:gap-2 bg-white dark:bg-zinc-800/50 dark:hover:bg-zinc-800 dark:backdrop-blur-md h-[36px] sm:h-[42px] px-2 sm:px-5 rounded-xl font-medium border-gray-200 dark:border-zinc-700 text-xs sm:text-sm text-gray-700 dark:text-gray-200">
                                     <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Edit
                                 </Button>
@@ -483,7 +523,7 @@ export default function ShootDetailsPage() {
             </div>
 
             {/* Calendar Banner - Moved below header */}
-            {!shoot.googleEventId && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && shoot.status !== 'CANCELLED' && (
+            {!shoot.googleEventId && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && shoot.status === 'CONFIRMED' && (
                 <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
@@ -510,6 +550,13 @@ export default function ShootDetailsPage() {
                         )}
                         Sync to Calendar
                     </Button>
+                </div>
+            )}
+
+            {shoot.status === 'CANCELLED' && shoot.cancellationReason && (
+                <div className="rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-red-700 dark:text-red-300">Cancellation Reason</p>
+                    <p className="mt-1 text-sm text-red-900 dark:text-red-100 whitespace-pre-wrap">{shoot.cancellationReason}</p>
                 </div>
             )}
 
@@ -614,7 +661,9 @@ export default function ShootDetailsPage() {
                     {/* Team List - Main Content */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between px-1 mb-4">
-                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">{labels.teamPlural} Assignments</h2>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                                {shoot.status === 'DRAFT' ? `Tentative ${labels.teamPlural}` : `${labels.teamPlural} Assignments`}
+                            </h2>
                             <span className="px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{assignments.length} Members</span>
                         </div>
 
@@ -627,9 +676,13 @@ export default function ShootDetailsPage() {
                                         </svg>
                                     </div>
                                     <p className="font-medium text-gray-700 dark:text-gray-300">No {labels.teamPluralLower} assigned yet</p>
-                                    <p className="text-sm mb-4 text-gray-500 dark:text-gray-400">Add members to organize this {labels.workLower}</p>
+                                    <p className="text-sm mb-4 text-gray-500 dark:text-gray-400">
+                                        {shoot.status === 'DRAFT'
+                                            ? `Add tentative ${labels.teamPluralLower} before publishing this ${labels.workLower}`
+                                            : `Add members to organize this ${labels.workLower}`}
+                                    </p>
                                     {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
-                                        <Link href={`/shoots/${id}/edit`}>
+                                        <Link href={withReturnTo(`/shoots/${id}/edit`)}>
                                             <Button size="sm">Add {labels.teamSingular}</Button>
                                         </Link>
                                     )}
@@ -885,6 +938,52 @@ export default function ShootDetailsPage() {
                     </Card>
                 </div>
             </div>
+
+            {isCancelModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden">
+                        <div className="p-5 border-b border-gray-200 dark:border-gray-800">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Cancel {labels.workSingular}?</h2>
+                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                This will mark the {labels.workLower} as cancelled and remove the Google Calendar event if connected.
+                            </p>
+                        </div>
+
+                        <div className="p-5 space-y-2">
+                            <label htmlFor="cancel-reason" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                Reason <span className="font-normal text-gray-400">(optional)</span>
+                            </label>
+                            <textarea
+                                id="cancel-reason"
+                                value={cancelReason}
+                                onChange={event => setCancelReason(event.target.value)}
+                                rows={4}
+                                placeholder="Add context for why this was cancelled"
+                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                            />
+                        </div>
+
+                        <div className="p-4 bg-gray-50 dark:bg-gray-900/60 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsCancelModalOpen(false)}
+                                disabled={isCancelling}
+                            >
+                                Keep {labels.workSingular}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="danger"
+                                onClick={handleConfirmCancelShoot}
+                                isLoading={isCancelling}
+                            >
+                                Cancel {labels.workSingular}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

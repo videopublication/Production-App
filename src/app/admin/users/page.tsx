@@ -32,7 +32,14 @@ export default function UserManagementPage() {
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [newPassword, setNewPassword] = useState('');
-    const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'CREW', departmentId: '' });
+    const [newUser, setNewUser] = useState({
+        name: '',
+        email: '',
+        password: '',
+        role: 'CREW',
+        departmentId: '',
+        canBeAssignedToShoots: true,
+    });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Bulk Import State
@@ -206,6 +213,16 @@ export default function UserManagementPage() {
         };
     }, [users, department, user]);
 
+    const canAssignToShoots = (targetUser: User) => targetUser.canBeAssignedToShoots ?? targetUser.role === 'CREW';
+
+    const parseCsvBoolean = (value?: string) => {
+        if (!value) return undefined;
+        const normalized = value.trim().toLowerCase();
+        if (['1', 'true', 'yes', 'y'].includes(normalized)) return true;
+        if (['0', 'false', 'no', 'n'].includes(normalized)) return false;
+        return undefined;
+    };
+
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
             setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -235,7 +252,7 @@ export default function UserManagementPage() {
             });
             if (res.ok) {
                 setShowAddModal(false);
-                setNewUser({ name: '', email: '', password: '', role: 'CREW', departmentId: '' });
+                setNewUser({ name: '', email: '', password: '', role: 'CREW', departmentId: '', canBeAssignedToShoots: true });
                 fetchUsers();
                 if (user) {
                     await storage.addLog({
@@ -334,6 +351,37 @@ export default function UserManagementPage() {
         finally { setProcessingIds(prev => { const next = new Set(prev); next.delete(userId); return next; }); }
     };
 
+    const handleShootAssignmentEligibilityChange = async (userId: string, canBeAssignedToShoots: boolean) => {
+        if (processingIds.has(userId)) return;
+        setProcessingIds(prev => new Set(prev).add(userId));
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: userId, canBeAssignedToShoots })
+            });
+            if (res.ok) {
+                fetchUsers();
+                showToast(canBeAssignedToShoots ? 'User can be assigned to shoots' : 'User hidden from shoot assignment lists', 'success');
+                const targetUser = users.find(u => u.id === userId);
+                if (user && targetUser) {
+                    await storage.addLog({
+                        id: crypto.randomUUID(),
+                        action: 'EDIT',
+                        entityId: userId,
+                        userId: user.id,
+                        timestamp: new Date().toISOString(),
+                        details: `${canBeAssignedToShoots ? 'Enabled' : 'Disabled'} shoot assignment eligibility for "${targetUser.name}"`
+                    });
+                }
+            } else {
+                const error = await res.json();
+                showToast(error.error || 'Failed to update shoot assignment setting', 'error');
+            }
+        } catch { showToast('Failed to update shoot assignment setting', 'error'); }
+        finally { setProcessingIds(prev => { const next = new Set(prev); next.delete(userId); return next; }); }
+    };
+
     const handleDepartmentChange = async (userId: string, newDeptId: string) => {
         if (processingIds.has(userId)) return;
         setProcessingIds(prev => new Set(prev).add(userId));
@@ -378,8 +426,11 @@ export default function UserManagementPage() {
                 const rowData: Record<string, string> = {};
                 headers.forEach((h, index) => { rowData[h] = values[index]?.replace(/^"|"$/g, '') || ''; });
                 if (!rowData.email || !rowData.password || !rowData.name) { failCount++; continue; }
+                const canBeAssignedToShoots = parseCsvBoolean(
+                    rowData.can_be_assigned_to_shoots || rowData.canbeassignedtoshoots || rowData.assignable || rowData.planner
+                );
                 try {
-                    const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: rowData.name, email: rowData.email, password: rowData.password, role: rowData.role?.toUpperCase() || 'CREW', phone: rowData.phone || undefined, departmentId: importDepartmentId || null }) });
+                    const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: rowData.name, email: rowData.email, password: rowData.password, role: rowData.role?.toUpperCase() || 'CREW', phone: rowData.phone || undefined, departmentId: importDepartmentId || null, canBeAssignedToShoots }) });
                     if (res.ok) successCount++; else failCount++;
                 } catch { failCount++; }
             }
@@ -619,7 +670,7 @@ export default function UserManagementPage() {
             <PullToRefresh onRefresh={fetchUsers}>
                 <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
                     {/* Sort Header (desktop) */}
-                    <div className="hidden lg:grid grid-cols-[minmax(280px,1.55fr)_150px_120px_minmax(160px,0.8fr)_minmax(430px,1fr)] items-center gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <div className="hidden lg:grid grid-cols-[minmax(280px,1.45fr)_150px_120px_minmax(150px,0.75fr)_minmax(560px,1.25fr)] items-center gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         <button className="flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-left" onClick={() => handleSort('name')}>
                             Name <SortIcon active={sortKey === 'name'} dir={sortKey === 'name' ? sortDir : 'asc'} />
                         </button>
@@ -657,7 +708,7 @@ export default function UserManagementPage() {
                                     className={`p-4 sm:px-5 sm:py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${processingIds.has(u.id) ? 'opacity-60 pointer-events-none' : ''}`}
                                 >
                                     {/* Desktop Layout */}
-                                    <div className="hidden lg:grid grid-cols-[minmax(280px,1.55fr)_150px_120px_minmax(160px,0.8fr)_minmax(430px,1fr)] items-center gap-4">
+                                    <div className="hidden lg:grid grid-cols-[minmax(280px,1.45fr)_150px_120px_minmax(150px,0.75fr)_minmax(560px,1.25fr)] items-center gap-4">
                                         {/* Name + Avatar */}
                                         <div className="flex items-center gap-3 min-w-0">
                                             <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-md ${avatarGradient(u.role)}`}>
@@ -703,6 +754,17 @@ export default function UserManagementPage() {
                                                             {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                                         </select>
                                                     )}
+
+                                                    <button
+                                                        onClick={() => handleShootAssignmentEligibilityChange(u.id, !canAssignToShoots(u))}
+                                                        className={`h-9 w-[112px] rounded-xl px-3 text-xs font-bold transition-all active:scale-95 ${canAssignToShoots(u)
+                                                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                                                            }`}
+                                                        title={canAssignToShoots(u) ? 'Hide from shoot assignment lists' : 'Show in shoot assignment lists'}
+                                                    >
+                                                        {canAssignToShoots(u) ? 'Planner On' : 'Hidden'}
+                                                    </button>
 
                                                     {['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(u.role) && (
                                                         <button
@@ -793,6 +855,16 @@ export default function UserManagementPage() {
                                                     )}
                                                 </div>
 
+                                                <button
+                                                    onClick={() => handleShootAssignmentEligibilityChange(u.id, !canAssignToShoots(u))}
+                                                    className={`w-full rounded-xl px-3 py-2.5 text-xs font-bold transition-all active:scale-95 ${canAssignToShoots(u)
+                                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                                        : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                                        }`}
+                                                >
+                                                    {canAssignToShoots(u) ? 'Can be assigned to shoots' : 'Hidden from shoot assignment lists'}
+                                                </button>
+
                                                 <div className="flex items-center gap-2">
                                                     {/* Primary Approver Toggle (Only for Admin/Manager) */}
                                                     {['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(u.role) && (
@@ -844,13 +916,34 @@ export default function UserManagementPage() {
                             <Input label="Password" type="password" required value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
                             <div className="space-y-1.5">
                                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-                                <select className="flex h-10 w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })}>
+                                <select
+                                    className="flex h-10 w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                    value={newUser.role}
+                                    onChange={e => {
+                                        const role = e.target.value;
+                                        setNewUser({ ...newUser, role, canBeAssignedToShoots: role === 'CREW' });
+                                    }}
+                                >
                                     <option value="CREW">Crew</option>
                                     <option value="MANAGER">Manager</option>
                                     <option value="FINANCE_MANAGER">Finance Manager</option>
                                     <option value="ADMIN">Admin</option>
                                 </select>
                             </div>
+                            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-800">
+                                <input
+                                    type="checkbox"
+                                    checked={newUser.canBeAssignedToShoots}
+                                    onChange={e => setNewUser({ ...newUser, canBeAssignedToShoots: e.target.checked })}
+                                    className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600"
+                                />
+                                <span>
+                                    <span className="block font-semibold text-gray-900 dark:text-white">Can be assigned to shoots</span>
+                                    <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                                        Shows this person in planner crew lists and assignment dropdowns.
+                                    </span>
+                                </span>
+                            </label>
                             <div className="space-y-1.5">
                                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
                                 {user?.role === 'SUPER_ADMIN' ? (
@@ -952,8 +1045,8 @@ export default function UserManagementPage() {
                         </div>
                         <div className="space-y-4">
                             <div className="bg-primary/10 dark:bg-primary/20 p-4 rounded-xl text-sm text-primary dark:text-primary border border-primary dark:border-primary">
-                                <p className="font-semibold mb-1">CSV Format:</p>
-                                <code className="bg-white dark:bg-gray-800 px-2 py-1 rounded border block mt-1 text-xs">name,email,password,role,phone</code>
+                                <p className="font-semibold mb-1">CSV Format (last column optional):</p>
+                                <code className="bg-white dark:bg-gray-800 px-2 py-1 rounded border block mt-1 text-xs">name,email,password,role,phone,can_be_assigned_to_shoots</code>
                             </div>
                             <input type="file" accept=".csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary cursor-pointer" />
                             <div className="space-y-1.5">

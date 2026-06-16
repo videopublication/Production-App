@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { User, Equipment, Transaction, Log, Shoot, Assignment, Department, Leave } from '@/types';
+import { User, Equipment, Transaction, Log, Shoot, Assignment, Department, Leave, PlannerDraftAssignment, AssignmentSegment } from '@/types';
 import { decodeTransactionNotes, encodeTransactionNotes } from './transaction-manual-items';
 
 class StorageService {
@@ -64,7 +64,8 @@ class StorageService {
             fcmToken: u.fcm_token,
             departmentId: u.department_id,
             isPrimaryLeaveApprover: u.is_primary_leave_approver,
-            canManageExpenses: u.can_manage_expenses
+            canManageExpenses: u.can_manage_expenses,
+            canBeAssignedToShoots: u.can_be_assigned_to_shoots
         })) as User[];
     }
 
@@ -73,6 +74,22 @@ class StorageService {
         if (updates.fcmToken !== undefined) {
             dbUpdates.fcm_token = updates.fcmToken;
             delete dbUpdates.fcmToken;
+        }
+        if (updates.departmentId !== undefined) {
+            dbUpdates.department_id = updates.departmentId;
+            delete dbUpdates.departmentId;
+        }
+        if (updates.isPrimaryLeaveApprover !== undefined) {
+            dbUpdates.is_primary_leave_approver = updates.isPrimaryLeaveApprover;
+            delete dbUpdates.isPrimaryLeaveApprover;
+        }
+        if (updates.canManageExpenses !== undefined) {
+            dbUpdates.can_manage_expenses = updates.canManageExpenses;
+            delete dbUpdates.canManageExpenses;
+        }
+        if (updates.canBeAssignedToShoots !== undefined) {
+            dbUpdates.can_be_assigned_to_shoots = updates.canBeAssignedToShoots;
+            delete dbUpdates.canBeAssignedToShoots;
         }
         // Remove known non-db fields if any, though User interface is clean
 
@@ -671,6 +688,7 @@ class StorageService {
             requiredRoles: s.required_roles,
             createdBy: s.created_by,
             googleEventId: s.google_event_id, // Map DB column to type
+            ...(s.cancellation_reason ? { cancellationReason: s.cancellation_reason } : {}),
             shootNumber: s.shoot_number,
             jiraTicketId: s.jira_ticket_id,
             departmentId: s.department_id,
@@ -679,7 +697,7 @@ class StorageService {
     }
 
     async saveShoot(shoot: Shoot): Promise<void> {
-        const dbShoot = {
+        const dbShoot: Record<string, unknown> = {
             id: shoot.id,
             title: shoot.title,
             description: shoot.description,
@@ -696,6 +714,10 @@ class StorageService {
             department_id: shoot.departmentId,
             expenses: shoot.expenses || []
         };
+
+        if (shoot.cancellationReason !== undefined) {
+            dbShoot.cancellation_reason = shoot.cancellationReason || null;
+        }
 
         const { error } = await supabase
             .from('shoots')
@@ -738,6 +760,10 @@ class StorageService {
         if (updates.googleEventId !== undefined) {
             dbUpdates.google_event_id = updates.googleEventId;
             delete dbUpdates.googleEventId;
+        }
+        if (updates.cancellationReason !== undefined) {
+            dbUpdates.cancellation_reason = updates.cancellationReason || null;
+            delete dbUpdates.cancellationReason;
         }
         if (updates.jiraTicketId !== undefined) {
             dbUpdates.jira_ticket_id = updates.jiraTicketId;
@@ -783,12 +809,20 @@ class StorageService {
             return [];
         }
 
-        return data.map((a: any) => ({
+        return data.map((a: {
+            id: string;
+            shoot_id: string;
+            user_id: string;
+            role: string;
+            status: Assignment['status'];
+            department_id?: string;
+        }) => ({
             id: a.id,
             shootId: a.shoot_id,
             userId: a.user_id,
             role: a.role,
-            status: a.status
+            status: a.status,
+            departmentId: a.department_id
         })) as Assignment[];
     }
 
@@ -816,6 +850,215 @@ class StorageService {
             .eq('id', id);
 
         if (error) console.error('Error deleting assignment:', error);
+    }
+
+    // Planner draft assignments
+    async getPlannerDraftAssignments(departmentId?: string | null): Promise<PlannerDraftAssignment[]> {
+        let query = supabase
+            .from('planner_draft_assignments')
+            .select('*')
+            .order('created_at', { ascending: true });
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            if (error.code === '42P01') {
+                console.warn('Planner draft assignments table is missing. Run migration_planner_draft_assignments.sql.');
+                return [];
+            }
+            console.error('Error fetching planner draft assignments:', error);
+            return [];
+        }
+
+        return data.map((a: {
+            id: string;
+            shoot_id: string;
+            user_id: string;
+            role: string;
+            created_by?: string;
+            created_at: string;
+            department_id?: string;
+        }) => ({
+            id: a.id,
+            shootId: a.shoot_id,
+            userId: a.user_id,
+            role: a.role,
+            createdBy: a.created_by,
+            createdAt: a.created_at,
+            departmentId: a.department_id
+        })) as PlannerDraftAssignment[];
+    }
+
+    async savePlannerDraftAssignments(assignments: PlannerDraftAssignment[]): Promise<void> {
+        const dbAssignments = assignments.map(a => ({
+            id: a.id,
+            shoot_id: a.shootId,
+            user_id: a.userId,
+            role: a.role,
+            created_by: a.createdBy,
+            created_at: a.createdAt,
+            department_id: a.departmentId
+        }));
+
+        const { error } = await supabase
+            .from('planner_draft_assignments')
+            .upsert(dbAssignments, { onConflict: 'shoot_id,user_id' });
+
+        if (error) {
+            console.error('Error saving planner draft assignments:', error);
+            throw error;
+        }
+    }
+
+    async deletePlannerDraftAssignment(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('planner_draft_assignments')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error deleting planner draft assignment:', error);
+            throw error;
+        }
+    }
+
+    async deletePlannerDraftAssignments(ids: string[]): Promise<void> {
+        if (ids.length === 0) return;
+
+        const { error } = await supabase
+            .from('planner_draft_assignments')
+            .delete()
+            .in('id', ids);
+
+        if (error) {
+            console.error('Error deleting planner draft assignments:', error);
+            throw error;
+        }
+    }
+
+    // Assignment schedule segments
+    async getAssignmentSegments(departmentId?: string | null): Promise<AssignmentSegment[]> {
+        let query = supabase
+            .from('assignment_segments')
+            .select('*')
+            .order('start_time', { ascending: true });
+
+        if (departmentId) {
+            query = query.eq('department_id', departmentId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            if (error.code === '42P01') {
+                console.warn('Assignment segments table is missing. Run migration_assignment_segments.sql.');
+                return [];
+            }
+            console.error('Error fetching assignment segments:', error);
+            return [];
+        }
+
+        return data.map((segment: {
+            id: string;
+            assignment_id?: string | null;
+            draft_assignment_id?: string | null;
+            shoot_id: string;
+            user_id: string;
+            start_time: string;
+            end_time: string;
+            role?: string;
+            note?: string;
+            created_by?: string;
+            created_at?: string;
+            department_id?: string;
+        }) => ({
+            id: segment.id,
+            assignmentId: segment.assignment_id,
+            draftAssignmentId: segment.draft_assignment_id,
+            shootId: segment.shoot_id,
+            userId: segment.user_id,
+            startTime: segment.start_time,
+            endTime: segment.end_time,
+            role: segment.role,
+            note: segment.note,
+            createdBy: segment.created_by,
+            createdAt: segment.created_at,
+            departmentId: segment.department_id,
+        })) as AssignmentSegment[];
+    }
+
+    async saveAssignmentSegments(segments: AssignmentSegment[]): Promise<void> {
+        if (segments.length === 0) return;
+
+        const dbSegments = segments.map(segment => ({
+            id: segment.id,
+            assignment_id: segment.assignmentId || null,
+            draft_assignment_id: segment.draftAssignmentId || null,
+            shoot_id: segment.shootId,
+            user_id: segment.userId,
+            start_time: segment.startTime,
+            end_time: segment.endTime,
+            role: segment.role,
+            note: segment.note,
+            created_by: segment.createdBy,
+            created_at: segment.createdAt,
+            department_id: segment.departmentId
+        }));
+
+        const { error } = await supabase
+            .from('assignment_segments')
+            .upsert(dbSegments);
+
+        if (error) {
+            console.error('Error saving assignment segments:', error);
+            throw error;
+        }
+    }
+
+    async deleteAssignmentSegmentsByAssignmentIds(assignmentIds: string[]): Promise<void> {
+        if (assignmentIds.length === 0) return;
+
+        const { error } = await supabase
+            .from('assignment_segments')
+            .delete()
+            .in('assignment_id', assignmentIds);
+
+        if (error) {
+            console.error('Error deleting assignment segments:', error);
+            throw error;
+        }
+    }
+
+    async deleteAssignmentSegmentsByDraftAssignmentIds(draftAssignmentIds: string[]): Promise<void> {
+        if (draftAssignmentIds.length === 0) return;
+
+        const { error } = await supabase
+            .from('assignment_segments')
+            .delete()
+            .in('draft_assignment_id', draftAssignmentIds);
+
+        if (error) {
+            console.error('Error deleting draft assignment segments:', error);
+            throw error;
+        }
+    }
+
+    async deleteAssignmentSegmentsByIds(segmentIds: string[]): Promise<void> {
+        if (segmentIds.length === 0) return;
+
+        const { error } = await supabase
+            .from('assignment_segments')
+            .delete()
+            .in('id', segmentIds);
+
+        if (error) {
+            console.error('Error deleting assignment segments by id:', error);
+            throw error;
+        }
     }
 
     // Sessions tracking

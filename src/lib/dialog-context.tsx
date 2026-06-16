@@ -1,7 +1,6 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { Button } from '@/components/Button';
 
 interface DialogOptions {
     title: string;
@@ -47,12 +46,12 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                         className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
                         onClick={handleCancel}
                     />
-                    <div className="relative w-full max-w-[340px] bg-white/95 backdrop-blur-2xl rounded-[24px] overflow-hidden shadow-2xl animate-in zoom-in-95 fade-in duration-300">
+                    <div className="relative w-full max-w-[420px] bg-white/95 backdrop-blur-2xl rounded-[24px] overflow-hidden shadow-2xl animate-in zoom-in-95 fade-in duration-300">
                         <div className="px-6 pt-7 pb-5 text-center">
                             <h3 className="text-[20px] font-bold text-[#1d1d1f] mb-2 leading-tight">
                                 {dialog.title}
                             </h3>
-                            <p className="text-[15px] text-[#8e8e93] leading-relaxed px-1">
+                            <p className={`max-h-[50vh] overflow-y-auto text-[15px] text-[#8e8e93] leading-relaxed px-1 ${dialog.message.includes('\n') ? 'whitespace-pre-line text-left' : ''}`}>
                                 {dialog.message}
                             </p>
                         </div>

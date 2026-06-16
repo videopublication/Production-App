@@ -66,7 +66,8 @@ export async function GET(request: Request) {
             avatarUrl: profile.avatar_url,
             departmentId: profile.department_id,
             canManageExpenses: profile.can_manage_expenses,
-            isPrimaryLeaveApprover: profile.is_primary_leave_approver
+            isPrimaryLeaveApprover: profile.is_primary_leave_approver,
+            canBeAssignedToShoots: profile.can_be_assigned_to_shoots
         };
 
         return NextResponse.json(result);

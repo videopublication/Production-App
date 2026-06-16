@@ -6,7 +6,7 @@ import { ShootForm } from '@/components/ShootForm';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { useUsers } from '@/hooks/useUsers';
-import { Shoot, Assignment } from '@/types';
+import { Shoot, Assignment, AssignmentSegment } from '@/types';
 import { generateUUID } from '@/lib/id';
 import { useDepartment } from '@/lib/department-context';
 import { sendPushNotification } from '@/lib/push-notifications';
@@ -31,6 +31,8 @@ export default function NewShootPage() {
 
     // Get date from query params (if any) - from Calendar
     const dateParam = searchParams.get('date');
+    const returnTo = searchParams.get('returnTo');
+    const safeReturnTo = returnTo?.startsWith('/') ? returnTo : null;
     const initialData: Partial<Shoot> = {};
 
     if (dateParam) {
@@ -57,18 +59,66 @@ export default function NewShootPage() {
 
             await storage.saveShoot(newShoot);
 
-            // Create assignment records
-            const assignments: Assignment[] = crewIds.map(userId => ({
-                id: generateUUID(),
-                shootId: shootId,
-                userId: userId,
-                role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
-                status: 'PENDING',
-                departmentId: activeDepartmentId || undefined
-            }));
+            if (newShoot.status === 'DRAFT') {
+                const draftAssignments = crewIds.map(userId => ({
+                    id: generateUUID(),
+                    shootId,
+                    userId,
+                    role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
+                    createdBy: user?.id,
+                    createdAt: new Date().toISOString(),
+                    departmentId: activeDepartmentId || undefined
+                }));
+
+                if (draftAssignments.length > 0) {
+                    await storage.savePlannerDraftAssignments(draftAssignments);
+                    const draftSegments: AssignmentSegment[] = draftAssignments
+                        .filter(() => !!newShoot.startTime && !!newShoot.endTime)
+                        .map(assignment => ({
+                            id: generateUUID(),
+                            draftAssignmentId: assignment.id,
+                            shootId,
+                            userId: assignment.userId,
+                            startTime: newShoot.startTime,
+                            endTime: newShoot.endTime!,
+                            role: assignment.role,
+                            createdBy: user?.id,
+                            createdAt: new Date().toISOString(),
+                            departmentId: activeDepartmentId || undefined
+                        }));
+                    await storage.saveAssignmentSegments(draftSegments);
+                }
+            }
+
+            // Create live assignment records only for confirmed shoots
+            const assignments: Assignment[] = newShoot.status === 'DRAFT'
+                ? []
+                : crewIds.map(userId => ({
+                    id: generateUUID(),
+                    shootId: shootId,
+                    userId: userId,
+                    role: userId === inchargeId ? 'Incharge' : (users.find(u => u.id === userId)?.role || 'Crew'),
+                    status: 'PENDING',
+                    departmentId: activeDepartmentId || undefined
+                }));
 
             if (assignments.length > 0) {
                 await storage.saveAssignments(assignments);
+                const assignmentSegments: AssignmentSegment[] = assignments
+                    .filter(() => !!newShoot.startTime && !!newShoot.endTime)
+                    .map(assignment => ({
+                        id: generateUUID(),
+                        assignmentId: assignment.id,
+                        shootId,
+                        userId: assignment.userId,
+                        startTime: newShoot.startTime,
+                        endTime: newShoot.endTime!,
+                        role: assignment.role,
+                        createdBy: user?.id,
+                        createdAt: new Date().toISOString(),
+                        departmentId: activeDepartmentId || undefined
+                    }));
+                await storage.saveAssignmentSegments(assignmentSegments);
 
                 // Send notifications to assigned crew
                 await Promise.all(assignments.map(async (assignment) => {
@@ -104,7 +154,7 @@ export default function NewShootPage() {
                         entityId: shootId,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: `Created ${labels.workLower} "${newShoot.title}"`,
+                        details: `Created ${newShoot.status === 'DRAFT' ? 'draft ' : ''}${labels.workLower} "${newShoot.title}"`,
                         departmentId: activeDepartmentId || undefined
                     });
                 }
@@ -113,7 +163,9 @@ export default function NewShootPage() {
             }
 
             // Redirect to the new shoot details page
-            router.push(`/shoots/${shootId}`);
+            router.push(safeReturnTo
+                ? `/shoots/${shootId}?returnTo=${encodeURIComponent(safeReturnTo)}`
+                : `/shoots/${shootId}`);
         } catch (error) {
             console.error(`Failed to create ${labels.workLower}:`, error);
             isSubmittingRef.current = false;

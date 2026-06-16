@@ -87,6 +87,18 @@ function InventoryPageContent() {
         return { staleAssignments, ghostCheckouts };
     }, [items, transactions]);
 
+    const formatCleanupItem = (item: Equipment) => {
+        const assignedTo = item.assignedTo ? (users[item.assignedTo] || item.assignedTo) : 'None';
+        const serial = item.serialNumber ? ` | S/N: ${item.serialNumber}` : '';
+        return `- ${item.name} (${item.barcode}${serial})\n  Status: ${item.status.replace('_', ' ')} | Assigned: ${assignedTo} | Location: ${item.location || 'N/A'}`;
+    };
+
+    const formatCleanupSection = (title: string, issueItems: Equipment[]) => {
+        const previewItems = issueItems.slice(0, 5).map(formatCleanupItem).join('\n');
+        const remainingCount = issueItems.length - 5;
+        return `${title} (${issueItems.length}):\n${previewItems}${remainingCount > 0 ? `\n...and ${remainingCount} more` : ''}`;
+    };
+
     const cleanupAssignments = async (itemsToCleanup: Equipment[]) => {
         await Promise.all(itemsToCleanup.map(item =>
             updateEquipment({ id: item.id, updates: { assignedTo: null as unknown as string } })
@@ -118,9 +130,21 @@ function InventoryPageContent() {
             return;
         }
 
+        const messageParts = [`Found ${totalIssues} issue${totalIssues === 1 ? '' : 's'}:`];
+
+        if (staleAssignments.length) {
+            messageParts.push(formatCleanupSection('Available items with stale assignees', staleAssignments));
+        }
+
+        if (ghostCheckouts.length) {
+            messageParts.push(formatCleanupSection('Checked-out items without an active transaction', ghostCheckouts));
+        }
+
+        messageParts.push('Fix All will clear stale assignees and set checked-out orphan items back to Available.');
+
         const isConfirmed = await confirm({
             title: 'Fix Data Inconsistencies?',
-            message: `Found ${totalIssues} issues:\n` +
+            message: messageParts.join('\n\n') || `Found ${totalIssues} issues:\n` +
                 (staleAssignments.length ? `• ${staleAssignments.length} available items with stale assignees\n` : '') +
                 (ghostCheckouts.length ? `• ${ghostCheckouts.length} items marked 'Checked Out' but not in any active transaction` : ''),
             confirmLabel: 'Fix All',
@@ -341,14 +365,18 @@ function InventoryPageContent() {
 
             if (!jsPDF) throw new Error('jsPDF not loaded');
 
-            const qrUrl = await QRCode.toDataURL(item.barcode, { width: 400, margin: 2 });
+            const qrUrl = await QRCode.toDataURL(item.barcode, {
+                width: 512,
+                margin: 4,
+                errorCorrectionLevel: 'H'
+            });
 
             const pdf = new jsPDF({ orientation: 'landscape', format: [100, 60], unit: 'mm' });
 
             pdf.setFontSize(14);
             pdf.text(item.name.substring(0, 30), 5, 8);
 
-            pdf.addImage(qrUrl, 'PNG', 25, 12, 50, 40);
+            pdf.addImage(qrUrl, 'PNG', 29, 12, 42, 42);
 
             pdf.setFontSize(10);
             pdf.text(item.barcode, 50, 56, { align: 'center' });
@@ -433,7 +461,7 @@ function InventoryPageContent() {
             const isSmall = size === 'small';
             const cols = isSmall ? 7 : 4;
             const rows = isSmall ? 9 : 5;
-            const qrSize = isSmall ? 16 : 32; // ~50% reduction
+            const qrSize = isSmall ? 20 : 36;
             const fontSize = isSmall ? 6 : 9;
             const serialFontSize = isSmall ? 7 : 10;
 
@@ -496,7 +524,11 @@ function InventoryPageContent() {
                 // 2. Draw QR Code
                 const qrX = cellX + marginLeft + serialWidth;
                 const qrY = startY;
-                const qrUrl = await QRCode.toDataURL(item.barcode, { width: 300, margin: 1 });
+                const qrUrl = await QRCode.toDataURL(item.barcode, {
+                    width: 512,
+                    margin: 4,
+                    errorCorrectionLevel: 'H'
+                });
                 pdf.addImage(qrUrl, 'PNG', qrX, qrY, qrSize, qrSize);
 
                 // 3. Draw Barcode Text (Below QR)
@@ -652,7 +684,7 @@ function InventoryPageContent() {
                             </button>
                         </div>
 
-                        <div className="md:hidden h-[360px] max-h-[52vh] min-h-[280px] overflow-hidden rounded-[24px] bg-black shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
+                        <div className="md:hidden h-[min(72vh,560px)] min-h-[420px] overflow-hidden rounded-[24px] bg-black shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
                             <MobileScanner
                                 onScan={handleInventoryScan}
                                 onError={(error) => showToast(error, 'error')}

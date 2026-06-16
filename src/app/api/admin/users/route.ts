@@ -89,7 +89,7 @@ export async function GET() {
         const supabaseAdmin = getSupabaseAdmin();
         const { data: users, error } = await supabaseAdmin
             .from('users')
-            .select('id, name, email, role, status, department_id, is_primary_leave_approver, can_manage_expenses, department:departments(name)')
+            .select('id, name, email, role, status, department_id, is_primary_leave_approver, can_manage_expenses, can_be_assigned_to_shoots, department:departments(name)')
             .order('name', { ascending: true });
 
         if (error) {
@@ -110,7 +110,8 @@ const createUserSchema = z.object({
     password: z.string().min(6),
     name: z.string().min(1),
     role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'FINANCE_MANAGER', 'CREW']),
-    departmentId: z.string().uuid().nullable().optional()
+    departmentId: z.string().uuid().nullable().optional(),
+    canBeAssignedToShoots: z.boolean().optional()
 });
 
 export async function POST(request: Request) {
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { email, password, name, role, departmentId } = result.data;
+        const { email, password, name, role, departmentId, canBeAssignedToShoots } = result.data;
         const requester = authCheck.profile;
         if (!requester) {
             return NextResponse.json({ error: 'Admin profile not found' }, { status: 403 });
@@ -167,7 +168,8 @@ export async function POST(request: Request) {
                         name,
                         role,
                         status: 'ACTIVE', // Admin created users are active by default
-                        department_id: assignedDepartmentId
+                        department_id: assignedDepartmentId,
+                        can_be_assigned_to_shoots: canBeAssignedToShoots ?? role === 'CREW'
                     }
                 ]);
 
@@ -191,7 +193,8 @@ const updateUserSchema = z.object({
     role: z.string().optional(),
     departmentId: z.string().optional().nullable(),
     isPrimaryLeaveApprover: z.boolean().optional(),
-    canManageExpenses: z.boolean().optional()
+    canManageExpenses: z.boolean().optional(),
+    canBeAssignedToShoots: z.boolean().optional()
 });
 
 export async function PUT(request: Request) {
@@ -213,7 +216,7 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { id, password, status, role, departmentId, isPrimaryLeaveApprover, canManageExpenses } = result.data;
+        const { id, password, status, role, departmentId, isPrimaryLeaveApprover, canManageExpenses, canBeAssignedToShoots } = result.data;
 
         if (password) {
             const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(id, {
@@ -228,12 +231,14 @@ export async function PUT(request: Request) {
             department_id?: string | null;
             is_primary_leave_approver?: boolean;
             can_manage_expenses?: boolean;
+            can_be_assigned_to_shoots?: boolean;
         } = {};
         if (status) updates.status = status;
         if (role) updates.role = role;
         if (departmentId !== undefined) updates.department_id = departmentId;
         if (isPrimaryLeaveApprover !== undefined) updates.is_primary_leave_approver = isPrimaryLeaveApprover;
         if (canManageExpenses !== undefined) updates.can_manage_expenses = canManageExpenses;
+        if (canBeAssignedToShoots !== undefined) updates.can_be_assigned_to_shoots = canBeAssignedToShoots;
 
         if (Object.keys(updates).length > 0) {
             const { error: updateError } = await supabaseAdmin

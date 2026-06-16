@@ -19,7 +19,7 @@ import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
 
 type ViewMode = 'card' | 'list';
-type StatusFilter = 'ALL' | 'CONFIRMED' | 'CANCELLED';
+type StatusFilter = 'ALL' | 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
 type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST' | 'CUSTOM';
 type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber' | 'expenses';
 
@@ -271,6 +271,8 @@ export default function ShootList() {
 
     const getStatusStyle = (status: string) => {
         switch (status) {
+            case 'DRAFT':
+                return { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' };
             case 'CONFIRMED':
                 return { bg: '#dcfce7', text: '#166534', border: '#86efac' };
             case 'CANCELLED':
@@ -475,7 +477,7 @@ export default function ShootList() {
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-xs sm:text-sm font-medium shrink-0 text-gray-500 dark:text-gray-400">Status:</span>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {(['ALL', 'CONFIRMED', 'CANCELLED'] as StatusFilter[]).map(status => (
+                                    {(['ALL', 'DRAFT', 'CONFIRMED', 'CANCELLED'] as StatusFilter[]).map(status => (
                                         <button
                                             key={status}
                                             onClick={() => setStatusFilter(status)}

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSidebar } from '@/lib/sidebar-context';
 import { useDepartment } from '@/lib/department-context';
@@ -21,6 +21,9 @@ export const Header = () => {
     const labels = getDepartmentLabels(department);
     const router = useRouter();
     const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const returnTo = searchParams.get('returnTo');
+    const safeReturnTo = returnTo?.startsWith('/') ? returnTo : null;
 
     // Notification Hook
     const { notifications, unreadCount, markAsRead } = useNotifications();
@@ -52,8 +55,10 @@ export const Header = () => {
                 {pathname?.startsWith('/shoots/') && pathname !== '/shoots' ? (
                     (() => {
                         const isEditPage = pathname.endsWith('/edit');
-                        const backLink = isEditPage ? pathname.replace('/edit', '') : '/shoots';
-                        const backText = isEditPage ? `Back to ${labels.workSingular}` : `Back to ${labels.workPlural}`;
+                        const backLink = safeReturnTo || (isEditPage ? pathname.replace('/edit', '') : '/shoots');
+                        const backText = safeReturnTo?.startsWith('/calendar')
+                            ? 'Back to Planner'
+                            : isEditPage ? `Back to ${labels.workSingular}` : `Back to ${labels.workPlural}`;
 
                         return (
                             <Link

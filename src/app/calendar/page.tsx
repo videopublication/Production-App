@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
-import { Shoot, Assignment, User } from '@/types';
+import { Shoot, Assignment, User, PlannerDraftAssignment, AssignmentSegment } from '@/types';
 import { getRoleLabel } from '@/lib/roles';
 import {
     ChevronLeft,
@@ -48,6 +48,7 @@ import {
 import { Button } from '@/components/Button';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { AdminLeaveModal } from '@/components/AdminLeaveModal';
+import { ShootPlanner } from '@/components/ShootPlanner';
 import { useToast } from '@/lib/toast-context';
 
 // Helper to check if two intervals overlap
@@ -75,8 +76,48 @@ export default function CalendarPage() {
     const { leaves = [], isLoading: leavesLoading, refetch: refetchLeaves, addLeave } = useLeaves();
     const { showToast } = useToast();
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? null : user?.departmentId;
+    const [draftAssignments, setDraftAssignments] = useState<PlannerDraftAssignment[]>([]);
+    const [assignmentSegments, setAssignmentSegments] = useState<AssignmentSegment[]>([]);
+    const [draftAssignmentsLoading, setDraftAssignmentsLoading] = useState(false);
+    const [assignmentSegmentsLoading, setAssignmentSegmentsLoading] = useState(false);
 
-    const loading = shootsLoading || assignmentsLoading || usersLoading || leavesLoading;
+    const loading = shootsLoading || assignmentsLoading || usersLoading || leavesLoading || draftAssignmentsLoading || assignmentSegmentsLoading;
+
+    const refetchDraftAssignments = async () => {
+        if (!user || !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            setDraftAssignments([]);
+            return;
+        }
+
+        setDraftAssignmentsLoading(true);
+        try {
+            const drafts = await storage.getPlannerDraftAssignments(activeDepartmentId);
+            setDraftAssignments(drafts);
+        } catch (error) {
+            console.error('Failed to load planner drafts:', error);
+            showToast('Failed to load planner drafts', 'error');
+        } finally {
+            setDraftAssignmentsLoading(false);
+        }
+    };
+
+    const refetchAssignmentSegments = async () => {
+        if (!user || !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            setAssignmentSegments([]);
+            return;
+        }
+
+        setAssignmentSegmentsLoading(true);
+        try {
+            const segments = await storage.getAssignmentSegments(activeDepartmentId);
+            setAssignmentSegments(segments);
+        } catch (error) {
+            console.error('Failed to load assignment segments:', error);
+            showToast('Failed to load assignment schedule', 'error');
+        } finally {
+            setAssignmentSegmentsLoading(false);
+        }
+    };
 
     // Refresh handler
     const handleRefresh = async () => {
@@ -84,12 +125,18 @@ export default function CalendarPage() {
             refetchShoots(),
             refetchAssignments(),
             refetchUsers(),
-            refetchLeaves()
+            refetchLeaves(),
+            refetchDraftAssignments(),
+            refetchAssignmentSegments()
         ]);
     };
 
     // Pre-select crew filter from ?user= URL param (deep-linked from leaves page)
     const preselectedUserId = searchParams.get('user');
+
+    const initialViewMode = searchParams.get('view') === 'planner' ? 'planner' : 'calendar';
+    const initialPlannerWeek = searchParams.get('week');
+    const initialPlannerRange = searchParams.get('range');
 
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
@@ -98,6 +145,7 @@ export default function CalendarPage() {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+    const [viewMode, setViewMode] = useState<'calendar' | 'planner'>(initialViewMode);
     const filterRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -140,6 +188,11 @@ export default function CalendarPage() {
             }, 50);
         }
     }, [isFilterOpen]);
+
+    useEffect(() => {
+        refetchDraftAssignments();
+        refetchAssignmentSegments();
+    }, [activeDepartmentId, user?.id, user?.role]);
 
 
     // Get leaves based on crew filter or user role
@@ -252,6 +305,9 @@ export default function CalendarPage() {
 
     // Get status-specific styling (for cancelled shoots)
     const getStatusStyle = (status: string, shootId: string) => {
+        if (status === 'DRAFT') {
+            return { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' };
+        }
         if (status === 'CANCELLED') {
             return { bg: '#ef4444', text: '#ffffff', border: '#b91c1c' };
         }
@@ -268,6 +324,8 @@ export default function CalendarPage() {
         setCurrentMonth(new Date());
         setSelectedDate(new Date());
     };
+
+    const canUsePlanner = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
     if (loading) {
         return (
@@ -289,16 +347,46 @@ export default function CalendarPage() {
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3 text-gray-900 dark:text-white">
                             <CalendarIcon size={28} className="text-primary dark:text-primary" />
-                            Calendar
+                            {viewMode === 'planner' && canUsePlanner ? 'Planner' : 'Calendar'}
                         </h1>
                         <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">
-                            {shootsThisMonth} {shootsThisMonth === 1 ? labels.workLower : labels.workPluralLower} scheduled in {format(currentMonth, 'MMMM yyyy')}
+                            {viewMode === 'planner' && canUsePlanner
+                                ? `Plan upcoming ${labels.workPluralLower} across ${labels.teamPluralLower}`
+                                : `${shootsThisMonth} ${shootsThisMonth === 1 ? labels.workLower : labels.workPluralLower} scheduled in ${format(currentMonth, 'MMMM yyyy')}`}
                         </p>
                     </div>
 
-                    {/* Filter */}
-                    {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
-                        <div className="relative z-20" ref={filterRef}>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                        {canUsePlanner && (
+                            <div className="inline-flex h-10 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] p-1 shadow-sm">
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('calendar')}
+                                    className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors ${viewMode === 'calendar'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                        }`}
+                                >
+                                    <CalendarIcon size={15} />
+                                    Calendar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('planner')}
+                                    className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors ${viewMode === 'planner'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                        }`}
+                                >
+                                    <List size={15} />
+                                    Planner
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Filter */}
+                        {viewMode !== 'planner' && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                            <div className="relative z-20" ref={filterRef}>
                             <button
                                 onClick={() => {
                                     setIsFilterOpen(!isFilterOpen);
@@ -373,9 +461,28 @@ export default function CalendarPage() {
                                 </div>
                             </div>
                         </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
+                {viewMode === 'planner' && canUsePlanner ? (
+                    <ShootPlanner
+                        shoots={shoots}
+                        assignments={assignments}
+                        draftAssignments={draftAssignments}
+                        assignmentSegments={assignmentSegments}
+                        users={users}
+                        leaves={leaves}
+                        labels={labels}
+                        currentUser={user}
+                        activeDepartmentId={activeDepartmentId}
+                        crewFilter={crewFilter}
+                        onCrewFilterChange={setCrewFilter}
+                        initialWeek={initialPlannerWeek}
+                        initialRange={initialPlannerRange}
+                        onRefresh={handleRefresh}
+                    />
+                ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-4 lg:grid-cols-3 gap-6">
                     {/* Calendar */}
                     <div className="lg:col-span-2 xl:col-span-3">
@@ -577,7 +684,7 @@ export default function CalendarPage() {
                                                                     .filter(e => (dayIndex + 1) >= e.colStart && (dayIndex + 1) < (e.colStart + e.colSpan))
                                                                     .slice(0, 3)
                                                                     .map((e, i) => (
-                                                                        <div key={i} className={`w-1.5 h-1.5 rounded-full ${e.type === 'LEAVE' ? 'bg-red-800' : e.shoot.status === 'CANCELLED' ? 'bg-red-400' : 'bg-primary'}`} />
+                                                                        <div key={i} className={`w-1.5 h-1.5 rounded-full ${e.type === 'LEAVE' ? 'bg-red-800' : e.shoot.status === 'CANCELLED' ? 'bg-red-400' : e.shoot.status === 'DRAFT' ? 'bg-amber-400' : 'bg-primary'}`} />
                                                                     ))
                                                                 }
                                                             </div>
@@ -914,6 +1021,17 @@ export default function CalendarPage() {
                                                                 </div>
                                                             )}
 
+                                                            {shoot.status === 'CANCELLED' && shoot.cancellationReason && (
+                                                                <div className="mb-4 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-3">
+                                                                    <h5 className="text-xs font-bold uppercase tracking-wider mb-1 text-red-700 dark:text-red-300">
+                                                                        Cancellation Reason
+                                                                    </h5>
+                                                                    <p className="text-xs text-red-900 dark:text-red-100 whitespace-pre-wrap">
+                                                                        {shoot.cancellationReason}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+
                                                             {/* Team List */}
                                                             <h5 className="text-xs font-bold uppercase tracking-wider mb-3 text-gray-700 dark:text-gray-300">
                                                                 Assigned {labels.teamPlural}
@@ -972,6 +1090,7 @@ export default function CalendarPage() {
                         </div>
                     </div>
                 </div>
+                )}
             </div>
         </PullToRefresh>
             <AdminLeaveModal

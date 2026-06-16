@@ -47,6 +47,53 @@ type ReturnGroup = {
     manualItems: ManualReturnRow[];
 };
 
+type ReturnConditionLogInput = {
+    condition: Condition;
+    issueCondition: Condition;
+    issueType: EquipmentIssueType;
+    issueSeverity: EquipmentIssueSeverity;
+    issueNote?: string;
+};
+
+const formatEquipmentReturnLabel = (item: Equipment | undefined, fallbackId: string) => {
+    if (!item) return fallbackId;
+
+    const serialNumber = item.serialNumber || item.metadata?.serialNumber;
+    const identifiers = [
+        item.barcode ? `Barcode: ${item.barcode}` : null,
+        serialNumber ? `S/N: ${serialNumber}` : null,
+    ].filter(Boolean);
+
+    return identifiers.length > 0 ? `${item.name} (${identifiers.join(' | ')})` : item.name;
+};
+
+const formatManualReturnLabel = (row: ManualReturnRow) => {
+    const project = row.transaction.project?.trim();
+    const itemLabel = `${row.item.name} x${row.item.quantity}`;
+
+    return project ? `${itemLabel} (${project})` : itemLabel;
+};
+
+const formatReturnConditionForLog = ({
+    condition,
+    issueCondition,
+    issueType,
+    issueSeverity,
+    issueNote,
+}: ReturnConditionLogInput) => {
+    if (!isIssueCondition(condition)) return `Condition: ${CONDITION_LABELS.OK}`;
+
+    const issueSummary = getIssueSummary({
+        condition: issueCondition,
+        issueType,
+        severity: issueSeverity,
+        note: issueNote || '',
+        source: 'return',
+    });
+
+    return `Issue: ${issueSummary}${issueNote ? `, Note: ${issueNote}` : ''}`;
+};
+
 const getDateValue = (dateString?: string) => {
     if (!dateString) return 0;
     const time = new Date(dateString).getTime();
@@ -426,6 +473,13 @@ export default function ReturnsPage() {
                 const issueSeverity = issueSeverities[id] || conditionToIssueSeverity(condition);
                 const issueNote = issueNotes[id]?.trim();
                 const issueCondition = isIssueCondition(condition) ? issueToCondition(issueType, issueSeverity) : 'OK';
+                const conditionDetail = formatReturnConditionForLog({
+                    condition,
+                    issueCondition,
+                    issueType,
+                    issueSeverity,
+                    issueNote,
+                });
 
                 await updateEquipment({
                     id,
@@ -454,7 +508,7 @@ export default function ReturnsPage() {
                         entityId: id,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: `Submitted for return (${isIssueCondition(condition) ? `Issue: ${getIssueSummary({ condition: issueCondition, issueType, severity: issueSeverity, note: issueNote || '', source: 'return' })}${issueNote ? `, Note: ${issueNote}` : ''}` : `Condition: ${CONDITION_LABELS.OK}`})`,
+                        details: `Submitted ${formatEquipmentReturnLabel(item, id)} for return (${conditionDetail})`,
                         departmentId: activeDepartmentId || undefined
                     });
                 }
@@ -496,13 +550,31 @@ export default function ReturnsPage() {
                 await storage.updateTransaction(transactionId, { manualItems: updatedManualItems });
 
                 if (user) {
+                    const itemDetails = rows.map(row => {
+                        const key = row.key;
+                        const condition = conditions[key] || 'OK';
+                        const issueType = issueTypes[key] || conditionToIssueType(condition);
+                        const issueSeverity = issueSeverities[key] || conditionToIssueSeverity(condition);
+                        const issueNote = issueNotes[key]?.trim();
+                        const issueCondition = isIssueCondition(condition) ? issueToCondition(issueType, issueSeverity) : 'OK';
+                        const conditionDetail = formatReturnConditionForLog({
+                            condition,
+                            issueCondition,
+                            issueType,
+                            issueSeverity,
+                            issueNote,
+                        });
+
+                        return `${formatManualReturnLabel(row)} (${conditionDetail})`;
+                    }).join('; ');
+
                     await storage.addLog({
                         id: crypto.randomUUID(),
                         action: 'RETURN',
                         entityId: transactionId,
                         userId: user.id,
                         timestamp: new Date().toISOString(),
-                        details: `Submitted ${rows.length} manual item${rows.length === 1 ? '' : 's'} for return verification`,
+                        details: `Submitted ${rows.length} manual item${rows.length === 1 ? '' : 's'} for return verification: ${itemDetails}`,
                         departmentId: activeDepartmentId || undefined
                     });
                 }

@@ -137,6 +137,7 @@ export default function TransactionDetailPage() {
     const [showAddItem, setShowAddItem] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [showQRScanner, setShowQRScanner] = useState(false);
+    const [itemsToAdd, setItemsToAdd] = useState<Set<string>>(new Set());
     const [isMobile, setIsMobile] = useState(false);
 
     // Multi-select states
@@ -291,66 +292,122 @@ export default function TransactionDetailPage() {
         return found ? (found.name || found.email || 'Unknown User') : 'Unknown User';
     };
 
-    const handleAddItem = async (itemId: string) => {
-        if (!transaction || transaction.status !== 'OPEN') {
-            showToast('Cannot modify closed transactions', 'error');
+    const getAddableItem = (itemId: string) => {
+        if (!transaction) return null;
+        const item = equipment.find(e => e.id === itemId);
+        if (!item) return null;
+        if (transaction.items.includes(itemId)) return null;
+        if (item.status !== 'AVAILABLE') return null;
+        return item;
+    };
+
+    const toggleItemToAdd = (itemId: string) => {
+        const item = equipment.find(e => e.id === itemId);
+        if (!item) {
+            showToast('Item not found', 'error');
             return;
         }
 
-        if (transaction.items.includes(itemId)) {
+        if (transaction?.items.includes(itemId)) {
             showToast('Item already in this transaction', 'error');
             return;
         }
 
-        const item = equipment.find(e => e.id === itemId);
-        if (!item) {
-            alert('Item not found');
-            return;
-        }
-
-        // If item is not available, check if it's assigned to this transaction (should be caught by includes check above)
-        // But if it's assigned to OTHER transaction, block it.
         if (item.status !== 'AVAILABLE') {
             showToast(`Item is not available (Current Status: ${item.status})`, 'error');
             return;
         }
 
+        setItemsToAdd(prev => {
+            const next = new Set(prev);
+            if (next.has(itemId)) {
+                next.delete(itemId);
+            } else {
+                next.add(itemId);
+            }
+            return next;
+        });
+    };
+
+    const handleAddItems = async (itemIds: string[]) => {
+        if (!transaction || transaction.status !== 'OPEN') {
+            showToast('Cannot modify closed transactions', 'error');
+            return;
+        }
+
+        const uniqueIds = Array.from(new Set(itemIds));
+        const validItems = uniqueIds
+            .map(getAddableItem)
+            .filter((item): item is Equipment => Boolean(item));
+
+        if (validItems.length === 0) {
+            showToast('Select at least one available item to add', 'error');
+            return;
+        }
+
+        if (validItems.length !== uniqueIds.length) {
+            showToast('Some selected items are no longer available and were skipped', 'error');
+        }
+
+        const itemIdsToAdd = validItems.map(item => item.id);
+        const itemSummaries = validItems.map(item => `${item.name} (${item.barcode})`);
+        const logSummary = itemSummaries.length <= 6
+            ? itemSummaries.join(', ')
+            : `${itemSummaries.slice(0, 6).join(', ')} and ${itemSummaries.length - 6} more`;
+
+        if (validItems.length === 0) {
+            return;
+        }
+
         setSaving(true);
         try {
-            // Update transaction
             await storage.updateTransaction(transaction.id, {
-                items: [...transaction.items, itemId],
+                items: [...transaction.items, ...itemIdsToAdd],
                 preCheckoutConditions: {
                     ...transaction.preCheckoutConditions,
-                    [itemId]: item.condition,
+                    ...Object.fromEntries(validItems.map(item => [item.id, item.condition])),
                 },
             });
 
-            // Update item status
-            await storage.updateEquipment(itemId, {
-                status: 'CHECKED_OUT',
-                assignedTo: transaction.userId,
-                lastActivity: new Date().toISOString()
-            });
+            const updatedAt = new Date().toISOString();
+            await Promise.all(validItems.map(item =>
+                storage.updateEquipment(item.id, {
+                    status: 'CHECKED_OUT',
+                    assignedTo: transaction.userId,
+                    lastActivity: updatedAt
+                })
+            ));
 
-            // Log the change
             await storage.addLog({
                 id: crypto.randomUUID(),
                 action: 'EDIT',
                 entityId: transaction.id,
                 userId: user!.id,
                 timestamp: new Date().toISOString(),
-                details: `Added item: ${item.name} (${item.barcode}) to transaction "${transaction.project || 'Unspecified'}"`,
+                details: validItems.length === 1
+                    ? `Added item: ${itemSummaries[0]} to transaction "${transaction.project || 'Unspecified'}"`
+                    : `Added ${validItems.length} items: ${logSummary} to transaction "${transaction.project || 'Unspecified'}"`,
+                newValue: {
+                    addedItemIds: itemIdsToAdd,
+                    addedItemNames: itemSummaries,
+                },
+                departmentId: effectiveDeptId || transaction.departmentId,
             });
 
             await loadData(true);
             setSearchQuery('');
+            setItemsToAdd(new Set());
             setShowAddItem(false);
             setShowQRScanner(false);
-            showToast(`Successfully added ${item.name}`, 'success');
+            showToast(
+                validItems.length === 1
+                    ? `Successfully added ${validItems[0].name}`
+                    : `Successfully added ${validItems.length} items`,
+                'success'
+            );
         } catch (error) {
-            console.error('Error adding item:', error);
-            showToast('Error adding item to transaction', 'error');
+            console.error('Error adding items:', error);
+            showToast('Error adding items to transaction', 'error');
         } finally {
             setSaving(false);
         }
@@ -419,7 +476,28 @@ export default function TransactionDetailPage() {
     const handleQRScan = async (decodedText: string) => {
         const item = equipment.find(e => e.barcode === decodedText || e.id === decodedText);
         if (item) {
-            await handleAddItem(item.id);
+            if (itemsToAdd.has(item.id)) {
+                showToast(`${item.name} is already selected`, 'success');
+                return;
+            }
+
+            const addableItem = getAddableItem(item.id);
+            if (!addableItem) {
+                showToast(
+                    transaction?.items.includes(item.id)
+                        ? 'Item already in this transaction'
+                        : `Item is not available (Current Status: ${item.status})`,
+                    'error'
+                );
+                return;
+            }
+
+            setItemsToAdd(prev => {
+                const next = new Set(prev);
+                next.add(item.id);
+                return next;
+            });
+            showToast(`Selected ${item.name}`, 'success');
         } else {
             showToast('Item not found with this barcode', 'error');
         }
@@ -624,6 +702,9 @@ export default function TransactionDetailPage() {
             normalize(item.name).includes(normalizedQuery)
         );
     }).sort(compareByName);
+    const selectedAddItems = Array.from(itemsToAdd)
+        .map(getAddableItem)
+        .filter((item): item is Equipment => Boolean(item));
 
     if (!user || !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
         return null;
@@ -1257,7 +1338,14 @@ export default function TransactionDetailPage() {
                             {transaction.status === 'OPEN' && (
                                 <Button
                                     size="sm"
-                                    onClick={() => setShowAddItem(!showAddItem)}
+                                    onClick={() => {
+                                        const shouldShow = !showAddItem;
+                                        setShowAddItem(shouldShow);
+                                        if (!shouldShow) {
+                                            setItemsToAdd(new Set());
+                                            setShowQRScanner(false);
+                                        }
+                                    }}
                                     disabled={saving}
                                 >
                                     <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1278,12 +1366,16 @@ export default function TransactionDetailPage() {
                             <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/30">
                                 <div>
                                     <h3 className="font-bold text-[17px]">Add Equipment</h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Search or scan to add items to this active transaction</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Search or scan, select multiple items, then add them together</p>
                                 </div>
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => setShowAddItem(false)}
+                                    onClick={() => {
+                                        setShowAddItem(false);
+                                        setItemsToAdd(new Set());
+                                        setShowQRScanner(false);
+                                    }}
                                     className="hover:bg-muted rounded-full w-8 h-8 p-0"
                                 >
                                     <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1323,8 +1415,41 @@ export default function TransactionDetailPage() {
                                     </Button>
                                 </div>
 
+                                <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-foreground">
+                                            {selectedAddItems.length} item{selectedAddItems.length !== 1 ? 's' : ''} selected
+                                        </p>
+                                        <p className="truncate text-xs text-muted-foreground">
+                                            {selectedAddItems.length > 0
+                                                ? selectedAddItems.slice(0, 4).map(item => item.name).join(', ') + (selectedAddItems.length > 4 ? ` and ${selectedAddItems.length - 4} more` : '')
+                                                : 'Select available items from the list below'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setItemsToAdd(new Set())}
+                                            disabled={selectedAddItems.length === 0 || saving}
+                                        >
+                                            Clear
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => handleAddItems(Array.from(itemsToAdd))}
+                                            disabled={selectedAddItems.length === 0 || saving}
+                                            isLoading={saving}
+                                        >
+                                            Add Selected
+                                        </Button>
+                                    </div>
+                                </div>
+
                                 {showQRScanner && (
-                                    <div className="h-[320px] rounded-2xl overflow-hidden border border-border shadow-inner bg-black">
+                                    <div className="h-[min(72vh,560px)] min-h-[420px] md:h-[360px] md:min-h-0 rounded-2xl overflow-hidden border border-border shadow-inner bg-black">
                                         {isMobile ? (
                                             <MobileScanner onScan={handleQRScan} onClose={() => setShowQRScanner(false)} />
                                         ) : (
@@ -1346,16 +1471,32 @@ export default function TransactionDetailPage() {
                                             <p className="text-xs mt-1">Try a different search term</p>
                                         </div>
                                     ) : (
-                                        filteredAvailableItems.map(item => (
+                                        filteredAvailableItems.map(item => {
+                                            const isQueued = itemsToAdd.has(item.id);
+
+                                            return (
                                             <div
                                                 key={item.id}
-                                                className="group flex items-center justify-between p-3 pl-3 pr-4 bg-card rounded-2xl border border-border hover:border-primary hover:shadow-md transition-all duration-200"
+                                                onClick={() => toggleItemToAdd(item.id)}
+                                                className={`group flex cursor-pointer items-center justify-between p-3 pl-3 pr-4 rounded-2xl border transition-all duration-200 ${isQueued
+                                                    ? 'bg-primary/5 border-primary shadow-md'
+                                                    : 'bg-card border-border hover:border-primary hover:shadow-md'
+                                                    }`}
                                             >
                                                 <div className="flex items-center gap-4 min-w-0">
-                                                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors">
-                                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                        </svg>
+                                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${isQueued
+                                                        ? 'bg-primary text-primary-foreground'
+                                                        : 'bg-muted text-muted-foreground group-hover:text-primary'
+                                                        }`}>
+                                                        {isQueued ? (
+                                                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            </svg>
+                                                        )}
                                                     </div>
                                                     <div className="min-w-0">
                                                         <h4 className="font-bold text-[15px] truncate group-hover:text-primary transition-colors">{item.name}</h4>
@@ -1367,14 +1508,19 @@ export default function TransactionDetailPage() {
                                                 </div>
                                                 <Button
                                                     size="sm"
-                                                    onClick={() => handleAddItem(item.id)}
+                                                    variant={isQueued ? 'secondary' : 'outline'}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        toggleItemToAdd(item.id);
+                                                    }}
                                                     isLoading={saving}
-                                                    className="rounded-xl px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90 border-0 transition-colors font-medium"
+                                                    className="rounded-xl px-5 h-9 transition-colors font-medium"
                                                 >
-                                                    Add
+                                                    {isQueued ? 'Selected' : 'Select'}
                                                 </Button>
                                             </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
                             </div>

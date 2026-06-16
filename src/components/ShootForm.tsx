@@ -42,10 +42,10 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         title: '',
         description: '',
         location: '',
-        status: 'CONFIRMED',
         pocName: '',
         pocContact: '',
         ...initialData,
+        status: initialData.status === 'CANCELLED' ? 'CONFIRMED' : (initialData.status || 'DRAFT'),
         startTime: initialData.startTime ? format(new Date(initialData.startTime), "yyyy-MM-dd'T'HH:mm") : '',
         endTime: initialData.endTime ? format(new Date(initialData.endTime), "yyyy-MM-dd'T'HH:mm") : '',
     });
@@ -264,8 +264,8 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         try {
             const requiredRoles = calculateRequiredRoles();
 
-            // Determine effective status (revive to CONFIRMED if it was CANCELLED)
-            const effectiveStatus = initialData.status === 'CANCELLED' ? 'CONFIRMED' : formData.status;
+            // Determine effective status (revive cancelled records through edit instead of keeping them cancelled)
+            const effectiveStatus = initialData.status === 'CANCELLED' ? 'CONFIRMED' : (formData.status || 'DRAFT');
 
             // Ensure End Time is populated if missing
             let effectiveEndTime = formData.endTime;
@@ -279,6 +279,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
             const submissionData = {
                 ...formData,
                 status: effectiveStatus,
+                cancellationReason: effectiveStatus === 'CANCELLED' ? formData.cancellationReason : undefined,
                 startTime: formData.startTime ? new Date(formData.startTime).toISOString() : formData.startTime,
                 endTime: effectiveEndTime ? new Date(effectiveEndTime).toISOString() : effectiveEndTime
             };
@@ -286,7 +287,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
             // Handle Google Calendar Logic
             let googleEventId = submissionData.googleEventId; // Keep existing if present
 
-            if (hasCalendarToken) {
+            if (hasCalendarToken && effectiveStatus !== 'DRAFT') {
                 try {
                     const tokens = await getGoogleProviderToken();
                     if (tokens && tokens.accessToken) {
@@ -344,7 +345,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
             await onSubmit({
                 ...submissionData,
                 requiredRoles,
-                googleEventId // Save the ID to DB
+                googleEventId: effectiveStatus === 'DRAFT' ? undefined : googleEventId
             }, Array.from(new Set(selectedCrewIds)), inchargeId); // Ensure unique crew IDs
 
         } catch (error) {
@@ -432,6 +433,35 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                     rows={3}
                                     className="flex w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y min-h-[80px]"
                                 />
+                            </div>
+
+                            <div className="w-full">
+                                <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">
+                                    Planning Status
+                                </label>
+                                <div className="grid grid-cols-2 gap-1 rounded-2xl bg-[#f5f5f7] dark:bg-gray-800 p-1">
+                                    {[
+                                        { value: 'DRAFT' as const, label: 'Draft' },
+                                        { value: 'CONFIRMED' as const, label: 'Confirmed' },
+                                    ].map(option => (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, status: option.value })}
+                                            className={`h-11 rounded-xl text-sm font-bold transition-colors ${formData.status === option.value
+                                                ? 'bg-white text-primary shadow-sm dark:bg-[#1c1c1e]'
+                                                : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
+                                                }`}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    {formData.status === 'DRAFT'
+                                        ? `Draft ${labels.workPluralLower} stay internal and do not notify ${labels.teamPluralLower}.`
+                                        : `Confirmed ${labels.workPluralLower} can notify assigned ${labels.teamPluralLower}.`}
+                                </p>
                             </div>
 
                             <div className="w-full">
@@ -563,17 +593,23 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
                         {/* Google Calendar Section */}
                         <div className="space-y-3 pt-1">
+                            {formData.status === 'DRAFT' && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                                    Google Calendar and crew invites are disabled for draft {labels.workPluralLower}.
+                                </div>
+                            )}
                             {hasCalendarToken ? (
                                 <div className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-[#e5e5ea] dark:border-gray-700 p-3 rounded-xl animate-in fade-in slide-in-from-top-2">
                                     <div className="flex items-center h-5">
                                         <input
                                             id="google-calendar"
                                             type="checkbox"
-                                            checked={addToCalendar}
+                                            checked={formData.status !== 'DRAFT' && addToCalendar}
                                             onChange={(e) => {
                                                 setAddToCalendar(e.target.checked);
                                                 localStorage.setItem('addToCalendarPreference', e.target.checked ? 'true' : 'false');
                                             }}
+                                            disabled={formData.status === 'DRAFT'}
                                             className="w-5 h-5 text-primary border-gray-300 dark:border-gray-600 rounded focus:ring-primary transition-colors"
                                         />
                                     </div>

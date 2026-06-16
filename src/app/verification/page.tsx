@@ -966,7 +966,7 @@ export default function VerificationPage() {
                             </button>
                         </div>
 
-                        <div className="md:hidden h-[360px] max-h-[52vh] min-h-[280px] overflow-hidden rounded-[24px] bg-black shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
+                        <div className="md:hidden h-[min(72vh,560px)] min-h-[420px] overflow-hidden rounded-[24px] bg-black shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
                             <MobileScanner
                                 onScan={handleVerificationScan}
                                 onError={(error) => showToast(error, 'error')}

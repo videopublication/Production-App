@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { ShootForm } from '@/components/ShootForm';
 import { storage } from '@/lib/storage';
@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useUsers } from '@/hooks/useUsers';
 import { useShoot } from '@/hooks/useShoots';
 import { useAssignments } from '@/hooks/useAssignments';
-import { Shoot, Assignment } from '@/types';
+import { Shoot, Assignment, PlannerDraftAssignment, AssignmentSegment } from '@/types';
 import { generateUUID } from '@/lib/id';
 import { format, parseISO } from 'date-fns';
 import { sendPushNotification } from '@/lib/push-notifications';
@@ -22,7 +22,10 @@ export default function EditShootPage() {
     const { user } = useAuth();
     const { department, allDepartments } = useDepartment();
     const params = useParams();
+    const searchParams = useSearchParams();
     const id = params?.id as string;
+    const returnTo = searchParams.get('returnTo');
+    const safeReturnTo = returnTo?.startsWith('/') ? returnTo : null;
     const queryClient = useQueryClient();
 
     const { data: shoot, isLoading: isShootLoading } = useShoot(id);
@@ -32,6 +35,7 @@ export default function EditShootPage() {
     const labels = getDepartmentLabels(pageDepartment);
 
     const [isLoading, setIsLoading] = useState(false);
+    const [draftAssignments, setDraftAssignments] = useState<PlannerDraftAssignment[]>([]);
 
     useEffect(() => {
         if (user && !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
@@ -39,7 +43,20 @@ export default function EditShootPage() {
         }
     }, [user, router]);
 
+    useEffect(() => {
+        if (!shoot) return;
+
+        storage.getPlannerDraftAssignments(shoot.departmentId)
+            .then(drafts => setDraftAssignments(drafts.filter(draft => draft.shootId === shoot.id)))
+            .catch(error => {
+                console.error('Failed to load draft assignments:', error);
+                setDraftAssignments([]);
+            });
+    }, [shoot]);
+
     const isSubmittingRef = React.useRef(false);
+    const getShootDetailsHref = (shootId: string) =>
+        safeReturnTo ? `/shoots/${shootId}?returnTo=${encodeURIComponent(safeReturnTo)}` : `/shoots/${shootId}`;
 
     const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string) => {
         if (!shoot || isSubmittingRef.current || isLoading) return;
@@ -56,12 +73,65 @@ export default function EditShootPage() {
 
             // Current assignments for THIS shoot
             const currentAssignments = allAssignments.filter(a => a.shootId === shoot.id);
+            const currentDraftAssignments = draftAssignments.filter(a => a.shootId === shoot.id);
+
+            if (updatedShoot.status === 'DRAFT') {
+                const toRemoveLive = currentAssignments;
+                if (toRemoveLive.length > 0) {
+                    await storage.deleteAssignmentSegmentsByAssignmentIds(toRemoveLive.map(a => a.id));
+                    await Promise.all(toRemoveLive.map(a => storage.deleteAssignment(a.id)));
+                }
+
+                const selectedCrew = new Set(crewIds);
+                const draftIdsToRemove = currentDraftAssignments
+                    .filter(a => !selectedCrew.has(a.userId))
+                    .map(a => a.id);
+
+                if (draftIdsToRemove.length > 0) {
+                    await storage.deletePlannerDraftAssignments(draftIdsToRemove);
+                }
+
+                const draftsToSave: PlannerDraftAssignment[] = crewIds.map(userId => {
+                    const existing = currentDraftAssignments.find(a => a.userId === userId);
+                    return {
+                        id: existing?.id || generateUUID(),
+                        shootId: shoot.id,
+                        userId,
+                        role: userId === inchargeId ? 'Incharge' : (allUsers.find(u => u.id === userId)?.role || 'Crew'),
+                        createdBy: existing?.createdBy || user?.id,
+                        createdAt: existing?.createdAt || new Date().toISOString(),
+                        departmentId: shoot.departmentId
+                    };
+                });
+
+                if (draftsToSave.length > 0) {
+                    await storage.savePlannerDraftAssignments(draftsToSave);
+                }
+
+                if (user) {
+                    await storage.addLog({
+                        id: generateUUID(),
+                        action: 'EDIT',
+                        entityId: shoot.id,
+                        userId: user.id,
+                        timestamp: new Date().toISOString(),
+                        details: `Updated draft ${labels.workLower} details`,
+                        departmentId: shoot.departmentId
+                    });
+                }
+
+                await queryClient.invalidateQueries({ queryKey: ['shoots'] });
+                await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+                router.push(getShootDetailsHref(shoot.id));
+                return;
+            }
 
             // Update Assignments
             // 1. Find removed assignments
             const existingCrewIds = currentAssignments.map(a => a.userId);
             const toRemove = currentAssignments.filter(a => !crewIds.includes(a.userId));
             if (toRemove.length > 0) {
+                await storage.deleteAssignmentSegmentsByAssignmentIds(toRemove.map(a => a.id));
                 await Promise.all(toRemove.map(a => storage.deleteAssignment(a.id)));
             }
 
@@ -77,6 +147,21 @@ export default function EditShootPage() {
             }));
             if (newAssignments.length > 0) {
                 await storage.saveAssignments(newAssignments);
+                const assignmentSegments: AssignmentSegment[] = newAssignments
+                    .filter(() => !!updatedShoot.startTime && !!updatedShoot.endTime)
+                    .map(assignment => ({
+                        id: generateUUID(),
+                        assignmentId: assignment.id,
+                        shootId: shoot.id,
+                        userId: assignment.userId,
+                        startTime: updatedShoot.startTime,
+                        endTime: updatedShoot.endTime!,
+                        role: assignment.role,
+                        createdBy: user?.id,
+                        createdAt: new Date().toISOString(),
+                        departmentId: shoot.departmentId
+                    }));
+                await storage.saveAssignmentSegments(assignmentSegments);
 
                 // Notify newly added crew
                 await Promise.all(newAssignments.map(async (assignment) => {
@@ -145,6 +230,10 @@ export default function EditShootPage() {
                 }));
             }
 
+            if (currentDraftAssignments.length > 0) {
+                await storage.deletePlannerDraftAssignments(currentDraftAssignments.map(a => a.id));
+            }
+
             try {
                 // Log activity
                 const changes: string[] = [];
@@ -179,7 +268,7 @@ export default function EditShootPage() {
                 console.warn('Non-critical error during post-save operations:', nonCriticalError);
             }
 
-            router.push(`/shoots/${shoot.id}`);
+            router.push(getShootDetailsHref(shoot.id));
         } catch (error) {
             console.error(`Failed to update ${labels.workLower}:`, error);
             isSubmittingRef.current = false;
@@ -194,8 +283,10 @@ export default function EditShootPage() {
 
     if (!shoot) return null;
 
-    const currentCrewIds = allAssignments.filter(a => a.shootId === shoot.id).map(a => a.userId);
-    const currentInchargeId = allAssignments.find(a => a.shootId === shoot.id && a.role === 'Incharge')?.userId;
+    const liveShootAssignments = allAssignments.filter(a => a.shootId === shoot.id);
+    const initialShootAssignments = shoot.status === 'DRAFT' ? draftAssignments : liveShootAssignments;
+    const currentCrewIds = initialShootAssignments.map(a => a.userId);
+    const currentInchargeId = initialShootAssignments.find(a => a.role === 'Incharge')?.userId;
 
     return (
         <div className="px-2 pb-3 pt-1 sm:px-6 sm:pb-6 space-y-4 max-w-7xl mx-auto w-full">
@@ -206,6 +297,7 @@ export default function EditShootPage() {
             </div>
 
             <ShootForm
+                key={`${shoot.id}-${shoot.status}-${currentCrewIds.join(',')}-${currentInchargeId || ''}`}
                 initialData={shoot}
                 initialCrewIds={currentCrewIds}
                 initialInchargeId={currentInchargeId}

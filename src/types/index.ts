@@ -49,6 +49,7 @@ export interface User {
     departmentId?: string; // Initially optional during migration
     isPrimaryLeaveApprover?: boolean;
     canManageExpenses?: boolean;
+    canBeAssignedToShoots?: boolean;
 }
 
 export interface Equipment {
@@ -160,7 +161,7 @@ export interface Notification {
     departmentId?: string;
 }
 
-export type ShootStatus = 'CONFIRMED' | 'CANCELLED';
+export type ShootStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
 
 export interface HumanResourceRequirement {
     roleName: string;
@@ -187,6 +188,7 @@ export interface Shoot {
     requiredRoles: HumanResourceRequirement[];
     createdBy: string;
     googleEventId?: string;
+    cancellationReason?: string;
     shootNumber?: number;
     jiraTicketId?: string;
     departmentId?: string;
@@ -199,6 +201,31 @@ export interface Assignment {
     userId: string;
     role: string;
     status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    departmentId?: string;
+}
+
+export interface PlannerDraftAssignment {
+    id: string;
+    shootId: string;
+    userId: string;
+    role: string;
+    createdBy?: string;
+    createdAt: string;
+    departmentId?: string;
+}
+
+export interface AssignmentSegment {
+    id: string;
+    assignmentId?: string | null;
+    draftAssignmentId?: string | null;
+    shootId: string;
+    userId: string;
+    startTime: string;
+    endTime: string;
+    role?: string;
+    note?: string;
+    createdBy?: string;
+    createdAt?: string;
     departmentId?: string;
 }
 

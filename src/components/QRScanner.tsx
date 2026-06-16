@@ -29,7 +29,9 @@ type CameraCapabilities = MediaTrackCapabilities & {
 };
 type ScannerConfig = {
     fps: number;
-    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => { width: number; height: number };
+    qrbox?: (viewfinderWidth: number, viewfinderHeight: number) => { width: number; height: number };
+    formatsToSupport?: number[];
+    disableFlip?: boolean;
     videoConstraints?: MediaTrackConstraints;
     useBarCodeDetectorIfSupported: boolean;
     experimentalFeatures: {
@@ -38,7 +40,7 @@ type ScannerConfig = {
 };
 type Html5Scanner = {
     start: (
-        cameraIdOrConfig: MediaTrackConstraints,
+        cameraIdOrConfig: string | MediaTrackConstraints,
         configuration: ScannerConfig,
         qrCodeSuccessCallback: (decodedText: string) => void | Promise<void>,
         qrCodeErrorCallback?: (errorMessage?: string) => void
@@ -56,7 +58,33 @@ const isAppleTouchDevice = () => {
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 };
 
+const QR_CODE_FORMAT = 0;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const waitForScannerElement = async (scannerId: string) => {
+    if (typeof window === 'undefined') return;
+
+    for (let attempt = 0; attempt < 16; attempt++) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const element = document.getElementById(scannerId);
+        const rect = element?.getBoundingClientRect();
+
+        if (
+            rect &&
+            rect.width >= 180 &&
+            rect.height >= 180 &&
+            rect.bottom > 0 &&
+            rect.top < window.innerHeight
+        ) {
+            await sleep(isAppleTouchDevice() ? 220 : 60);
+            return;
+        }
+
+        await sleep(40);
+    }
+};
 
 const getScanBox = (ratio: number, maxSize: number) => (viewfinderWidth: number, viewfinderHeight: number) => {
     const minEdge = Math.min(viewfinderWidth || 300, viewfinderHeight || 300);
@@ -76,9 +104,13 @@ const buildVideoConstraints = (variant: 'desktop' | 'mobile'): MediaTrackConstra
     const constraints: CameraConstraints = {
         facingMode: { ideal: 'environment' },
         width: { ideal: conservativeMobileStream ? 1280 : 1920 },
-        height: { ideal: conservativeMobileStream ? 720 : 1080 },
-        frameRate: { ideal: conservativeMobileStream ? 24 : 30, max: 30 }
+        height: { ideal: conservativeMobileStream ? 1280 : 1080 },
+        frameRate: { ideal: 30, max: 30 }
     };
+
+    if (conservativeMobileStream) {
+        constraints.aspectRatio = { ideal: 1 };
+    }
 
     if (!conservativeMobileStream) {
         constraints.focusMode = 'continuous';
@@ -90,13 +122,16 @@ const buildVideoConstraints = (variant: 'desktop' | 'mobile'): MediaTrackConstra
 
 const buildScannerConfig = (variant: 'desktop' | 'mobile'): ScannerConfig => {
     const appleTouchDevice = isAppleTouchDevice();
-    const useNativeDetector = variant === 'desktop' && !appleTouchDevice;
+    const useFullFrameDecode = variant === 'mobile' || appleTouchDevice;
+    const useNativeDetector = true;
 
     return {
         fps: variant === 'mobile'
-            ? (appleTouchDevice ? 10 : 15)
+            ? (appleTouchDevice ? 12 : 20)
             : (appleTouchDevice ? 10 : 20),
-        qrbox: getScanBox(variant === 'mobile' ? 0.78 : 0.7, variant === 'mobile' ? 280 : 320),
+        qrbox: useFullFrameDecode ? undefined : getScanBox(0.7, 320),
+        formatsToSupport: [QR_CODE_FORMAT],
+        disableFlip: true,
         videoConstraints: buildVideoConstraints(variant),
         useBarCodeDetectorIfSupported: useNativeDetector,
         experimentalFeatures: {
@@ -105,31 +140,70 @@ const buildScannerConfig = (variant: 'desktop' | 'mobile'): ScannerConfig => {
     };
 };
 
+const buildScannerStartConfigs = (config: ScannerConfig): ScannerConfig[] => {
+    const appleTouchDevice = isAppleTouchDevice();
+    const configs: ScannerConfig[] = [config];
+
+    if (appleTouchDevice) {
+        configs.push(
+            {
+                ...config,
+                videoConstraints: {
+                    facingMode: { exact: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: 8, max: 15 }
+                }
+            },
+            {
+                ...config,
+                videoConstraints: {
+                    facingMode: 'environment',
+                    width: { ideal: 960 },
+                    height: { ideal: 540 },
+                    frameRate: { ideal: 8, max: 15 }
+                }
+            }
+        );
+    }
+
+    configs.push(
+        {
+            ...config,
+            videoConstraints: { facingMode: 'environment' }
+        },
+        {
+            ...config,
+            videoConstraints: undefined
+        }
+    );
+
+    return configs;
+};
+
 const startHtml5Scanner = async (
     scanner: Html5Scanner,
     config: ScannerConfig,
     onSuccess: (decodedText: string) => void | Promise<void>,
     onFailure: (errorMessage?: string) => void
 ) => {
-    try {
-        await scanner.start(
-            { facingMode: 'environment' },
-            config,
-            onSuccess,
-            onFailure
-        );
-    } catch (err) {
-        const fallbackConfig = { ...config, videoConstraints: undefined };
+    let firstError: unknown;
 
-        await scanner.start(
-            { facingMode: 'environment' },
-            fallbackConfig,
-            onSuccess,
-            onFailure
-        ).catch(() => {
-            throw err;
-        });
+    for (const candidateConfig of buildScannerStartConfigs(config)) {
+        try {
+            await scanner.start(
+                { facingMode: 'environment' },
+                candidateConfig,
+                onSuccess,
+                onFailure
+            );
+            return;
+        } catch (err) {
+            firstError ??= err;
+        }
     }
+
+    throw firstError;
 };
 
 const configureRunningTrack = async (
@@ -145,7 +219,7 @@ const configureRunningTrack = async (
         return { zoomCapabilities: null, zoomVal: 1 };
     }
 
-    if (Array.isArray(capabilities?.focusMode) && capabilities.focusMode.includes('continuous')) {
+    if (!isAppleTouchDevice() && Array.isArray(capabilities?.focusMode) && capabilities.focusMode.includes('continuous')) {
         try {
             await scanner.applyVideoConstraints({
                 advanced: [{ focusMode: 'continuous' }]
@@ -168,7 +242,7 @@ const configureRunningTrack = async (
         step: Number.isFinite(step) && step > 0 ? step : 0.1
     };
     const zoomVal = preferMobileZoom
-        ? clamp(2, zoomCapabilities.min, zoomCapabilities.max)
+        ? clamp(isAppleTouchDevice() ? 1 : 2, zoomCapabilities.min, zoomCapabilities.max)
         : zoomCapabilities.min;
 
     if (zoomVal !== zoomCapabilities.min) {
@@ -228,6 +302,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({
         try {
             setError('');
             setTorchOn(false);
+            await waitForScannerElement(scannerId);
 
             if (scannerRef.current && isInitialized.current) {
                 try {
@@ -401,10 +476,15 @@ export const QRScanner: React.FC<QRScannerProps> = ({
                 )}
 
                 <style jsx global>{`
+                    #${scannerId} {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
                     #${scannerId} video {
                         width: 100% !important;
-                        height: 100% !important;
-                        object-fit: cover !important;
+                        height: auto !important;
+                        object-fit: contain !important;
                         display: block !important;
                         border-radius: 0.5rem;
                     }
@@ -498,6 +578,7 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
         try {
             setError('');
             setTorchOn(false); // Reset torch state
+            await waitForScannerElement(scannerId);
 
             if (scannerRef.current && isInitialized.current) {
                 try {
@@ -601,6 +682,17 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
                     overflow: 'hidden'
                 }}
             />
+
+            {isScanning && (
+                <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center px-8 pb-12">
+                    <div className="relative aspect-square w-[min(82vw,320px)] max-w-[82%] rounded-[28px]">
+                        <div className="absolute left-0 top-0 h-12 w-12 rounded-tl-[28px] border-l-4 border-t-4 border-white/90 shadow-[0_0_18px_rgba(255,255,255,0.2)]" />
+                        <div className="absolute right-0 top-0 h-12 w-12 rounded-tr-[28px] border-r-4 border-t-4 border-white/90 shadow-[0_0_18px_rgba(255,255,255,0.2)]" />
+                        <div className="absolute bottom-0 left-0 h-12 w-12 rounded-bl-[28px] border-b-4 border-l-4 border-white/90 shadow-[0_0_18px_rgba(255,255,255,0.2)]" />
+                        <div className="absolute bottom-0 right-0 h-12 w-12 rounded-br-[28px] border-b-4 border-r-4 border-white/90 shadow-[0_0_18px_rgba(255,255,255,0.2)]" />
+                    </div>
+                </div>
+            )}
 
             {/* Scan count indicator */}
             {scanCount > 0 && (
@@ -718,10 +810,15 @@ export const MobileScanner: React.FC<MobileScannerProps> = ({
             </div>
 
             <style jsx global>{`
+                #${scannerId} {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
                 #${scannerId} video {
                     width: 100% !important;
-                    height: 100% !important;
-                    object-fit: cover !important;
+                    height: auto !important;
+                    object-fit: contain !important;
                     display: block !important;
                     border-radius: 0 !important;
                 }

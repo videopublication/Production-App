@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 const { data, error } = await supabase
                     .from('users')
-                    .select('*, avatarUrl:avatar_url, departmentId:department_id, canManageExpenses:can_manage_expenses, isPrimaryLeaveApprover:is_primary_leave_approver')
+                    .select('*, avatarUrl:avatar_url, departmentId:department_id, canManageExpenses:can_manage_expenses, isPrimaryLeaveApprover:is_primary_leave_approver, canBeAssignedToShoots:can_be_assigned_to_shoots')
                     .eq('id', userId)
                     .single();
 
@@ -101,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                 if (updatedUser.department_id) updatedUser.departmentId = updatedUser.department_id;
                                 if (updatedUser.can_manage_expenses !== undefined) updatedUser.canManageExpenses = updatedUser.can_manage_expenses;
                                 if (updatedUser.is_primary_leave_approver !== undefined) updatedUser.isPrimaryLeaveApprover = updatedUser.is_primary_leave_approver;
+                                if (updatedUser.can_be_assigned_to_shoots !== undefined) updatedUser.canBeAssignedToShoots = updatedUser.can_be_assigned_to_shoots;
 
                                 if (updatedUser.status === 'PENDING' || updatedUser.status === 'SUSPENDED') {
                                     const reason = updatedUser.status === 'SUSPENDED' ? 'suspended' : 'pending';
@@ -137,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                 role: 'CREW',
                                 status: 'PENDING',
                                 avatar_url: avatarUrl,
+                                can_be_assigned_to_shoots: true,
                             })
                             .then(({ error: insertErr }) => {
                                 if (insertErr && insertErr.code !== '23505') {
@@ -343,7 +345,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         name: name,
                         role: 'CREW',
                         status: 'PENDING',
-                        department_id: departmentId || null
+                        department_id: departmentId || null,
+                        can_be_assigned_to_shoots: true
                     }
                 ]);
 

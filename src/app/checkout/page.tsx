@@ -1207,9 +1207,9 @@ export default function CheckoutPage() {
 
                     <div className="flex-1 pb-40">
                         {/* Scanner View (Inline) - Moved inside scrollable area to push content down */}
-                        <div className={`overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${showScanner ? 'max-h-[500px] opacity-100 mb-6' : 'max-h-0 opacity-0'}`}>
+                        <div className={`overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${showScanner ? 'max-h-[640px] opacity-100 mb-6' : 'max-h-0 opacity-0'}`}>
                             <div className="mx-5 relative z-10">
-                                <div className="h-[360px] rounded-[32px] overflow-hidden shadow-[0_20px_40px_-12px_rgba(0,0,0,0.3)] border border-border transform translate-z-0">
+                                <div className="h-[min(72vh,560px)] min-h-[420px] rounded-[32px] overflow-hidden shadow-[0_20px_40px_-12px_rgba(0,0,0,0.3)] border border-border transform translate-z-0">
                                     {showScanner && (
                                         <MobileScanner
                                             onScan={handleQRScan}
