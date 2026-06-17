@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@custom-variant dark (&:is(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Safelist for ShootPlanner dynamic color palette — guarantees inclusion in production CSS */
 @source inline("border-l-blue-500 border-l-emerald-500 border-l-amber-500 border-l-rose-500 border-l-cyan-500 border-l-violet-500");
