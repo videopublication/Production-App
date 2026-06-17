@@ -97,6 +97,33 @@ const recoverManualItemsFromLogs = (logs: Log[]) => {
     return recovered;
 };
 
+const ACTION_LABELS: Record<string, string> = {
+    CHECKOUT: 'Checked out items',
+    RETURN: 'Returned items',
+    VERIFY: 'Verified return',
+    EDIT: 'Edited transaction',
+    CREATE: 'Created transaction',
+    LOGIN: 'Logged in',
+    LOGOUT: 'Logged out',
+    SIGNUP: 'Signed up',
+    LOGIN_FAILED: 'Login failed',
+};
+
+const formatLogAction = (action?: string) => {
+    if (!action) return 'Activity recorded';
+    return ACTION_LABELS[action] ?? action.charAt(0) + action.slice(1).toLowerCase().replace(/_/g, ' ');
+};
+
+const formatLogTimestamp = (ts: string) =>
+    new Date(ts).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+
 const formatLogDetails = (details?: string) => {
     if (!details) return '';
     const decoded = decodeTransactionNotes(details);
@@ -128,10 +155,17 @@ export default function TransactionDetailPage() {
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [allShoots, setAllShoots] = useState<Shoot[]>([]);
     const [logs, setLogs] = useState<Log[]>([]);
+    const [activitySearch, setActivitySearch] = useState('');
+    const [activityActionFilter, setActivityActionFilter] = useState<string>('ALL');
+    const [activityVisibleCount, setActivityVisibleCount] = useState(50);
+    const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set());
     const [linkedShoot, setLinkedShoot] = useState<Shoot | null>(null);
     const [shootAssignments, setShootAssignments] = useState<Assignment[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    // Guards manualItems-from-logs recovery against duplicate writes if the user reloads
+    // mid-flight (between updateTransaction and addLog).
+    const manualItemsRecoveryAttempted = React.useRef<Set<string>>(new Set());
 
     // Add item states
     const [showAddItem, setShowAddItem] = useState(false);
@@ -185,10 +219,26 @@ export default function TransactionDetailPage() {
                 return;
             }
 
-            // Fetch logs for this transaction AND its items directly
-            // This prevents missing old transaction logs due to the 1000 row limits of global getLogs()
-            const entityIdsToFetch = [transactionId, ...loadedTxn.items];
-            const allLogs = await storage.getLogsByEntities(entityIdsToFetch);
+            // Fetch logs server-side bounded by time to cut bandwidth.
+            // Transaction-level logs: no time bound (always relevant to this txn).
+            // Item-level logs: bounded to [txn.timestampOut - 1min, txn.timestampIn + 14d OR txn.timestampOut + 30d if still open]
+            // The 14d / 30d outer caps are deliberately generous — final per-item trimming
+            // happens client-side using each item's "next checkout" boundary below.
+            const outerStartISO = new Date(
+                new Date(loadedTxn.timestampOut || 0).getTime() - 60000
+            ).toISOString();
+            const outerEndMs = loadedTxn.timestampIn
+                ? new Date(loadedTxn.timestampIn).getTime() + 14 * 24 * 60 * 60 * 1000
+                : new Date(loadedTxn.timestampOut || Date.now()).getTime() + 30 * 24 * 60 * 60 * 1000;
+            const outerEndISO = new Date(outerEndMs).toISOString();
+
+            const [txnScopedLogs, itemScopedLogs] = await Promise.all([
+                storage.getLogsByEntities([transactionId]),
+                loadedTxn.items.length > 0
+                    ? storage.getLogsByEntities(loadedTxn.items, { since: outerStartISO, until: outerEndISO })
+                    : Promise.resolve([] as Log[]),
+            ]);
+            const allLogs = [...txnScopedLogs, ...itemScopedLogs];
 
             let txn = loadedTxn;
             const txnUser = users.find(u => u.id === txn.userId);
@@ -207,26 +257,52 @@ export default function TransactionDetailPage() {
             // But since logs are directly retrieved by entity IDs tied to this specific transaction,
             // we don't strictly need to filter them out by effectiveDeptId here again.
 
-            // We time-bound the equipment logs to prevent showing the item's 
-            // entire historical usage across all projects.
+            // Per-item time bounds. Equipment is reused across transactions, so each item
+            // gets its own [start, end] window:
+            //   start = txn.timestampOut - 1 min (clock skew buffer)
+            //   end   = min(txn.timestampIn + 3 days for verifications, next CHECKOUT of this item)
+            // Capping at the next CHECKOUT of the same item prevents another transaction's
+            // logs from leaking in if the item was reused soon after return.
             const txnItemIds = new Set(txn.items);
-            const txnStartTime = new Date(txn.timestampOut || 0).getTime() - 60000; // 1 min buffer
-            const txnEndTime = txn.timestampIn 
-                ? new Date(txn.timestampIn).getTime() + (14 * 24 * 60 * 60 * 1000) // 14 day buffer for verifications
+            const txnStartTime = new Date(txn.timestampOut || 0).getTime() - 60000;
+            const txnReturnedAtPlusVerifyTail = txn.timestampIn
+                ? new Date(txn.timestampIn).getTime() + (3 * 24 * 60 * 60 * 1000)
                 : Infinity;
+
+            // Build per-item "next checkout after this txn" boundary so logs from a later
+            // checkout of the same equipment are excluded. CHECKOUT logs are keyed by
+            // transaction ID (not item ID), so we derive the cap from the timestampOut
+            // of any OTHER transaction whose items include this equipment.
+            const thisTxnOutMs = new Date(txn.timestampOut || 0).getTime();
+            const itemNextCheckoutAfter = new Map<string, number>();
+            for (const otherTxn of txns) {
+                if (otherTxn.id === txn.id) continue;
+                const otherOutMs = new Date(otherTxn.timestampOut || 0).getTime();
+                if (!Number.isFinite(otherOutMs) || otherOutMs <= thisTxnOutMs) continue;
+                for (const itemId of otherTxn.items || []) {
+                    if (!txnItemIds.has(itemId)) continue;
+                    const existing = itemNextCheckoutAfter.get(itemId) ?? Infinity;
+                    if (otherOutMs < existing) itemNextCheckoutAfter.set(itemId, otherOutMs);
+                }
+            }
 
             const transactionLogs = allLogs
                 .filter(l => {
                     if (l.entityId === transactionId) return true;
-                    if (txnItemIds.has(l.entityId)) {
-                        const logTime = new Date(l.timestamp).getTime();
-                        return logTime >= txnStartTime && logTime <= txnEndTime;
-                    }
-                    return false;
+                    if (!txnItemIds.has(l.entityId)) return false;
+                    const logTime = new Date(l.timestamp).getTime();
+                    if (logTime < txnStartTime) return false;
+                    const nextCheckout = itemNextCheckoutAfter.get(l.entityId) ?? Infinity;
+                    const effectiveEnd = Math.min(txnReturnedAtPlusVerifyTail, nextCheckout);
+                    return logTime <= effectiveEnd;
                 })
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-            if ((txn.manualItems || []).length === 0) {
+            if (
+                (txn.manualItems || []).length === 0 &&
+                !manualItemsRecoveryAttempted.current.has(txn.id)
+            ) {
+                manualItemsRecoveryAttempted.current.add(txn.id);
                 const recoveredManualItems = recoverManualItemsFromLogs(transactionLogs);
                 if (recoveredManualItems.length > 0) {
                     await storage.updateTransaction(txn.id, {
@@ -234,8 +310,10 @@ export default function TransactionDetailPage() {
                         manualItems: recoveredManualItems,
                     });
 
+                    // Deterministic log ID: PK insert collision will silently no-op on a
+                    // duplicate cross-session run, so we get at-most-one recovery log per txn.
                     await storage.addLog({
-                        id: crypto.randomUUID(),
+                        id: `recovery-manual-items-${txn.id}`,
                         action: 'EDIT',
                         entityId: txn.id,
                         userId: user?.id,
@@ -290,6 +368,39 @@ export default function TransactionDetailPage() {
         if (!userId) return 'System / Guest';
         const found = allUsers.find(u => u.id === userId);
         return found ? (found.name || found.email || 'Unknown User') : 'Unknown User';
+    };
+
+    // Returns the list of item display labels behind a CHECKOUT log.
+    // Prefers structured `new_value.itemNames` written by newer code. For legacy
+    // logs without that, falls back to: txn.items at checkout time (excluding items
+    // added later via subsequent "Added item:" EDIT logs that come AFTER this log).
+    const getCheckoutLogItems = (log: Log): string[] => {
+        const nv = log.newValue as { itemNames?: string[]; itemIds?: string[] } | undefined;
+        if (nv?.itemNames && nv.itemNames.length > 0) return nv.itemNames;
+        if (!transaction) return [];
+        const checkoutMs = new Date(log.timestamp).getTime();
+        const idsAddedAfter = new Set<string>();
+        for (const other of logs) {
+            if (other.action !== 'EDIT') continue;
+            if (new Date(other.timestamp).getTime() <= checkoutMs) continue;
+            const ov = other.newValue as { addedItemIds?: string[] } | undefined;
+            ov?.addedItemIds?.forEach(id => idsAddedAfter.add(id));
+        }
+        const initialIds = transaction.items.filter(id => !idsAddedAfter.has(id));
+        return initialIds.map(id => {
+            const eq = equipment.find(e => e.id === id);
+            return eq ? `${eq.name}${eq.barcode ? ` (${eq.barcode})` : ''}` : id;
+        });
+    };
+
+    // Returns avatar initial. Falls back to "?" for deleted/unknown users so the
+    // avatar visibly signals "user no longer exists" instead of showing a stray "U".
+    const getUserAvatarChar = (userId?: string) => {
+        if (!userId) return '·';
+        const found = allUsers.find(u => u.id === userId);
+        if (!found) return '?';
+        const source = found.name || found.email || '';
+        return source.charAt(0).toUpperCase() || '?';
     };
 
     const getAddableItem = (itemId: string) => {
@@ -1883,36 +1994,162 @@ export default function TransactionDetailPage() {
                 )}
             </Card>
 
-            {/* Activity History Log - Compact */}
-            <Card>
-                <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Activity History</h3>
-                    <span className="text-xs text-muted-foreground">{logs.length} entries</span>
-                </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {logs.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-3 italic">No activity recorded</p>
-                    ) : (
-                        logs.map(log => (
-                            <div key={log.id} className="flex items-start gap-2 py-1.5 border-b border-border last:border-0">
-                                <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0 mt-0.5">
-                                    {getUserName(log.userId).charAt(0)}
+            {/* Activity History Log */}
+            {(() => {
+                const distinctActions = Array.from(new Set(logs.map(l => l.action))).sort();
+                const normalizedSearch = activitySearch.trim().toLowerCase();
+                const filteredLogs = logs.filter(l => {
+                    if (activityActionFilter !== 'ALL' && l.action !== activityActionFilter) return false;
+                    if (!normalizedSearch) return true;
+                    const haystack = [
+                        getUserName(l.userId),
+                        l.details ?? '',
+                        l.action ?? '',
+                        formatLogAction(l.action),
+                    ].join(' ').toLowerCase();
+                    return haystack.includes(normalizedSearch);
+                });
+                const visibleLogs = filteredLogs.slice(0, activityVisibleCount);
+                // Group by local date for date headers.
+                const groupedByDate: { date: string; entries: Log[] }[] = [];
+                for (const l of visibleLogs) {
+                    const dateKey = new Date(l.timestamp).toLocaleDateString(undefined, {
+                        year: 'numeric', month: 'short', day: 'numeric', weekday: 'short'
+                    });
+                    const last = groupedByDate[groupedByDate.length - 1];
+                    if (last && last.date === dateKey) {
+                        last.entries.push(l);
+                    } else {
+                        groupedByDate.push({ date: dateKey, entries: [l] });
+                    }
+                }
+                return (
+                    <Card>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Activity History</h3>
+                            <span className="text-xs text-muted-foreground">
+                                {filteredLogs.length === logs.length
+                                    ? `${logs.length} entries`
+                                    : `${filteredLogs.length} of ${logs.length}`}
+                            </span>
+                        </div>
+                        {logs.length > 0 && (
+                            <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                                <div className="relative flex-1">
+                                    <input
+                                        type="text"
+                                        value={activitySearch}
+                                        onChange={(e) => { setActivitySearch(e.target.value); setActivityVisibleCount(50); }}
+                                        placeholder="Search user, item, action..."
+                                        className="w-full h-9 pl-3 pr-8 rounded-lg bg-muted text-foreground text-sm border border-transparent focus:bg-background focus:border-primary focus:outline-none transition-all"
+                                    />
+                                    {activitySearch && (
+                                        <button
+                                            onClick={() => setActivitySearch('')}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                            aria-label="Clear search"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs text-muted-foreground italic leading-relaxed">
-                                        <span className="font-medium not-italic text-foreground">{getUserName(log.userId)}</span>
-                                        {' — '}
-                                        {formatLogDetails(log.details) || log.action}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                        {new Date(log.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                    </p>
-                                </div>
+                                <select
+                                    value={activityActionFilter}
+                                    onChange={(e) => { setActivityActionFilter(e.target.value); setActivityVisibleCount(50); }}
+                                    className="h-9 px-3 rounded-lg bg-muted text-foreground text-sm border border-transparent focus:bg-background focus:border-primary focus:outline-none transition-all"
+                                >
+                                    <option value="ALL">All actions</option>
+                                    {distinctActions.map(a => (
+                                        <option key={a} value={a}>{formatLogAction(a)}</option>
+                                    ))}
+                                </select>
                             </div>
-                        ))
-                    )}
-                </div>
-            </Card>
+                        )}
+                        <div className="max-h-[28rem] overflow-y-auto pr-1">
+                            {logs.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-3 italic">No activity recorded</p>
+                            ) : filteredLogs.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-3 italic">No entries match your filters</p>
+                            ) : (
+                                <>
+                                    {groupedByDate.map(group => (
+                                        <div key={group.date} className="mb-2 last:mb-0">
+                                            <div className="sticky top-0 z-10 -mx-1 px-1 bg-card/95 backdrop-blur-sm py-1 mb-1">
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{group.date}</p>
+                                            </div>
+                                            {group.entries.map(log => {
+                                                const isCheckout = log.action === 'CHECKOUT' && log.entityId === transactionId;
+                                                const checkoutItems = isCheckout ? getCheckoutLogItems(log) : [];
+                                                const expandable = isCheckout && checkoutItems.length > 0;
+                                                const isExpanded = expandedLogIds.has(log.id);
+                                                return (
+                                                    <div key={log.id} className="flex items-start gap-2 py-1.5 border-b border-border last:border-0">
+                                                        <div
+                                                            className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0 mt-0.5"
+                                                            title={log.userId ? `User ID: ${log.userId}` : 'No user attribution'}
+                                                        >
+                                                            {getUserAvatarChar(log.userId)}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs text-muted-foreground italic leading-relaxed">
+                                                                <span
+                                                                    className={`font-medium not-italic ${log.userId && !allUsers.find(u => u.id === log.userId) ? 'text-muted-foreground/70 line-through' : 'text-foreground'}`}
+                                                                    title={log.userId && !allUsers.find(u => u.id === log.userId) ? `Deleted user (${log.userId})` : undefined}
+                                                                >
+                                                                    {getUserName(log.userId)}
+                                                                </span>
+                                                                {' — '}
+                                                                {formatLogDetails(log.details) || formatLogAction(log.action)}
+                                                                {expandable && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setExpandedLogIds(prev => {
+                                                                            const next = new Set(prev);
+                                                                            if (next.has(log.id)) next.delete(log.id);
+                                                                            else next.add(log.id);
+                                                                            return next;
+                                                                        })}
+                                                                        className="ml-1 inline-flex items-center gap-0.5 not-italic font-semibold text-primary hover:underline"
+                                                                    >
+                                                                        {isExpanded ? 'Hide items' : `Show ${checkoutItems.length} item${checkoutItems.length === 1 ? '' : 's'}`}
+                                                                        <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                                                        </svg>
+                                                                    </button>
+                                                                )}
+                                                            </p>
+                                                            {expandable && isExpanded && (
+                                                                <ul className="mt-1 ml-1 space-y-0.5 text-[11px] text-foreground/80 list-disc list-inside">
+                                                                    {checkoutItems.map((label, i) => (
+                                                                        <li key={`${log.id}-item-${i}`} className="not-italic">{label}</li>
+                                                                    ))}
+                                                                </ul>
+                                                            )}
+                                                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                                                                {formatLogTimestamp(log.timestamp)}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ))}
+                                    {filteredLogs.length > activityVisibleCount && (
+                                        <button
+                                            onClick={() => setActivityVisibleCount(c => c + 50)}
+                                            className="w-full mt-2 py-2 text-xs font-medium text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                                        >
+                                            Load {Math.min(50, filteredLogs.length - activityVisibleCount)} more
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </Card>
+                );
+            })()}
 
             {
                 transaction.status === 'CLOSED' && (

@@ -524,27 +524,32 @@ class StorageService {
         })) as Log[];
     }
 
-    async getLogsByEntities(entityIds: string[]): Promise<Log[]> {
+    async getLogsByEntities(
+        entityIds: string[],
+        options?: { since?: string; until?: string }
+    ): Promise<Log[]> {
         if (!entityIds || entityIds.length === 0) return [];
-        
+
         const chunkSize = 100;
         let allLogs: any[] = [];
-        
+
         for (let i = 0; i < entityIds.length; i += chunkSize) {
             const chunk = entityIds.slice(i, i + chunkSize);
-            const { data, error } = await supabase
+            let query = supabase
                 .from('logs')
                 .select('*')
-                .in('entity_id', chunk)
-                .order('timestamp', { ascending: false });
-                
+                .in('entity_id', chunk);
+            if (options?.since) query = query.gte('timestamp', options.since);
+            if (options?.until) query = query.lte('timestamp', options.until);
+            const { data, error } = await query.order('timestamp', { ascending: false });
+
             if (error) {
                 console.error('Error fetching logs for entities:', error);
             } else if (data) {
                 allLogs = [...allLogs, ...data];
             }
         }
-        
+
         return allLogs.map((l: any) => ({
             ...l,
             entityId: l.entity_id,

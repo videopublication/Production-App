@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 import path from "path";
+import { fileURLToPath } from "url";
+
+// ESM-safe project root. next.config.ts runs as an ES module under Next.js 16,
+// so __dirname is not defined; derive it from import.meta.url instead.
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -56,8 +61,13 @@ const withPWA = withPWAInit({
 const nextConfig: NextConfig = {
   // Pin workspace root to this project — a stray package-lock.json in the
   // parent directory was making Next.js infer the wrong root, which broke
-  // file tracing and (suspected) Tailwind content scan on the Vercel build.
-  outputFileTracingRoot: path.join(__dirname),
+  // file tracing and Tailwind/PostCSS resolution on dev + Vercel builds.
+  outputFileTracingRoot: projectRoot,
+  turbopack: {
+    // Webpack dev mode was also resolving from the inferred parent root,
+    // breaking `@import "tailwindcss"` in globals.css. Pin Turbopack's root too.
+    root: projectRoot,
+  },
   experimental: {
     optimizePackageImports: ['lucide-react', 'date-fns', 'html5-qrcode', 'lodash'],
   },

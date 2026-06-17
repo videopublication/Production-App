@@ -2814,13 +2814,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                 conflictCount > 0 ? `${conflictCount} conflict${conflictCount !== 1 ? 's' : ''}` : '',
                                                             ].filter(Boolean).join('\n');
 
+                                                            const isDraftShoot = bar.shoot.status === 'DRAFT';
                                                             return (
                                                                 <button
                                                                     key={`spanning-${bar.shoot.id}`}
                                                                     type="button"
                                                                     onClick={() => handleOpenShootPlan(bar.shoot)}
                                                                     title={title}
-                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-gray-200 border-l-4 bg-white px-2 text-left text-[11px] font-bold text-gray-800 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950/80 dark:text-gray-100 dark:hover:border-gray-700 dark:hover:bg-gray-900 ${isSelected ? 'ring-2 ring-primary/45 dark:ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-500/60' : ''}`}
+                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-l-4 px-2 text-left text-[11px] font-bold shadow-sm transition ${isDraftShoot
+                                                                        ? 'border-dashed border-amber-400/70 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100 dark:hover:bg-amber-950/50'
+                                                                        : 'border-gray-200 bg-white text-gray-800 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950/80 dark:text-gray-100 dark:hover:border-gray-700 dark:hover:bg-gray-900'
+                                                                    } ${isSelected ? 'ring-2 ring-primary/45 dark:ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-500/60' : ''}`}
                                                                     style={{
                                                                         ...accentStyle,
                                                                         gridColumn: `${bar.placement.columnStart} / span ${bar.placement.columnSpan}`,
@@ -2828,6 +2832,11 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     }}
                                                                 >
                                                                     <span className="min-w-0 flex-1 truncate">{bar.shoot.title}</span>
+                                                                    {isDraftShoot && (
+                                                                        <span className="shrink-0 rounded-full bg-amber-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-100">
+                                                                            Draft
+                                                                        </span>
+                                                                    )}
                                                                     <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-600 dark:bg-gray-900 dark:text-gray-300">
                                                                         {assignedCount === 0 ? 'Needs crew' : `${assignedCount} crew`}
                                                                     </span>
@@ -2910,12 +2919,19 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                         type="button"
                                                                         onClick={() => handleOpenShootPlan(shoot)}
                                                                         title={title}
-                                                                        className={`inline-flex max-w-[220px] items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors ${isSelected
+                                                                        className={`inline-flex max-w-[220px] items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors ${shoot.status === 'DRAFT' ? 'border-dashed' : ''} ${isSelected
                                                                             ? 'border-primary/60 bg-primary/10 text-primary'
-                                                                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:bg-gray-800/70'
+                                                                            : shoot.status === 'DRAFT'
+                                                                                ? 'border-amber-400/70 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/50'
+                                                                                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:bg-gray-800/70'
                                                                         }`}
                                                                     >
                                                                         <span className="truncate">{shoot.title}</span>
+                                                                        {shoot.status === 'DRAFT' && (
+                                                                            <span className="shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-200">
+                                                                                Draft
+                                                                            </span>
+                                                                        )}
                                                                         <span className="shrink-0 text-[10px] opacity-75">
                                                                             {assignedCount === 0 ? 'No crew' : `${assignedCount}`}
                                                                         </span>

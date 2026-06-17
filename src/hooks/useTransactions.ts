@@ -120,6 +120,14 @@ export function useCheckOut() {
                 userId: logUserId,
                 timestamp: new Date().toISOString(),
                 details: detailsMsg,
+                // Record exactly which items were on the cart at checkout. The Activity
+                // History UI uses this to let the user expand the entry and see the
+                // 10 items behind "Checked out 10 inventory items".
+                newValue: {
+                    itemIds: items.map(i => i.id),
+                    itemNames: items.map(i => `${i.name}${i.barcode ? ` (${i.barcode})` : ''}`),
+                    manualItems: manualItems.map(m => ({ name: m.name, quantity: m.quantity })),
+                },
                 departmentId
             });
 
