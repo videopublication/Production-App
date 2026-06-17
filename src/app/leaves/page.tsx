@@ -630,7 +630,7 @@ export default function LeavesPage() {
 
                     {/* Search + month filter (admin only) */}
                     {isAdmin && (
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(220px,1fr)_180px_auto]">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(220px\,1fr)_180px_auto]">
                             <div className="relative flex-1">
                                 <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                 <input

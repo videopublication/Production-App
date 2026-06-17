@@ -2484,7 +2484,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
+            <div className="grid grid-cols-1 2xl:grid-cols-[1fr_360px] gap-4 items-start">
                 {plannerViewMode === 'CREW' ? (
                 <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-sm overflow-hidden">
                     <div ref={plannerScrollRef} className="max-h-[calc(100vh-220px)] min-h-[520px] overflow-auto">
