@@ -2484,9 +2484,9 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 items-start">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-4 xl:items-start">
                 {plannerViewMode === 'CREW' ? (
-                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                <div className="min-w-0 rounded-2xl border border-border bg-card shadow-sm overflow-hidden xl:col-span-3">
                     <div ref={plannerScrollRef} className="max-h-[calc(100vh-220px)] min-h-[520px] overflow-auto">
                         <div style={{ minWidth: `${minGridWidth}px` }}>
                             <div
@@ -2580,7 +2580,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
                                                                     handleSelectPlannerItem(selectedCandidate.item, employee.id, day);
                                                                 }}
-                                                                className={`relative p-2 border-r last:border-r-0 border-border  ${dayAssignments.length > 0 ? 'cursor-pointer hover:bg-muted/50' : ''} ${isSelectedPlanningCell ? 'bg-muted/70 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]' : ''}`}
+                                                                className={`relative p-2 border-r last:border-r-0 border-border ${dayAssignments.length > 0 ? 'cursor-pointer hover:bg-muted/50' : ''} ${isSelectedPlanningCell ? 'bg-muted/70 ring-1 ring-inset ring-border' : ''}`}
                                                                 style={{ minHeight: `${rowMinHeight}px` }}
                                                             >
                                                                 {isSelectedPlanningCell && (
@@ -2666,7 +2666,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                             <Clock size={11} className="shrink-0" />
                                                                             <span className="min-w-0 truncate">
                                                                                 {formatPlannerItemTimeRange(item)}
-                                                                                {itemDateRange ? ` · ${itemDateRange}` : ''}
+                                                                                {itemDateRange ? ` - ${itemDateRange}` : ''}
                                                                             </span>
                                                                         </div>
                                                                     </div>
@@ -2724,7 +2724,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     </div>
                 </div>
                 ) : (
-                    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                    <div className="min-w-0 rounded-2xl border border-border bg-card shadow-sm overflow-hidden xl:col-span-3">
                         <div ref={plannerScrollRef} className="max-h-[calc(100vh-220px)] min-h-[520px] overflow-auto">
                             <div className="sticky top-0 z-20 border-b border-border bg-muted/40 px-4 py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -2818,7 +2818,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     type="button"
                                                                     onClick={() => handleOpenShootPlan(bar.shoot)}
                                                                     title={title}
-                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-border border-l-4 bg-background px-2 text-left text-[11px] font-bold text-foreground shadow-sm transition hover:border-border hover:bg-muted/40      ${accentClass} ${isSelected ? 'ring-2 ring-primary/45 ' : ''} ${conflictCount > 0 ? 'ring-1 ring-destructive/50' : ''}`}
+                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-border border-l-4 bg-background px-2 text-left text-[11px] font-bold text-foreground shadow-sm transition hover:border-border hover:bg-muted/40 ${accentClass} ${isSelected ? 'ring-2 ring-primary/45' : ''} ${conflictCount > 0 ? 'ring-1 ring-destructive/50' : ''}`}
                                                                     style={{
                                                                         gridColumn: `${bar.placement.columnStart} / span ${bar.placement.columnSpan}`,
                                                                         gridRow: bar.lane + 1,
@@ -2829,7 +2829,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                         {assignedCount === 0 ? 'Needs crew' : `${assignedCount} crew`}
                                                                     </span>
                                                                     {conflictCount > 0 && (
-                                                                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] text-primary-foreground">
+                                                                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] text-destructive-foreground">
                                                                             <AlertTriangle size={9} />
                                                                             {conflictCount}
                                                                         </span>
@@ -2875,7 +2875,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setExpandedConflictDay(isConflictExpanded ? null : conflictDateKey)}
-                                                                className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-1 text-primary-foreground transition-colors hover:bg-destructive/90 focus:outline-none focus:ring-2 focus:ring-destructive/40"
+                                                                className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-1 text-destructive-foreground transition-colors hover:bg-destructive/90 focus:outline-none focus:ring-2 focus:ring-destructive/40"
                                                             >
                                                                 <AlertTriangle size={12} />
                                                                 {groupConflictCount} conflict{groupConflictCount !== 1 ? 's' : ''}
@@ -2909,7 +2909,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                         title={title}
                                                                         className={`inline-flex max-w-[220px] items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors ${isSelected
                                                                             ? 'border-primary/60 bg-primary/10 text-primary'
-                                                                            : 'border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted     '
+                                                                            : 'border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted'
                                                                         }`}
                                                                     >
                                                                         <span className="truncate">{shoot.title}</span>
@@ -2999,16 +2999,16 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     const accentClass = plannerAccentColors[(shootIndex >= 0 ? shootIndex : 0) % plannerAccentColors.length];
                                                                     const segmentNote = getTimelineSegmentNote(segment, group.day);
                                                                     const rowStateClass = isSelected
-                                                                        ? 'bg-primary/5  shadow-[inset_0_0_0_1px_rgba(34,197,94,0.45)]'
+                                                                        ? 'bg-primary/5 ring-1 ring-inset ring-primary/40'
                                                                         : conflictCount > 0
-                                                                            ? 'bg-destructive/10 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.3)]'
+                                                                            ? 'bg-destructive/10 ring-1 ring-inset ring-destructive/30'
                                                                             : 'bg-transparent';
 
                                                                     return (
                                                                         <div
                                                                             key={`long-${segment.shoot.id}-${group.day.toISOString()}`}
                                                                             onClick={() => handleOpenShootPlan(segment.shoot)}
-                                                                            className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-l-4 px-3 py-2 text-xs text-foreground transition-colors hover:bg-background/80   ${hasSplitTimeline ? 'sm:grid-cols-[minmax(0,1fr)_auto]' : 'sm:grid-cols-[112px_minmax(0,1fr)_auto_auto]'} sm:gap-x-3 ${accentClass} ${rowStateClass}`}
+                                                                            className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-l-4 px-3 py-2 text-xs text-foreground transition-colors hover:bg-background/80 ${hasSplitTimeline ? 'sm:grid-cols-[minmax(0,1fr)_auto]' : 'sm:grid-cols-[112px_minmax(0,1fr)_auto_auto]'} sm:gap-x-3 ${accentClass} ${rowStateClass}`}
                                                                             title={segment.shoot.title}
                                                                         >
                                                                             <div className={`col-span-2 min-w-0 ${hasSplitTimeline ? 'sm:col-span-2' : 'sm:col-span-1'}`}>
@@ -3042,7 +3042,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                                     {uniqueAssignments.length === 0 ? 'Needs crew' : `${uniqueAssignments.length} crew`}
                                                                                 </span>
                                                                                 {conflictCount > 0 && (
-                                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-primary-foreground">
+                                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
                                                                                         <AlertTriangle size={11} />
                                                                                         {conflictCount}
                                                                                     </span>
@@ -3051,7 +3051,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                             <Link
                                                                                 href={getShootPlannerHref(segment.shoot.id)}
                                                                                 onClick={event => event.stopPropagation()}
-                                                                                className="inline-flex h-8 w-8 justify-self-end items-center justify-center rounded bg-muted text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100 focus:opacity-100   sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                                                                                className="inline-flex h-8 w-8 justify-self-end items-center justify-center rounded bg-muted text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                                                                                 title={`View ${segment.shoot.title}`}
                                                                             >
                                                                                 <ExternalLink size={13} />
@@ -3089,7 +3089,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                 {timelineTicks.map(tick => (
                                                                     <div
                                                                         key={tick.hour}
-                                                                        className={`absolute bottom-0 top-0 border-l ${tick.isMajor ? 'border-border/90 /90' : 'border-border/80 /90'}`}
+                                                                        className={`absolute bottom-0 top-0 border-l ${tick.isMajor ? 'border-border/90' : 'border-border/80'}`}
                                                                         style={{ left: `${(tick.hour / 24) * 100}%` }}
                                                                     />
                                                                 ))}
@@ -3107,7 +3107,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                             <div
                                                                                 key={`${segment.shoot.id}-${group.day.toISOString()}`}
                                                                                 onClick={() => handleOpenShootPlan(segment.shoot)}
-                                                                                className={`absolute grid min-h-[52px] min-w-[118px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-l-4 px-2.5 py-1.5 text-xs shadow-sm transition-all hover:shadow-md ${colorClass} ${isSelected ? 'ring-2 ring-primary/45 ' : ''} ${conflictCount > 0 ? 'ring-1 ring-destructive/60' : ''}`}
+                                                                                className={`absolute grid min-h-[52px] min-w-[118px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-l-4 px-2.5 py-1.5 text-xs shadow-sm transition-all hover:shadow-md ${colorClass} ${isSelected ? 'ring-2 ring-primary/45' : ''} ${conflictCount > 0 ? 'ring-1 ring-destructive/60' : ''}`}
                                                                                 style={{
                                                                                     left: `${segment.leftPercent}%`,
                                                                                     top: `${7 + segment.lane * 64}px`,
@@ -3120,7 +3120,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                                         <Clock size={11} className="shrink-0" />
                                                                                         <span className="truncate">{formatTimelineSegmentTime(segment)}</span>
                                                                                         {conflictCount > 0 && (
-                                                                                            <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] font-bold text-primary-foreground">
+                                                                                            <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] font-bold text-destructive-foreground">
                                                                                                 <AlertTriangle size={9} />
                                                                                                 {conflictCount}
                                                                                             </span>
@@ -3162,7 +3162,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     </div>
                 )}
 
-                <div className="space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-32px)] xl:overflow-y-auto">
+                <div className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:col-span-1 xl:max-h-[calc(100vh-32px)] xl:overflow-y-auto">
                     {plannerViewMode === 'CREW' && (
                     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
@@ -3646,7 +3646,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     {conflict.shoot.title}
                                                                 </p>
                                                                 <p className="text-[11px] text-warning/80 ">
-                                                                    {formatPlannerItemDateRange(conflict) || format(getItemStart(conflict) || selectedScheduleWindow.start, 'MMM d')} · {formatPlannerItemTimeRange(conflict)}
+                                                                    {formatPlannerItemDateRange(conflict) || format(getItemStart(conflict) || selectedScheduleWindow.start, 'MMM d')} - {formatPlannerItemTimeRange(conflict)}
                                                                 </p>
                                                             </div>
                                                             <Link
