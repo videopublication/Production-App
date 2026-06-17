@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
+import path from "path";
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -53,6 +54,10 @@ const withPWA = withPWAInit({
 
 
 const nextConfig: NextConfig = {
+  // Pin workspace root to this project — a stray package-lock.json in the
+  // parent directory was making Next.js infer the wrong root, which broke
+  // file tracing and (suspected) Tailwind content scan on the Vercel build.
+  outputFileTracingRoot: path.join(__dirname),
   experimental: {
     optimizePackageImports: ['lucide-react', 'date-fns', 'html5-qrcode', 'lodash'],
   },
