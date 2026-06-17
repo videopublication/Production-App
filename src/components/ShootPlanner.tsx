@@ -110,21 +110,21 @@ type ShootTimelineSegment = {
 };
 
 const plannerColors = [
-    'border-l-blue-500 border-blue-500/30 bg-blue-950/80 text-blue-100',
-    'border-l-emerald-500 border-emerald-500/30 bg-emerald-950/80 text-emerald-100',
-    'border-l-amber-500 border-amber-500/30 bg-amber-950/80 text-amber-100',
-    'border-l-rose-500 border-rose-500/30 bg-rose-950/80 text-rose-100',
-    'border-l-cyan-500 border-cyan-500/30 bg-cyan-950/80 text-cyan-100',
-    'border-l-violet-500 border-violet-500/30 bg-violet-950/80 text-violet-100',
+    'border-l-primary bg-card text-card-foreground',
+    'border-l-primary bg-card text-card-foreground',
+    'border-l-primary bg-card text-card-foreground',
+    'border-l-primary bg-card text-card-foreground',
+    'border-l-primary bg-card text-card-foreground',
+    'border-l-primary bg-card text-card-foreground',
 ];
 
 const plannerAccentColors = [
-    'border-l-blue-500',
-    'border-l-emerald-500',
-    'border-l-amber-500',
-    'border-l-rose-500',
-    'border-l-cyan-500',
-    'border-l-violet-500',
+    'border-l-primary',
+    'border-l-primary',
+    'border-l-primary',
+    'border-l-primary',
+    'border-l-primary',
+    'border-l-primary',
 ];
 
 const timelineMinVisualMinutes = 190;
@@ -294,21 +294,21 @@ const PlannerDropdown: React.FC<PlannerDropdownProps> = ({
                 type="button"
                 disabled={isDisabled}
                 onClick={() => setIsOpen(prev => !prev)}
-                className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-gray-700 bg-gray-900 px-3 text-left text-sm text-white shadow-sm transition-colors hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 text-left text-sm text-foreground shadow-sm transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
-                <span className={`min-w-0 truncate ${selectedOption ? '' : 'text-gray-500'}`}>
+                <span className={`min-w-0 truncate ${selectedOption ? '' : 'text-muted-foreground'}`}>
                     {selectedOption?.label || placeholder}
                 </span>
                 <ChevronDown
                     size={16}
-                    className={`shrink-0 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    className={`shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`}
                 />
             </button>
 
             {isOpen && !isDisabled && (
-                <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-xl border border-gray-700 bg-gray-950 p-1 shadow-2xl">
+                <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-2xl">
                     {enabledOptions.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-400">{placeholder}</div>
+                        <div className="px-3 py-2 text-sm text-muted-foreground">{placeholder}</div>
                     ) : (
                         enabledOptions.map(option => {
                             const isSelected = option.value === value;
@@ -321,14 +321,14 @@ const PlannerDropdown: React.FC<PlannerDropdownProps> = ({
                                         setIsOpen(false);
                                     }}
                                     className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${isSelected
-                                        ? 'bg-gray-800 text-white'
-                                        : 'text-gray-300 hover:bg-gray-900 hover:text-white'
+                                        ? 'bg-muted text-foreground'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                                         }`}
                                 >
                                     <span className="min-w-0 flex-1">
                                         <span className="block truncate font-semibold">{option.label}</span>
                                         {option.description && (
-                                            <span className="mt-0.5 block truncate text-xs text-gray-400">
+                                            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                                                 {option.description}
                                             </span>
                                         )}
@@ -2277,11 +2277,11 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
         : plannerRange === 'TWO_WEEK'
             ? 'Two Week Planner'
             : 'Weekly Planner';
-    const segmentedControlClass = 'border border-gray-700 bg-gray-950/70 p-1';
+    const segmentedControlClass = 'border border-border bg-background p-1';
     const getSegmentButtonClass = (isActive: boolean, baseClass: string) =>
         `${baseClass} transition-colors ${isActive
-            ? 'bg-gray-700 text-white shadow-sm'
-            : 'text-gray-400 hover:bg-gray-800/70 hover:text-white'
+            ? 'bg-muted text-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
         }`;
 
     return (
@@ -2294,11 +2294,11 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                 }
             }}
         >
-            <div className="rounded-2xl border border-gray-800 bg-[#1c1c1e] shadow-sm overflow-hidden">
-                <div className="px-4 sm:px-5 py-4 border-b border-gray-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
-                        <h2 className="text-lg sm:text-xl font-bold text-white">{rangeTitle}</h2>
-                        <p className="text-sm text-gray-400 mt-1">
+                        <h2 className="text-lg sm:text-xl font-bold text-foreground">{rangeTitle}</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
                             {plannerViewMode === 'CREW'
                                 ? `${rangeLabel} - ${activeEmployees.length} crew - ${plannerShoots.length} visible ${plannerShoots.length === 1 ? labels.workLower : labels.workPluralLower}`
                                 : `${rangeLabel} - ${visiblePlannerShoots.length} ${visiblePlannerShoots.length === 1 ? labels.workLower : labels.workPluralLower} - ${selectableEmployees.length} crew in pool`}
@@ -2369,7 +2369,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     ? startOfMonth(addMonths(prev, -1))
                                     : addDays(prev, -rangeStepDays));
                             }}
-                            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-700 text-gray-300 hover:bg-gray-800"
+                            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
                             title="Previous range"
                         >
                             <ChevronLeft size={18} />
@@ -2382,7 +2382,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     ? startOfMonth(new Date())
                                     : startOfWeek(new Date(), { weekStartsOn: 0 }));
                             }}
-                            className="h-9 px-3 rounded-lg border border-gray-700 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                            className="h-9 px-3 rounded-lg border border-border text-sm font-semibold text-muted-foreground hover:bg-muted"
                         >
                             {plannerRange === 'MONTH' ? 'This Month' : 'This Week'}
                         </button>
@@ -2394,7 +2394,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     ? startOfMonth(addMonths(prev, 1))
                                     : addDays(prev, rangeStepDays));
                             }}
-                            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-700 text-gray-300 hover:bg-gray-800"
+                            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
                             title="Next range"
                         >
                             <ChevronRight size={18} />
@@ -2418,35 +2418,35 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-gray-800">
+                <div className="grid grid-cols-2 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-border">
                     <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Scheduled</p>
-                        <p className="text-2xl font-bold text-white mt-1">{plannerShoots.length}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Scheduled</p>
+                        <p className="text-2xl font-bold text-foreground mt-1">{plannerShoots.length}</p>
                     </div>
                     <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Need Planning</p>
-                        <p className="text-2xl font-bold text-amber-300 mt-1">{unassignedShoots.length}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Need Planning</p>
+                        <p className="text-2xl font-bold text-warning mt-1">{unassignedShoots.length}</p>
                     </div>
                     <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Drafts</p>
-                        <p className="text-2xl font-bold text-amber-300 mt-1">{visibleDraftAssignments.length}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Drafts</p>
+                        <p className="text-2xl font-bold text-warning mt-1">{visibleDraftAssignments.length}</p>
                     </div>
                     <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Crew Used</p>
-                        <p className="text-2xl font-bold text-white mt-1">{assignedCrewCount}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Crew Used</p>
+                        <p className="text-2xl font-bold text-foreground mt-1">{assignedCrewCount}</p>
                     </div>
                     <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Conflicts</p>
-                        <p className={`text-2xl font-bold mt-1 ${conflictItems.length > 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conflicts</p>
+                        <p className={`text-2xl font-bold mt-1 ${conflictItems.length > 0 ? 'text-destructive' : 'text-success'}`}>
                             {conflictItems.length}
                         </p>
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-gray-800 flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
+                <div className="p-4 border-t border-border flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
                     <div className="flex w-full flex-col gap-3 lg:max-w-2xl lg:flex-row">
                         <div className="relative w-full lg:max-w-sm">
-                            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                             <input
                                 type="text"
                                 value={plannerViewMode === 'CREW' ? crewSearch : shootSearch}
@@ -2458,7 +2458,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     }
                                 }}
                                 placeholder={plannerViewMode === 'CREW' ? 'Search crew...' : `Search ${labels.workPluralLower}...`}
-                                className="h-10 w-full rounded-xl border border-gray-700 bg-gray-900 pl-9 pr-3 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                             />
                         </div>
                     </div>
@@ -2486,23 +2486,23 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 items-start">
                 {plannerViewMode === 'CREW' ? (
-                <div className="rounded-2xl border border-gray-800 bg-[#1c1c1e] shadow-sm overflow-hidden">
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
                     <div ref={plannerScrollRef} className="max-h-[calc(100vh-220px)] min-h-[520px] overflow-auto">
                         <div style={{ minWidth: `${minGridWidth}px` }}>
                             <div
-                                className="sticky top-0 z-30 grid bg-gray-800 border-b border-gray-800 shadow-sm"
+                                className="sticky top-0 z-30 grid bg-muted/40 border-b border-border shadow-sm"
                                 style={{ gridTemplateColumns: columnTemplate }}
                             >
-                                <div className="sticky left-0 z-20 bg-gray-800 px-4 py-3 border-r border-gray-800">
-                                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-400">
+                                <div className="sticky left-0 z-20 bg-muted/40 px-4 py-3 border-r border-border">
+                                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                         <Users size={14} />
                                         {crewFilter === 'ALL' ? 'All Crew' : 'Selected Crew'}
                                     </div>
                                 </div>
                                 {plannerDays.map(day => (
-                                    <div key={day.toISOString()} className="px-3 py-3 text-center border-r last:border-r-0 border-gray-800">
-                                        <p className="text-xs font-semibold uppercase text-gray-400">{format(day, 'EEE')}</p>
-                                        <p className={`mt-1 inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm font-bold ${isToday(day) ? 'bg-primary text-primary-foreground' : 'text-white'}`}>
+                                    <div key={day.toISOString()} className="px-3 py-3 text-center border-r last:border-r-0 border-border ">
+                                        <p className="text-xs font-semibold uppercase text-muted-foreground">{format(day, 'EEE')}</p>
+                                        <p className={`mt-1 inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm font-bold ${isToday(day) ? 'bg-primary text-primary-foreground' : 'text-foreground'}`}>
                                             {format(day, 'd')}
                                         </p>
                                     </div>
@@ -2510,7 +2510,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             </div>
 
                             {activeEmployees.length === 0 ? (
-                                <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                <div className="p-8 text-center text-sm text-muted-foreground">
                                     No crew found for this view.
                                 </div>
                             ) : (
@@ -2528,26 +2528,26 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     return (
                                         <div
                                             key={employee.id}
-                                            className="grid border-b last:border-b-0 border-gray-800"
+                                            className="grid border-b last:border-b-0 border-border "
                                             style={{ gridTemplateColumns: '240px minmax(0, 1fr)' }}
                                         >
                                             <div
-                                                className="sticky left-0 z-20 bg-[#1c1c1e] px-4 py-3 border-r border-gray-800"
+                                                className="sticky left-0 z-20 bg-card px-4 py-3 border-r border-border"
                                                 style={{ minHeight: `${rowMinHeight}px` }}
                                             >
                                                 <div className="flex items-start gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-sm font-bold text-gray-200 shrink-0">
+                                                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-sm font-bold text-foreground shrink-0">
                                                         {getInitials(employee.name)}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <p className="text-sm font-bold text-white truncate">{employee.name}</p>
-                                                        <p className="text-xs text-gray-400 truncate">{getRoleLabel(employee.role)}</p>
-                                                        <p className="text-xs font-semibold text-primary dark:text-primary mt-1">{weeklyHours} h planned</p>
+                                                        <p className="text-sm font-bold text-foreground truncate">{employee.name}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{getRoleLabel(employee.role)}</p>
+                                                        <p className="text-xs font-semibold text-primary mt-1">{weeklyHours} h planned</p>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="relative bg-[#1c1c1e]" style={{ minHeight: `${rowMinHeight}px` }}>
+                                            <div className="relative bg-card" style={{ minHeight: `${rowMinHeight}px` }}>
                                                 <div
                                                     className="absolute inset-0 grid"
                                                     style={{ gridTemplateColumns: dayColumnTemplate }}
@@ -2580,17 +2580,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
                                                                     handleSelectPlannerItem(selectedCandidate.item, employee.id, day);
                                                                 }}
-                                                                className={`relative p-2 border-r last:border-r-0 border-gray-800 ${dayAssignments.length > 0 ? 'cursor-pointer hover:bg-gray-800/40' : ''} ${isSelectedPlanningCell ? 'bg-gray-800/60 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]' : ''}`}
+                                                                className={`relative p-2 border-r last:border-r-0 border-border  ${dayAssignments.length > 0 ? 'cursor-pointer hover:bg-muted/50' : ''} ${isSelectedPlanningCell ? 'bg-muted/70 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]' : ''}`}
                                                                 style={{ minHeight: `${rowMinHeight}px` }}
                                                             >
                                                                 {isSelectedPlanningCell && (
-                                                                    <div className="absolute left-3 right-3 top-1 h-1 rounded-full bg-gray-500/70" />
+                                                                    <div className="absolute left-3 right-3 top-1 h-1 rounded-full bg-muted-foreground/50" />
                                                                 )}
                                                                 <div className="space-y-2">
                                                                     {dayLeaves.map(leave => (
                                                                         <div
                                                                             key={leave.id}
-                                                                            className="rounded-md border border-red-900/50 bg-red-950/30 px-2 py-1.5 text-xs text-red-200"
+                                                                            className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
                                                                             title={leave.reason}
                                                                         >
                                                                             <div className="font-bold">Absent</div>
@@ -2602,10 +2602,10 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => handleOpenCrewDayPlan(employee.id, day)}
-                                                                            className="group absolute inset-1 flex items-center justify-center rounded-lg border border-dashed border-transparent text-gray-500 opacity-0 transition-all hover:opacity-100 hover:border-gray-700 hover:bg-gray-900/50 hover:text-primary focus:opacity-100 focus:border-primary focus:bg-primary/10 focus:text-primary focus:outline-none"
+                                                                            className="group absolute inset-1 flex items-center justify-center rounded-lg border border-dashed border-transparent text-muted-foreground opacity-0 transition-all hover:opacity-100 hover:border-border hover:bg-muted/40 hover:text-primary focus:opacity-100 focus:border-primary focus:bg-primary/5 focus:text-primary focus:outline-none  "
                                                                             title={`Plan ${employee.name} on ${format(day, 'MMM d')}`}
                                                                         >
-                                                                            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-current/30 bg-gray-900/90 shadow-sm transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
+                                                                            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-current/30 bg-background shadow-sm transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
                                                                                 <Plus size={15} />
                                                                             </span>
                                                                         </button>
@@ -2639,7 +2639,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     employee.id,
                                                                     getDayFromPlannerCardClick(event, placement)
                                                                 )}
-                                                                className={`pointer-events-auto relative my-2 flex min-h-[92px] flex-col rounded-lg border border-gray-700 border-l-4 px-3 py-2 text-xs shadow-sm hover:shadow-md transition-shadow ${selectedPlannerItemKey === getPlannerItemKey(item) ? 'ring-2 ring-gray-600' : ''} ${itemConflictCount > 0 ? 'ring-1 ring-red-400/70' : ''} ${item.isDraft ? 'border-dashed ring-1 ring-amber-400/60' : ''} ${colorClass}`}
+                                                                className={`pointer-events-auto relative my-2 flex min-h-[92px] flex-col rounded-lg border border-border border-l-4 px-3 py-2 text-xs shadow-sm hover:shadow-md transition-shadow ${selectedPlannerItemKey === getPlannerItemKey(item) ? 'ring-2 ring-primary/40' : ''} ${itemConflictCount > 0 ? 'ring-1 ring-destructive/60' : ''} ${item.isDraft ? 'border-dashed ring-1 ring-warning/60' : ''} ${colorClass}`}
                                                                 style={{
                                                                     gridColumn: `${placement.columnStart} / span ${placement.columnSpan}`,
                                                                     gridRow: lane + 1,
@@ -2649,12 +2649,12 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                 {(item.isDraft || item.shoot.status === 'DRAFT') && (
                                                                     <div className="mb-1 flex flex-wrap gap-1">
                                                                         {item.shoot.status === 'DRAFT' && (
-                                                                            <span className="inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
+                                                                            <span className="inline-flex rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning">
                                                                                 Draft Shoot
                                                                             </span>
                                                                         )}
                                                                         {item.isDraft && (
-                                                                            <span className="inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
+                                                                            <span className="inline-flex rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning">
                                                                                 Tentative
                                                                             </span>
                                                                         )}
@@ -2672,7 +2672,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     </div>
                                                                     {itemConflictCount > 0 && (
                                                                         <span
-                                                                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-sm"
+                                                                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
                                                                             title={`${itemConflictCount} overlapping ${itemConflictCount === 1 ? 'assignment' : 'assignments'}`}
                                                                         >
                                                                             <AlertTriangle size={12} />
@@ -2693,7 +2693,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     <Link
                                                                         href={getShootPlannerHref(item.shoot.id)}
                                                                         onClick={event => event.stopPropagation()}
-                                                                        className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded bg-black/20 px-2 text-[11px] font-bold hover:bg-black/30"
+                                                                        className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded bg-background/80 px-2 text-[11px] font-bold hover:bg-muted"
                                                                     >
                                                                         <ExternalLink size={12} />
                                                                         View
@@ -2705,7 +2705,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                             handleRemoveAssignment(item);
                                                                         }}
                                                                         disabled={isRemoving}
-                                                                        className="inline-flex h-7 w-8 items-center justify-center rounded bg-black/20 text-red-300 hover:bg-red-950/40 disabled:opacity-50"
+                                                                        className="inline-flex h-7 w-8 items-center justify-center rounded bg-background/80 text-destructive hover:bg-destructive/10  disabled:opacity-50"
                                                                         title={`Remove ${employee.name} from ${item.shoot.title}`}
                                                                     >
                                                                         <Trash2 size={12} />
@@ -2724,42 +2724,42 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     </div>
                 </div>
                 ) : (
-                    <div className="rounded-2xl border border-gray-800 bg-[#1c1c1e] shadow-sm overflow-hidden">
+                    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
                         <div ref={plannerScrollRef} className="max-h-[calc(100vh-220px)] min-h-[520px] overflow-auto">
-                            <div className="sticky top-0 z-20 border-b border-gray-800 bg-gray-800 px-4 py-3">
+                            <div className="sticky top-0 z-20 border-b border-border bg-muted/40 px-4 py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                             {labels.workSingular} timeline
                                         </p>
-                                        <p className="text-sm text-gray-300">
+                                        <p className="text-sm text-muted-foreground">
                                             Grouped by date so same-day overlaps are visible.
                                         </p>
                                     </div>
-                                    <p className="text-xs font-semibold text-gray-400">
+                                    <p className="text-xs font-semibold text-muted-foreground">
                                         {visiblePlannerShoots.length} visible
                                     </p>
                                 </div>
                             </div>
 
                             {shootTimelineGroups.length === 0 && spanningShootBars.length === 0 ? (
-                                <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                <div className="p-8 text-center text-sm text-muted-foreground">
                                     No {labels.workPluralLower} found for this view.
                                 </div>
                             ) : (
                                 <div className="space-y-4 p-4">
                                     {spanningShootBars.length > 0 && (
-                                        <div className="rounded-xl border border-gray-800 bg-[#1c1c1e] shadow-sm">
-                                            <div className="flex items-center justify-between gap-3 border-b border-gray-800 bg-gray-900/45 px-4 py-3">
+                                        <div className="rounded-xl border border-border bg-card shadow-sm">
+                                            <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3">
                                                 <div>
-                                                    <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                                         Multi-day {labels.workPluralLower}
                                                     </p>
-                                                    <p className="text-xs text-gray-400">
+                                                    <p className="text-xs text-muted-foreground">
                                                         One line connects the dates it covers.
                                                     </p>
                                                 </div>
-                                                <p className="text-xs font-semibold text-gray-400">
+                                                <p className="text-xs font-semibold text-muted-foreground">
                                                     {spanningShootBars.length} {spanningShootBars.length === 1 ? labels.workLower : labels.workPluralLower}
                                                 </p>
                                             </div>
@@ -2767,18 +2767,18 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                             <div className="overflow-x-auto p-3">
                                                 <div style={{ minWidth: `${Math.max(960, plannerDays.length * 84)}px` }}>
                                                     <div
-                                                        className="grid border-b border-gray-800 pb-2 text-center text-[10px] font-bold uppercase tracking-wide text-gray-500"
+                                                        className="grid border-b border-border pb-2 text-center text-[10px] font-bold uppercase tracking-wide text-muted-foreground "
                                                         style={{ gridTemplateColumns: `repeat(${plannerDays.length}, minmax(84px, 1fr))` }}
                                                     >
                                                         {plannerDays.map(day => (
-                                                            <div key={`range-day-${day.toISOString()}`} className="truncate border-r border-gray-800 px-2 last:border-r-0">
+                                                            <div key={`range-day-${day.toISOString()}`} className="truncate border-r border-border px-2 last:border-r-0 ">
                                                                 {format(day, 'MMM d')}
                                                             </div>
                                                         ))}
                                                     </div>
 
                                                     <div
-                                                        className="relative grid gap-y-1 rounded-b-lg bg-black/10 py-2"
+                                                        className="relative grid gap-y-1 rounded-b-lg bg-muted/30 py-2 "
                                                         style={{
                                                             gridTemplateColumns: `repeat(${plannerDays.length}, minmax(84px, 1fr))`,
                                                             gridTemplateRows: `repeat(${spanningLaneCount}, 26px)`,
@@ -2790,7 +2790,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                             style={{ gridTemplateColumns: `repeat(${plannerDays.length}, minmax(84px, 1fr))` }}
                                                         >
                                                             {plannerDays.map(day => (
-                                                                <div key={`range-grid-${day.toISOString()}`} className="border-r border-gray-800 last:border-r-0" />
+                                                                <div key={`range-grid-${day.toISOString()}`} className="border-r border-border last:border-r-0 " />
                                                             ))}
                                                         </div>
 
@@ -2818,18 +2818,18 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     type="button"
                                                                     onClick={() => handleOpenShootPlan(bar.shoot)}
                                                                     title={title}
-                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-gray-800 border-l-4 bg-gray-950/80 px-2 text-left text-[11px] font-bold text-gray-100 shadow-sm transition hover:border-gray-700 hover:bg-gray-900 ${accentClass} ${isSelected ? 'ring-2 ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-500/60' : ''}`}
+                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-border border-l-4 bg-background px-2 text-left text-[11px] font-bold text-foreground shadow-sm transition hover:border-border hover:bg-muted/40      ${accentClass} ${isSelected ? 'ring-2 ring-primary/45 ' : ''} ${conflictCount > 0 ? 'ring-1 ring-destructive/50' : ''}`}
                                                                     style={{
                                                                         gridColumn: `${bar.placement.columnStart} / span ${bar.placement.columnSpan}`,
                                                                         gridRow: bar.lane + 1,
                                                                     }}
                                                                 >
                                                                     <span className="min-w-0 flex-1 truncate">{bar.shoot.title}</span>
-                                                                    <span className="shrink-0 rounded-full bg-gray-900 px-1.5 py-0.5 text-[9px] text-gray-300">
+                                                                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
                                                                         {assignedCount === 0 ? 'Needs crew' : `${assignedCount} crew`}
                                                                     </span>
                                                                     {conflictCount > 0 && (
-                                                                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] text-white">
+                                                                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] text-primary-foreground">
                                                                             <AlertTriangle size={9} />
                                                                             {conflictCount}
                                                                         </span>
@@ -2856,14 +2856,14 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                         return (
                                             <div
                                                 key={group.day.toISOString()}
-                                                className="overflow-hidden rounded-xl border border-gray-800 bg-[#1c1c1e] shadow-sm"
+                                                className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
                                             >
-                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 bg-gray-900/45 px-4 py-3">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3">
                                                     <div>
-                                                        <p className="text-sm font-bold text-white">
+                                                        <p className="text-sm font-bold text-foreground">
                                                             {format(group.day, 'EEE, MMM d')}
                                                         </p>
-                                                        <p className="text-xs text-gray-400">
+                                                        <p className="text-xs text-muted-foreground">
                                                             {group.segments.length} timed {group.segments.length === 1 ? labels.workLower : labels.workPluralLower}
                                                             {group.activeMultiDayShoots.length > 0
                                                                 ? ` - ${group.activeMultiDayShoots.length} multi-day active`
@@ -2875,7 +2875,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setExpandedConflictDay(isConflictExpanded ? null : conflictDateKey)}
-                                                                className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2 py-1 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-800"
+                                                                className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-1 text-primary-foreground transition-colors hover:bg-destructive/90 focus:outline-none focus:ring-2 focus:ring-destructive/40"
                                                             >
                                                                 <AlertTriangle size={12} />
                                                                 {groupConflictCount} conflict{groupConflictCount !== 1 ? 's' : ''}
@@ -2885,9 +2885,9 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                 </div>
 
                                                 {group.activeMultiDayShoots.length > 0 && (
-                                                    <div className="border-b border-gray-800 px-4 py-2">
+                                                    <div className="border-b border-border px-4 py-2 ">
                                                         <div className="flex flex-wrap items-center gap-2">
-                                                            <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                                                            <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                                                                 Active multi-day
                                                             </span>
                                                             {group.activeMultiDayShoots.slice(0, 4).map(shoot => {
@@ -2908,8 +2908,8 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                         onClick={() => handleOpenShootPlan(shoot)}
                                                                         title={title}
                                                                         className={`inline-flex max-w-[220px] items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors ${isSelected
-                                                                                            ? 'border-primary/60 bg-primary/10 text-primary'
-                                                                            : 'border-gray-800 bg-gray-900/60 text-gray-300 hover:border-gray-700 hover:bg-gray-800/70'
+                                                                            ? 'border-primary/60 bg-primary/10 text-primary'
+                                                                            : 'border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted     '
                                                                         }`}
                                                                     >
                                                                         <span className="truncate">{shoot.title}</span>
@@ -2920,7 +2920,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                 );
                                                             })}
                                                             {group.activeMultiDayShoots.length > 4 && (
-                                                                <span className="text-[11px] font-semibold text-gray-500">
+                                                                <span className="text-[11px] font-semibold text-muted-foreground">
                                                                     +{group.activeMultiDayShoots.length - 4} more
                                                                 </span>
                                                             )}
@@ -2929,15 +2929,15 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                 )}
 
                                                 {isConflictExpanded && dayConflicts.length > 0 && (
-                                                    <div className="border-b border-red-900/50 bg-red-950/20 px-4 py-3">
+                                                    <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-3">
                                                         <div className="mb-2 flex items-center justify-between gap-3">
-                                                            <p className="text-xs font-bold uppercase tracking-wide text-red-200">
+                                                            <p className="text-xs font-bold uppercase tracking-wide text-destructive">
                                                                 Conflict details
                                                             </p>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setExpandedConflictDay(null)}
-                                                                className="text-xs font-semibold text-red-200 hover:underline"
+                                                                className="text-xs font-semibold text-destructive hover:underline"
                                                             >
                                                                 Close
                                                             </button>
@@ -2946,22 +2946,22 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                             {dayConflicts.map(conflict => (
                                                                 <div
                                                                     key={conflict.key}
-                                                                    className="rounded-lg border border-red-900/60 bg-red-950/25 p-3 text-xs text-red-100"
+                                                                    className="rounded-lg border border-destructive/30 bg-background/80 p-3 text-xs text-destructive "
                                                                 >
                                                                     <div className="mb-2 flex items-center justify-between gap-2">
                                                                         <span className="min-w-0 truncate font-bold">
                                                                             {conflict.user?.name || 'Crew member'}
                                                                         </span>
-                                                                        <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                                                                        <span className="shrink-0 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground">
                                                                             Overlap {format(conflict.overlapStart, 'HH:mm')} - {format(conflict.overlapEnd, 'HH:mm')}
                                                                         </span>
                                                                     </div>
                                                                     {[conflict.first, conflict.second].map(item => (
                                                                         <div
                                                                             key={getPlannerItemKey(item)}
-                                                                            className="mt-1 grid grid-cols-[82px_minmax(0,1fr)] gap-2 rounded-md bg-red-950/50 px-2 py-1.5"
+                                                                            className="mt-1 grid grid-cols-[82px_minmax(0,1fr)] gap-2 rounded-md bg-destructive/15 px-2 py-1.5"
                                                                         >
-                                                                                <span className="font-semibold text-red-200">
+                                                                            <span className="font-semibold text-destructive">
                                                                                 {formatConflictItemWindow(item, group.day)}
                                                                             </span>
                                                                             <span className="truncate font-semibold">
@@ -2982,14 +2982,14 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                     {longSegments.length > 0 && (
                                                         <div className="min-w-0">
                                                             <div className="mb-2 flex items-center justify-between gap-3">
-                                                                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                                                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                                                                     Spans this day
                                                                 </p>
-                                                                <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500">
+                                                                <p className="text-[11px] font-semibold text-muted-foreground">
                                                                     {longSegments.length} {longSegments.length === 1 ? labels.workLower : labels.workPluralLower}
                                                                 </p>
                                                             </div>
-                                                            <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-900/20 divide-y divide-gray-800">
+                                                            <div className="overflow-hidden rounded-lg border border-border bg-muted/30 divide-y divide-border">
                                                                 {longSegments.map(segment => {
                                                                     const shootAssignments = getAssignmentsForShoot(segment.shoot.id);
                                                                     const uniqueAssignments = getUniqueCrewAssignments(shootAssignments);
@@ -2999,25 +2999,25 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     const accentClass = plannerAccentColors[(shootIndex >= 0 ? shootIndex : 0) % plannerAccentColors.length];
                                                                     const segmentNote = getTimelineSegmentNote(segment, group.day);
                                                                     const rowStateClass = isSelected
-                                                                        ? 'bg-primary/10 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.45)]'
+                                                                        ? 'bg-primary/5  shadow-[inset_0_0_0_1px_rgba(34,197,94,0.45)]'
                                                                         : conflictCount > 0
-                                                                            ? 'bg-red-950/15 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.3)]'
+                                                                            ? 'bg-destructive/10 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.3)]'
                                                                             : 'bg-transparent';
 
                                                                     return (
                                                                         <div
                                                                             key={`long-${segment.shoot.id}-${group.day.toISOString()}`}
                                                                             onClick={() => handleOpenShootPlan(segment.shoot)}
-                                                                            className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-l-4 px-3 py-2 text-xs text-gray-100 transition-colors hover:bg-gray-900/70 ${hasSplitTimeline ? 'sm:grid-cols-[minmax(0,1fr)_auto]' : 'sm:grid-cols-[112px_minmax(0,1fr)_auto_auto]'} sm:gap-x-3 ${accentClass} ${rowStateClass}`}
+                                                                            className={`group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-l-4 px-3 py-2 text-xs text-foreground transition-colors hover:bg-background/80   ${hasSplitTimeline ? 'sm:grid-cols-[minmax(0,1fr)_auto]' : 'sm:grid-cols-[112px_minmax(0,1fr)_auto_auto]'} sm:gap-x-3 ${accentClass} ${rowStateClass}`}
                                                                             title={segment.shoot.title}
                                                                         >
                                                                             <div className={`col-span-2 min-w-0 ${hasSplitTimeline ? 'sm:col-span-2' : 'sm:col-span-1'}`}>
                                                                                 <div className="flex items-center gap-1 font-bold">
-                                                                                    <Clock size={12} className="shrink-0 text-gray-400" />
+                                                                                    <Clock size={12} className="shrink-0 text-muted-foreground" />
                                                                                     <span className="truncate">{formatTimelineSegmentTime(segment)}</span>
                                                                                 </div>
                                                                                 {segmentNote && (
-                                                                                    <div className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                                                                    <div className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                                                                         {segmentNote}
                                                                                     </div>
                                                                                 )}
@@ -3031,18 +3031,18 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                                     )}
                                                                                     <span className="truncate text-sm font-bold">{segment.shoot.title}</span>
                                                                                     {segment.shoot.status === 'DRAFT' && (
-                                                                                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-200">
+                                                                                        <span className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-warning">
                                                                                             Draft
                                                                                         </span>
                                                                                     )}
                                                                                 </div>
                                                                             </div>
                                                                             <div className="flex shrink-0 items-center gap-2">
-                                                                                <span className="rounded-full bg-gray-950/70 px-2 py-1 text-[10px] font-bold text-gray-300">
+                                                                                <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-bold text-muted-foreground">
                                                                                     {uniqueAssignments.length === 0 ? 'Needs crew' : `${uniqueAssignments.length} crew`}
                                                                                 </span>
                                                                                 {conflictCount > 0 && (
-                                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-primary-foreground">
                                                                                         <AlertTriangle size={11} />
                                                                                         {conflictCount}
                                                                                     </span>
@@ -3051,7 +3051,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                             <Link
                                                                                 href={getShootPlannerHref(segment.shoot.id)}
                                                                                 onClick={event => event.stopPropagation()}
-                                                                                className="inline-flex h-8 w-8 justify-self-end items-center justify-center rounded bg-gray-900 text-gray-300 opacity-70 transition-opacity hover:bg-gray-800 hover:opacity-100 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                                                                                className="inline-flex h-8 w-8 justify-self-end items-center justify-center rounded bg-muted text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100 focus:opacity-100   sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                                                                                 title={`View ${segment.shoot.title}`}
                                                                             >
                                                                                 <ExternalLink size={13} />
@@ -3066,11 +3066,11 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                     {timedSegments.length > 0 ? (
                                                         <div className="overflow-x-auto">
                                                             <div className="min-w-[960px]">
-                                                                <div className="relative h-7 text-[11px] font-semibold text-gray-500">
+                                                                <div className="relative h-7 text-[11px] font-semibold text-muted-foreground">
                                                                     {timelineTicks.map(tick => (
                                                                         <span
                                                                             key={tick.hour}
-                                                                            className={`absolute top-0 ${tick.isMajor ? 'text-gray-400' : 'text-gray-600'}`}
+                                                                            className={`absolute top-0 ${tick.isMajor ? 'text-muted-foreground' : 'text-muted-foreground/50 '}`}
                                                                             style={{
                                                                                 left: `${(tick.hour / 24) * 100}%`,
                                                                                 transform: tick.hour === 0 ? 'translateX(0)' : tick.hour === 24 ? 'translateX(-100%)' : 'translateX(-50%)',
@@ -3082,14 +3082,14 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                 </div>
 
                                                                 <div
-                                                                    className="relative rounded-lg border border-gray-800 bg-black/10"
+                                                                    className="relative rounded-lg border border-border bg-muted/30"
                                                                     style={{ height: `${laneCount * 64 + 14}px` }}
                                                                 >
                                                                     <div className="pointer-events-none absolute inset-0">
                                                                 {timelineTicks.map(tick => (
                                                                     <div
                                                                         key={tick.hour}
-                                                                        className={`absolute bottom-0 top-0 border-l ${tick.isMajor ? 'border-gray-800/90' : 'border-gray-900/90'}`}
+                                                                        className={`absolute bottom-0 top-0 border-l ${tick.isMajor ? 'border-border/90 /90' : 'border-border/80 /90'}`}
                                                                         style={{ left: `${(tick.hour / 24) * 100}%` }}
                                                                     />
                                                                 ))}
@@ -3107,7 +3107,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                             <div
                                                                                 key={`${segment.shoot.id}-${group.day.toISOString()}`}
                                                                                 onClick={() => handleOpenShootPlan(segment.shoot)}
-                                                                                className={`absolute grid min-h-[52px] min-w-[118px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-l-4 px-2.5 py-1.5 text-xs shadow-sm transition-all hover:shadow-md ${colorClass} ${isSelected ? 'ring-2 ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-400/70' : ''}`}
+                                                                                className={`absolute grid min-h-[52px] min-w-[118px] cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-l-4 px-2.5 py-1.5 text-xs shadow-sm transition-all hover:shadow-md ${colorClass} ${isSelected ? 'ring-2 ring-primary/45 ' : ''} ${conflictCount > 0 ? 'ring-1 ring-destructive/60' : ''}`}
                                                                                 style={{
                                                                                     left: `${segment.leftPercent}%`,
                                                                                     top: `${7 + segment.lane * 64}px`,
@@ -3120,7 +3120,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                                         <Clock size={11} className="shrink-0" />
                                                                                         <span className="truncate">{formatTimelineSegmentTime(segment)}</span>
                                                                                         {conflictCount > 0 && (
-                                                                                            <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                                                                                            <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] font-bold text-primary-foreground">
                                                                                                 <AlertTriangle size={9} />
                                                                                                 {conflictCount}
                                                                                             </span>
@@ -3136,7 +3136,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                                 <Link
                                                                                     href={getShootPlannerHref(segment.shoot.id)}
                                                                                     onClick={event => event.stopPropagation()}
-                                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded bg-black/20 hover:bg-black/30"
+                                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded bg-background/60 hover:bg-background"
                                                                                     title={`View ${segment.shoot.title}`}
                                                                                 >
                                                                                     <ExternalLink size={12} />
@@ -3148,7 +3148,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <div className="rounded-lg border border-dashed border-gray-800 px-3 py-4 text-center text-xs text-gray-400">
+                                                        <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground ">
                                                             No timed {labels.workPluralLower} on this date.
                                                         </div>
                                                     )}
@@ -3164,11 +3164,11 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
                 <div className="space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-32px)] xl:overflow-y-auto">
                     {plannerViewMode === 'CREW' && (
-                    <div className="rounded-2xl border border-gray-800 bg-[#1c1c1e] p-4 shadow-sm">
+                    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                                 <CalendarPlus size={18} className="text-primary" />
-                                <h3 className="font-bold text-white">Create Draft {labels.workSingular}</h3>
+                                <h3 className="font-bold text-foreground">Create Draft {labels.workSingular}</h3>
                             </div>
                             <button
                                 type="button"
@@ -3182,44 +3182,44 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                         {showDraftShootForm && (
                             <div className="mt-4 space-y-3">
                                 <label className="block">
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Title</span>
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Title</span>
                                     <input
                                         type="text"
                                         value={draftShootTitle}
                                         onChange={event => setDraftShootTitle(event.target.value)}
                                         placeholder={`${labels.workSingular} title`}
-                                        className="mt-1 h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
+                                        className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                     />
                                 </label>
 
                                 <label className="block">
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Location</span>
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Location</span>
                                     <input
                                         type="text"
                                         value={draftShootLocation}
                                         onChange={event => setDraftShootLocation(event.target.value)}
                                         placeholder="Location"
-                                        className="mt-1 h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
+                                        className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                     />
                                 </label>
 
                                 <div className="grid grid-cols-1 gap-2">
                                     <label className="block">
-                                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Start</span>
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start</span>
                                         <input
                                             type="datetime-local"
                                             value={draftShootStart}
                                             onChange={event => setDraftShootStart(event.target.value)}
-                                            className="mt-1 h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                            className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                         />
                                     </label>
                                     <label className="block">
-                                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">End</span>
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">End</span>
                                         <input
                                             type="datetime-local"
                                             value={draftShootEnd}
                                             onChange={event => setDraftShootEnd(event.target.value)}
-                                            className="mt-1 h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                            className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                         />
                                     </label>
                                 </div>
@@ -3240,17 +3240,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     )}
 
                     {selectedPlannerItem && (
-                        <div className="rounded-2xl border border-primary/25 bg-[#1c1c1e] p-4 shadow-sm">
+                        <div className="rounded-2xl border border-primary/25 bg-card p-4 shadow-sm">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2">
                                         <Clock size={18} className="text-primary" />
-                                        <h3 className="font-bold text-white">Crew Timing</h3>
+                                        <h3 className="font-bold text-foreground">Crew Timing</h3>
                                     </div>
-                                    <p className="mt-2 text-sm font-semibold text-white line-clamp-2">
+                                    <p className="mt-2 text-sm font-semibold text-foreground line-clamp-2">
                                         {selectedPlannerItem.shoot.title}
                                     </p>
-                                    <p className="text-xs text-gray-400">
+                                    <p className="text-xs text-muted-foreground">
                                         {selectedPlannerEmployee?.name || 'Crew'} - {selectedPlannerItem.isDraft ? 'Draft plan' : 'Live assignment'}
                                     </p>
                                     {selectedPlanDate && (
@@ -3262,17 +3262,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setSelectedPlannerItemKey('')}
-                                    className="text-xs font-semibold text-gray-400 hover:text-primary"
+                                    className="text-xs font-semibold text-muted-foreground hover:text-primary "
                                 >
                                     Close
                                 </button>
                             </div>
 
-                            <div className="mt-3 rounded-xl border border-gray-800 bg-gray-900/60 px-3 py-2.5 text-xs">
-                                <p className="font-bold uppercase tracking-wide text-gray-400">
+                            <div className="mt-3 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-xs">
+                                <p className="font-bold uppercase tracking-wide text-muted-foreground">
                                     Current setup
                                 </p>
-                                <p className="mt-1 text-gray-200">
+                                <p className="mt-1 text-foreground">
                                     {selectedPlannerHasCustomTime
                                         ? 'This crew member has a custom working time for this assignment.'
                                         : 'This crew member is following the main shoot time. Save a custom time only if their working hours are different.'}
@@ -3280,30 +3280,30 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             </div>
 
                             <div className="mt-4 space-y-3">
-                                <div className="rounded-xl border border-gray-800 p-3">
-                                    <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                <div className="rounded-xl border border-border p-3">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                         Change working time
                                     </p>
-                                    <p className="mt-1 text-xs text-gray-400">
+                                    <p className="mt-1 text-xs text-muted-foreground">
                                         Use this when the crew member starts later, leaves earlier, or works only part of the shoot.
                                     </p>
                                     <div className="mt-3 grid grid-cols-1 gap-2">
                                     <label className="block">
-                                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Work starts</span>
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Work starts</span>
                                         <input
                                             type="datetime-local"
                                             value={editSegmentStart}
                                             onChange={event => setEditSegmentStart(event.target.value)}
-                                            className="mt-1 h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                            className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                         />
                                     </label>
                                     <label className="block">
-                                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Work ends</span>
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Work ends</span>
                                         <input
                                             type="datetime-local"
                                             value={editSegmentEnd}
                                             onChange={event => setEditSegmentEnd(event.target.value)}
-                                            className="mt-1 h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                            className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                         />
                                     </label>
                                     </div>
@@ -3329,27 +3329,27 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     </Button>
                                     </div>
                                     {!selectedPlannerHasCustomTime && (
-                                        <p className="mt-2 text-xs text-gray-400">
+                                        <p className="mt-2 text-xs text-muted-foreground">
                                             Save once before adding another time block.
                                         </p>
                                     )}
                                 </div>
 
                                 {selectedPlannerCoversMultipleDates && (
-                                    <div className="rounded-xl border border-gray-800 p-3">
-                                        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                    <div className="rounded-xl border border-border p-3">
+                                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                             Remove one date
                                         </p>
-                                        <p className="mt-1 text-xs text-gray-400">
+                                        <p className="mt-1 text-xs text-muted-foreground">
                                             Use this if the crew member is not working on one day inside this time range.
                                         </p>
                                         <label className="block">
-                                            <span className="mt-3 block text-xs font-semibold uppercase tracking-wide text-gray-400">Date to remove</span>
+                                            <span className="mt-3 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date to remove</span>
                                             <input
                                                 type="date"
                                                 value={editSegmentDay}
                                                 onChange={event => setEditSegmentDay(event.target.value)}
-                                                className="mt-1 h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                                className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                             />
                                         </label>
                                         <Button
@@ -3387,17 +3387,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     )}
 
                     {plannerViewMode === 'SHOOT' && selectedShoot && selectedScheduleWindow && (
-                        <div className="rounded-2xl border border-gray-800 bg-[#1c1c1e] p-4 shadow-sm">
+                        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2">
                                         <UserCheck size={18} className="text-primary" />
-                                        <h3 className="font-bold text-white">Crew for this shoot</h3>
+                                        <h3 className="font-bold text-foreground">Crew for this shoot</h3>
                                     </div>
-                                    <p className="mt-2 line-clamp-2 text-sm font-semibold text-white">
+                                    <p className="mt-2 line-clamp-2 text-sm font-semibold text-foreground">
                                         {selectedShoot.title}
                                     </p>
-                                    <p className="mt-1 text-xs text-gray-400">
+                                    <p className="mt-1 text-xs text-muted-foreground">
                                         {format(selectedScheduleWindow.start, 'MMM d, HH:mm')} - {format(selectedScheduleWindow.end, 'MMM d, HH:mm')}
                                     </p>
                                 </div>
@@ -3408,7 +3408,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
                             {onCrewFilterChange && (
                                 <label className="mt-4 block">
-                                    <span className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                         Show crew
                                     </span>
                                     <PlannerDropdown
@@ -3420,8 +3420,8 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             )}
 
                             {selectedShootCrewAssignments.length > 0 && (
-                                <div className="mt-4 rounded-xl border border-gray-800 p-3">
-                                    <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                <div className="mt-4 rounded-xl border border-border p-3">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                         Already on this shoot
                                     </p>
                                     <div className="mt-2 flex flex-wrap gap-2">
@@ -3436,9 +3436,9 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                         item.assignment.userId,
                                                         selectedPlanDate || startOfDay(selectedScheduleWindow.start)
                                                     )}
-                                                    className="inline-flex items-center gap-1 rounded-full bg-gray-900 px-2 py-1 text-xs font-semibold text-gray-200 hover:bg-gray-800"
+                                                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted  "
                                                 >
-                                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px]">
+                                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-background text-[10px] ">
                                                         {getInitials(employee?.name || 'Crew')}
                                                     </span>
                                                     {employee?.name || 'Crew'}
@@ -3446,7 +3446,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                             );
                                         })}
                                         {selectedShootCrewAssignments.length > 8 && (
-                                            <span className="inline-flex rounded-full bg-gray-900 px-2 py-1 text-xs font-semibold text-gray-400">
+                                            <span className="inline-flex rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground ">
                                                 +{selectedShootCrewAssignments.length - 8} more
                                             </span>
                                         )}
@@ -3456,29 +3456,29 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
                             <div className="mt-4 space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                         Available to add
                                     </p>
                                 </div>
                                 {availableCrewForSelectedShoot.length === 0 ? (
-                                    <p className="rounded-lg bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+                                    <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                                         No free crew found in the current crew pool.
                                     </p>
                                 ) : (
                                     visibleAvailableCrewForSelectedShoot.map(item => (
                                         <div
                                             key={item.employee.id}
-                                            className="flex items-center justify-between gap-3 rounded-lg border border-emerald-900/60 bg-emerald-950/20 px-3 py-2"
+                                            className="flex items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/10 px-3 py-2"
                                         >
                                             <div className="min-w-0 flex items-center gap-2">
-                                                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/20 text-xs font-bold text-emerald-200">
+                                                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background text-xs font-bold text-success">
                                                     {getInitials(item.employee.name)}
                                                 </span>
                                                 <div className="min-w-0">
-                                                    <p className="truncate text-sm font-semibold text-white">
+                                                    <p className="truncate text-sm font-semibold text-foreground">
                                                         {item.employee.name}
                                                     </p>
-                                                    <p className="text-xs text-gray-400">
+                                                    <p className="text-xs text-muted-foreground">
                                                         {getRoleLabel(item.employee.role)}
                                                     </p>
                                                 </div>
@@ -3497,7 +3497,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => setShowAllAvailableCrew(prev => !prev)}
-                                        className="w-full rounded-lg border border-gray-800 px-3 py-2 text-xs font-bold text-gray-300 hover:border-primary hover:text-primary"
+                                        className="w-full rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground hover:border-primary hover:text-primary   "
                                     >
                                         {showAllAvailableCrew
                                             ? 'Show less'
@@ -3507,11 +3507,11 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             </div>
 
                             {selectedEmployee && (
-                                <div className="mt-4 rounded-xl border border-primary/20 bg-primary/10 p-3">
+                                <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3 ">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold uppercase tracking-wide text-primary">Add crew</p>
-                                            <p className="truncate text-sm font-semibold text-white">
+                                            <p className="truncate text-sm font-semibold text-foreground">
                                                 {selectedEmployee.name}
                                             </p>
                                         </div>
@@ -3526,7 +3526,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
                                     <div className="mt-3 grid grid-cols-1 gap-3">
                                         <label className="block">
-                                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Role</span>
+                                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Role</span>
                                             <PlannerDropdown
                                                 value={plannerRole}
                                                 onChange={value => setPlannerRole(value as 'DEFAULT' | 'Incharge')}
@@ -3535,7 +3535,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                         </label>
 
                                         <div>
-                                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Time</span>
+                                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Time</span>
                                             <div className={`mt-1 grid grid-cols-3 gap-1 rounded-xl ${segmentedControlClass}`}>
                                                 {[
                                                     { value: 'FULL_SHOOT' as const, label: 'Full' },
@@ -3558,17 +3558,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                         type="datetime-local"
                                                         value={customSegmentStart}
                                                         onChange={event => setCustomSegmentStart(event.target.value)}
-                                                        className="h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                                        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                                     />
                                                     <input
                                                         type="datetime-local"
                                                         value={customSegmentEnd}
                                                         onChange={event => setCustomSegmentEnd(event.target.value)}
-                                                        className="h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                                        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                                     />
                                                 </div>
                                             )}
-                                            <p className="mt-1 text-xs text-gray-400">
+                                            <p className="mt-1 text-xs text-muted-foreground">
                                                 {selectedScheduleWindow
                                                     ? `${format(selectedScheduleWindow.start, 'MMM d, HH:mm')} - ${format(selectedScheduleWindow.end, 'MMM d, HH:mm')}`
                                                     : 'Select a valid time'}
@@ -3576,7 +3576,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                         </div>
 
                                         <div>
-                                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Save</span>
+                                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Save</span>
                                             <div className={`mt-1 grid grid-cols-2 gap-1 rounded-xl ${segmentedControlClass}`}>
                                                 {[
                                                     { value: 'DRAFT' as const, label: 'Draft' },
@@ -3595,7 +3595,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                         </div>
 
                                         {selectedUserConflicts.length > 0 && !alreadyAssigned && (
-                                            <div className="rounded-lg bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+                                            <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                                                 <div className="font-bold">Conflict</div>
                                                 {selectedUserConflicts.slice(0, 2).map(shoot => (
                                                     <div key={shoot.id} className="truncate">{shoot.title}</div>
@@ -3618,19 +3618,19 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
 
                             {(conflictedCrewForSelectedShoot.length > 0 || absentCrewForSelectedShoot.length > 0) && (
                                 <div className="mt-4 space-y-2">
-                                    <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                         Busy or absent
                                     </p>
                                     {conflictedCrewForSelectedShoot.slice(0, 4).map(item => (
-                                        <div key={item.employee.id} className="rounded-lg bg-amber-950/25 px-3 py-2 text-xs text-amber-200">
+                                        <div key={item.employee.id} className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0">
                                                     <p className="font-bold">{item.employee.name}</p>
-                                                    <p className="text-[11px] text-amber-200/75">
+                                                    <p className="text-[11px] text-warning/80 ">
                                                         Already booked during this time
                                                     </p>
                                                 </div>
-                                                <span className="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-amber-950">
+                                                <span className="shrink-0 rounded-full bg-warning px-2 py-0.5 text-[10px] font-bold text-warning-foreground">
                                                     {item.conflicts.length}
                                                 </span>
                                             </div>
@@ -3638,20 +3638,20 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                 {item.conflicts.slice(0, 2).map(conflict => (
                                                     <div
                                                         key={getPlannerItemKey(conflict)}
-                                                        className="rounded-md border border-amber-900/60 bg-black/15 px-2 py-1.5"
+                                                        className="rounded-md border border-warning/30 bg-background/50 px-2 py-1.5"
                                                     >
                                                         <div className="flex items-start justify-between gap-2">
                                                             <div className="min-w-0">
-                                                                <p className="truncate font-semibold text-amber-100">
+                                                                <p className="truncate font-semibold text-warning ">
                                                                     {conflict.shoot.title}
                                                                 </p>
-                                                                <p className="text-[11px] text-amber-200/70">
+                                                                <p className="text-[11px] text-warning/80 ">
                                                                     {formatPlannerItemDateRange(conflict) || format(getItemStart(conflict) || selectedScheduleWindow.start, 'MMM d')} · {formatPlannerItemTimeRange(conflict)}
                                                                 </p>
                                                             </div>
                                                             <Link
                                                                 href={getShootPlannerHref(conflict.shoot.id)}
-                                                                className="shrink-0 text-[11px] font-bold text-amber-200 underline-offset-2 hover:underline"
+                                                                className="shrink-0 text-[11px] font-bold text-warning underline-offset-2 hover:underline "
                                                             >
                                                                 View
                                                             </Link>
@@ -3659,7 +3659,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                     </div>
                                                 ))}
                                                 {item.conflicts.length > 2 && (
-                                                    <div className="text-[11px] font-semibold text-amber-200/70">
+                                                    <div className="text-[11px] font-semibold text-warning/80 ">
                                                         +{item.conflicts.length - 2} more overlapping {labels.workPluralLower}
                                                     </div>
                                                 )}
@@ -3667,7 +3667,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                         </div>
                                     ))}
                                     {absentCrewForSelectedShoot.slice(0, 3).map(item => (
-                                        <div key={item.employee.id} className="rounded-lg bg-red-950/25 px-3 py-2 text-xs text-red-200">
+                                        <div key={item.employee.id} className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
                                             <span className="font-bold">{item.employee.name}</span> is absent during this time.
                                         </div>
                                     ))}
@@ -3677,17 +3677,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     )}
 
                     {plannerViewMode === 'CREW' && (
-                    <div className="rounded-2xl border border-gray-800 bg-[#1c1c1e] p-4 shadow-sm">
+                    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                         <div className="flex items-center gap-2 mb-4">
                             <UserCheck size={18} className="text-primary" />
-                            <h3 className="font-bold text-white">
+                            <h3 className="font-bold text-foreground">
                                 Assign Existing {labels.workSingular}
                             </h3>
                         </div>
 
                         <div className="space-y-3">
                             {selectedPlanDate && (
-                                <div className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2">
+                                <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
                                     <div className="flex items-start justify-between gap-2">
                                         <div>
                                             <p className="text-xs font-bold uppercase tracking-wide text-primary">
@@ -3695,10 +3695,10 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                             </p>
                                             {false ? (
                                                 <>
-                                                    <p className="text-sm font-semibold text-white line-clamp-2">
+                                                    <p className="text-sm font-semibold text-foreground line-clamp-2">
                                                         {selectedShoot?.title || ''}
                                                     </p>
-                                                    <p className="text-xs text-gray-400">
+                                                    <p className="text-xs text-muted-foreground">
                                                         {selectedEmployee?.name ? `Assigning ${selectedEmployee?.name}` : 'Choose crew from Available Crew'}
                                                         {false
                                                             ? ''
@@ -3707,10 +3707,10 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                 </>
                                             ) : (
                                                 <>
-                                                    <p className="text-sm font-semibold text-white">
+                                                    <p className="text-sm font-semibold text-foreground">
                                                         {selectedEmployee?.name || 'Selected crew'} on {format(selectedPlanDate, 'EEE, MMM d')}
                                                     </p>
-                                                    <p className="text-xs text-gray-400">
+                                                    <p className="text-xs text-muted-foreground">
                                                         {quickAssignShoots.length} existing {quickAssignShoots.length === 1 ? labels.workLower : labels.workPluralLower} on this date
                                                     </p>
                                                 </>
@@ -3720,7 +3720,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={() => setSelectedPlanDate(null)}
-                                                className="text-xs font-semibold text-gray-400 hover:text-primary"
+                                                className="text-xs font-semibold text-muted-foreground hover:text-primary "
                                             >
                                                 Show week
                                             </button>
@@ -3730,7 +3730,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             )}
 
                             {false && (
-                                <p className="rounded-xl border border-gray-800 bg-gray-900/60 px-3 py-3 text-sm text-gray-300">
+                                <p className="rounded-xl border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
                                     Choose a crew member from the available list above.
                                 </p>
                             )}
@@ -3740,7 +3740,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             {true ? (
                                 <>
                                     <label className="block">
-                                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">{labels.workSingular} to plan</span>
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{labels.workSingular} to plan</span>
                                         <PlannerDropdown
                                             value={selectedShootId}
                                             onChange={setSelectedShootId}
@@ -3750,7 +3750,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     </label>
 
                                     <label className="block">
-                                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Assign to</span>
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assign to</span>
                                         <PlannerDropdown
                                             value={selectedUserId}
                                             onChange={setSelectedUserId}
@@ -3760,10 +3760,10 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     </label>
                                 </>
                             ) : selectedEmployee && (
-                                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-800 bg-gray-900/60 px-3 py-2">
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-3 py-2">
                                     <div className="min-w-0">
-                                        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Crew</p>
-                                        <p className="truncate text-sm font-semibold text-white">{selectedEmployee?.name || 'Crew'}</p>
+                                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Crew</p>
+                                        <p className="truncate text-sm font-semibold text-foreground">{selectedEmployee?.name || 'Crew'}</p>
                                     </div>
                                     <button
                                         type="button"
@@ -3776,7 +3776,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             )}
 
                             <label className="block">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Role</span>
+                                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Role</span>
                                 <PlannerDropdown
                                     value={plannerRole}
                                     onChange={value => setPlannerRole(value as 'DEFAULT' | 'Incharge')}
@@ -3785,7 +3785,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             </label>
 
                             <div>
-                                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Working time</span>
+                                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Working time</span>
                                 <div className={`mt-1 grid grid-cols-3 gap-1 rounded-xl ${segmentedControlClass}`}>
                                     {[
                                         { value: 'FULL_SHOOT' as const, label: 'Full Shoot' },
@@ -3808,17 +3808,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                             type="datetime-local"
                                             value={customSegmentStart}
                                             onChange={event => setCustomSegmentStart(event.target.value)}
-                                            className="h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                         />
                                         <input
                                             type="datetime-local"
                                             value={customSegmentEnd}
                                             onChange={event => setCustomSegmentEnd(event.target.value)}
-                                            className="h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                                         />
                                     </div>
                                 )}
-                                <p className="mt-1 text-xs text-gray-400">
+                                <p className="mt-1 text-xs text-muted-foreground">
                                     {selectedScheduleWindow
                                         ? (
                                             scheduleMode === 'FULL_SHOOT'
@@ -3832,7 +3832,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             </div>
 
                             <div>
-                                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Save as</span>
+                                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Save as</span>
                                 <div className={`mt-1 grid grid-cols-2 gap-1 rounded-xl ${segmentedControlClass}`}>
                                     {[
                                         { value: 'DRAFT' as const, label: 'Draft' },
@@ -3848,7 +3848,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                         </button>
                                     ))}
                                 </div>
-                                <p className="mt-1 text-xs text-gray-400">
+                                <p className="mt-1 text-xs text-muted-foreground">
                                     {assignmentMode === 'DRAFT'
                                         ? 'Draft stays internal. Crew will not be notified.'
                                         : 'This becomes a live assignment and the crew member will be notified.'}
@@ -3856,7 +3856,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             </div>
 
                             {alreadyAssigned && (
-                                <p className="rounded-lg bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+                                <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                                     {alreadyPublished
                                         ? `This crew member is already on this ${labels.workLower}. Saving will add this as another working time.`
                                         : `This crew member already has a draft plan for this ${labels.workLower}. Saving will add this as another draft time.`}
@@ -3864,7 +3864,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             )}
 
                             {selectedUserConflicts.length > 0 && !alreadyAssigned && (
-                                <div className="rounded-lg bg-red-950/30 px-3 py-2 text-xs text-red-200">
+                                <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
                                     <div className="font-bold mb-1">Possible conflict</div>
                                     {selectedUserConflicts.slice(0, 2).map(shoot => (
                                         <div key={shoot.id} className="truncate">{shoot.title}</div>
@@ -3889,15 +3889,15 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     )}
 
                     {unassignedShoots.length > 0 && (
-                        <div className="rounded-2xl border border-gray-800 bg-[#1c1c1e] p-4 shadow-sm">
-                            <h3 className="font-bold text-white">Needs Planning</h3>
-                            <p className="text-xs text-gray-400 mt-1">{labels.workPlural} without assigned {labels.teamPluralLower} in this range.</p>
+                        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                            <h3 className="font-bold text-foreground">Needs Planning</h3>
+                            <p className="text-xs text-muted-foreground mt-1">{labels.workPlural} without assigned {labels.teamPluralLower} in this range.</p>
 
                             <div className="mt-4 space-y-2">
                                 {unassignedShoots.map(shoot => (
-                                    <div key={shoot.id} className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3">
-                                        <div className="font-semibold text-sm text-white line-clamp-2">{shoot.title}</div>
-                                        <div className="text-xs text-gray-300 mt-1">{formatTimeRange(shoot)}</div>
+                                    <div key={shoot.id} className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                                        <div className="font-semibold text-sm text-foreground line-clamp-2">{shoot.title}</div>
+                                        <div className="text-xs text-muted-foreground mt-1">{formatTimeRange(shoot)}</div>
                                         <Link href={getShootPlannerEditHref(shoot.id)} className="inline-flex mt-2 text-xs font-bold text-primary hover:underline">
                                             Plan {labels.teamLower}
                                         </Link>
@@ -3908,15 +3908,15 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     )}
 
                     {plannerViewMode === 'CREW' && conflictItems.length > 0 && (
-                        <div className="rounded-2xl border border-red-900/50 bg-red-950/20 p-4 shadow-sm">
-                            <h3 className="font-bold text-red-100">Conflicts</h3>
+                        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 shadow-sm">
+                            <h3 className="font-bold text-destructive">Conflicts</h3>
                             <div className="mt-3 space-y-2">
                                 {conflictItems.slice(0, 4).map(item => (
                                     <button
                                         key={`${item.user.id}-${item.day.toISOString()}`}
                                         type="button"
                                         onClick={() => handleOpenConflict(item)}
-                                        className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left text-xs text-red-200 transition-colors hover:bg-red-900/30 focus:bg-red-900/30 focus:outline-none focus:ring-2 focus:ring-red-700"
+                                        className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left text-xs text-destructive transition-colors hover:bg-destructive/10 focus:bg-destructive/10 focus:outline-none focus:ring-2 focus:ring-destructive/40   "
                                     >
                                         <span className="min-w-0">
                                             <span className="block truncate font-bold">{item.user.name}</span>
@@ -3924,7 +3924,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                 {format(item.day, 'EEE, MMM d')} - {item.conflictCount} overlap{item.conflictCount !== 1 ? 's' : ''}
                                             </span>
                                         </span>
-                                        <span className="shrink-0 rounded-full border border-red-800 bg-red-950/50 px-2 py-0.5 font-bold text-red-200">
+                                        <span className="shrink-0 rounded-full border border-destructive/30 bg-background/70 px-2 py-0.5 font-bold text-destructive   ">
                                             Show
                                         </span>
                                     </button>

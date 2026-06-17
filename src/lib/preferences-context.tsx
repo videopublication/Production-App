@@ -21,7 +21,7 @@ const PreferencesContext = createContext<PreferencesContextType | undefined>(und
 
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
     // Initialize state with default values, will be updated by useEffect on client
-    const [theme, setThemeState] = useState<Theme>('dark');
+    const [theme, setThemeState] = useState<Theme>('light');
     const [accentColor, setAccentColorState] = useState<AccentColor>('green');
     const [density, setDensityState] = useState<Density>('default');
     const [reducedMotion, setReducedMotionState] = useState<boolean>(false);
