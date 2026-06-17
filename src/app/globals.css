@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark, .dark *));
 
+/* Safelist for ShootPlanner dynamic color palette — guarantees inclusion in production CSS */
+@source inline("border-l-blue-500 border-l-emerald-500 border-l-amber-500 border-l-rose-500 border-l-cyan-500 border-l-violet-500");
+@source inline("bg-blue-50 bg-emerald-50 bg-amber-50 bg-rose-50 bg-cyan-50 bg-violet-50");
+@source inline("text-blue-950 text-emerald-950 text-amber-950 text-rose-950 text-cyan-950 text-violet-950");
+@source inline("dark:bg-blue-950 dark:bg-emerald-950 dark:bg-amber-950 dark:bg-rose-950 dark:bg-cyan-950 dark:bg-violet-950");
+@source inline("dark:text-blue-100 dark:text-emerald-100 dark:text-amber-100 dark:text-rose-100 dark:text-cyan-100 dark:text-violet-100");
+
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
