@@ -109,23 +109,24 @@ type ShootTimelineSegment = {
     lane: number;
 };
 
-const plannerColors = [
-    'border-l-blue-500 bg-blue-50 text-blue-950 dark:bg-blue-950 dark:text-blue-100',
-    'border-l-emerald-500 bg-emerald-50 text-emerald-950 dark:bg-emerald-950 dark:text-emerald-100',
-    'border-l-amber-500 bg-amber-50 text-amber-950 dark:bg-amber-950 dark:text-amber-100',
-    'border-l-rose-500 bg-rose-50 text-rose-950 dark:bg-rose-950 dark:text-rose-100',
-    'border-l-cyan-500 bg-cyan-50 text-cyan-950 dark:bg-cyan-950 dark:text-cyan-100',
-    'border-l-violet-500 bg-violet-50 text-violet-950 dark:bg-violet-950 dark:text-violet-100',
-];
+// Palette uses CSS variables defined in globals.css (see :root / .dark blocks).
+// This avoids any dependency on Tailwind's content-scan picking up these classes
+// in production — the original cause of Vercel builds losing planner colors.
+const PLANNER_PALETTE_SIZE = 6;
 
-const plannerAccentColors = [
-    'border-l-blue-500',
-    'border-l-emerald-500',
-    'border-l-amber-500',
-    'border-l-rose-500',
-    'border-l-cyan-500',
-    'border-l-violet-500',
-];
+const getPlannerColorStyle = (index: number): React.CSSProperties => {
+    const i = ((index % PLANNER_PALETTE_SIZE) + PLANNER_PALETTE_SIZE) % PLANNER_PALETTE_SIZE;
+    return {
+        borderLeftColor: `var(--planner-${i}-border)`,
+        backgroundColor: `var(--planner-${i}-bg)`,
+        color: `var(--planner-${i}-text)`,
+    };
+};
+
+const getPlannerAccentStyle = (index: number): React.CSSProperties => {
+    const i = ((index % PLANNER_PALETTE_SIZE) + PLANNER_PALETTE_SIZE) % PLANNER_PALETTE_SIZE;
+    return { borderLeftColor: `var(--planner-${i}-border)` };
+};
 
 const timelineMinVisualMinutes = 190;
 
@@ -2626,7 +2627,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                 >
                                                     {packedItems.map(({ item, placement, lane }) => {
                                                         const shootIndex = plannerShoots.findIndex(shoot => shoot.id === item.shoot.id);
-                                                        const colorClass = plannerColors[(shootIndex >= 0 ? shootIndex : 0) % plannerColors.length];
+                                                        const colorStyle = getPlannerColorStyle(shootIndex >= 0 ? shootIndex : 0);
                                                         const isRemoving = removingAssignmentId === item.assignment.id;
                                                         const itemConflictCount = getPlannerItemConflictCount(item, rowAssignments);
                                                         const itemDateRange = formatPlannerItemDateRange(item);
@@ -2639,8 +2640,9 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     employee.id,
                                                                     getDayFromPlannerCardClick(event, placement)
                                                                 )}
-                                                                className={`pointer-events-auto relative my-2 flex min-h-[92px] flex-col rounded-lg border border-gray-200 dark:border-gray-700 border-l-4 px-3 py-2 text-xs shadow-sm hover:shadow-md transition-shadow ${selectedPlannerItemKey === getPlannerItemKey(item) ? 'ring-2 ring-gray-300 dark:ring-gray-600' : ''} ${itemConflictCount > 0 ? 'ring-1 ring-red-500/70 dark:ring-red-400/70' : ''} ${item.isDraft ? 'border-dashed ring-1 ring-amber-400/60' : ''} ${colorClass}`}
+                                                                className={`pointer-events-auto relative my-2 flex min-h-[92px] flex-col rounded-lg border border-gray-200 dark:border-gray-700 border-l-4 px-3 py-2 text-xs shadow-sm hover:shadow-md transition-shadow ${selectedPlannerItemKey === getPlannerItemKey(item) ? 'ring-2 ring-gray-300 dark:ring-gray-600' : ''} ${itemConflictCount > 0 ? 'ring-1 ring-red-500/70 dark:ring-red-400/70' : ''} ${item.isDraft ? 'border-dashed ring-1 ring-amber-400/60' : ''}`}
                                                                 style={{
+                                                                    ...colorStyle,
                                                                     gridColumn: `${placement.columnStart} / span ${placement.columnSpan}`,
                                                                     gridRow: lane + 1,
                                                                 }}
@@ -2803,7 +2805,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                             const conflictCount = getShootConflictCountForRange(bar.shoot.id, rangeStart, rangeEnd);
                                                             const isSelected = selectedShootId === bar.shoot.id;
                                                             const shootIndex = plannerShoots.findIndex(shoot => shoot.id === bar.shoot.id);
-                                                            const accentClass = plannerAccentColors[(shootIndex >= 0 ? shootIndex : 0) % plannerAccentColors.length];
+                                                            const accentStyle = getPlannerAccentStyle(shootIndex >= 0 ? shootIndex : 0);
                                                             const title = [
                                                                 bar.shoot.title,
                                                                 shootStart && shootEnd ? `${format(shootStart, 'MMM d, HH:mm')} - ${format(shootEnd, 'MMM d, HH:mm')}` : 'Time TBD',
@@ -2818,8 +2820,9 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     type="button"
                                                                     onClick={() => handleOpenShootPlan(bar.shoot)}
                                                                     title={title}
-                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-gray-200 border-l-4 bg-white px-2 text-left text-[11px] font-bold text-gray-800 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950/80 dark:text-gray-100 dark:hover:border-gray-700 dark:hover:bg-gray-900 ${accentClass} ${isSelected ? 'ring-2 ring-primary/45 dark:ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-500/60' : ''}`}
+                                                                    className={`group relative z-10 mx-1 flex h-6 min-w-0 items-center gap-2 rounded-full border border-gray-200 border-l-4 bg-white px-2 text-left text-[11px] font-bold text-gray-800 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950/80 dark:text-gray-100 dark:hover:border-gray-700 dark:hover:bg-gray-900 ${isSelected ? 'ring-2 ring-primary/45 dark:ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-500/60' : ''}`}
                                                                     style={{
+                                                                        ...accentStyle,
                                                                         gridColumn: `${bar.placement.columnStart} / span ${bar.placement.columnSpan}`,
                                                                         gridRow: bar.lane + 1,
                                                                     }}
@@ -2996,7 +2999,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                     const conflictCount = getShootConflictCountForRange(segment.shoot.id, segment.start, segment.end);
                                                                     const isSelected = selectedShootId === segment.shoot.id;
                                                                     const shootIndex = plannerShoots.findIndex(shoot => shoot.id === segment.shoot.id);
-                                                                    const accentClass = plannerAccentColors[(shootIndex >= 0 ? shootIndex : 0) % plannerAccentColors.length];
+                                                                    const accentStyle = getPlannerAccentStyle(shootIndex >= 0 ? shootIndex : 0);
                                                                     const segmentNote = getTimelineSegmentNote(segment, group.day);
                                                                     const rowStateClass = isSelected
                                                                         ? 'bg-primary/5 dark:bg-primary/10 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.45)]'
@@ -3008,7 +3011,8 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                         <div
                                                                             key={`long-${segment.shoot.id}-${group.day.toISOString()}`}
                                                                             onClick={() => handleOpenShootPlan(segment.shoot)}
-                                                                            className={`group grid cursor-pointer grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 border-l-4 px-3 py-2 text-xs text-gray-900 transition-colors hover:bg-white/80 dark:text-gray-100 dark:hover:bg-gray-900/70 ${hasSplitTimeline ? 'sm:grid-cols-[1fr_auto]' : 'sm:grid-cols-[112px_1fr_auto_auto]'} sm:gap-x-3 ${accentClass} ${rowStateClass}`}
+                                                                            className={`group grid cursor-pointer grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 border-l-4 px-3 py-2 text-xs text-gray-900 transition-colors hover:bg-white/80 dark:text-gray-100 dark:hover:bg-gray-900/70 ${hasSplitTimeline ? 'sm:grid-cols-[1fr_auto]' : 'sm:grid-cols-[112px_1fr_auto_auto]'} sm:gap-x-3 ${rowStateClass}`}
+                                                                            style={accentStyle}
                                                                             title={segment.shoot.title}
                                                                         >
                                                                             <div className={`col-span-2 min-w-0 ${hasSplitTimeline ? 'sm:col-span-2' : 'sm:col-span-1'}`}>
@@ -3101,14 +3105,15 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                                                         const conflictCount = getShootConflictCountForRange(segment.shoot.id, segment.start, segment.end);
                                                                         const isSelected = selectedShootId === segment.shoot.id;
                                                                         const shootIndex = plannerShoots.findIndex(shoot => shoot.id === segment.shoot.id);
-                                                                        const colorClass = plannerColors[(shootIndex >= 0 ? shootIndex : 0) % plannerColors.length];
+                                                                        const colorStyle = getPlannerColorStyle(shootIndex >= 0 ? shootIndex : 0);
 
                                                                         return (
                                                                             <div
                                                                                 key={`${segment.shoot.id}-${group.day.toISOString()}`}
                                                                                 onClick={() => handleOpenShootPlan(segment.shoot)}
-                                                                                className={`absolute grid min-h-[52px] min-w-[118px] cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-l-4 px-2.5 py-1.5 text-xs shadow-sm transition-all hover:shadow-md ${colorClass} ${isSelected ? 'ring-2 ring-primary/45 dark:ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-500/70 dark:ring-red-400/70' : ''}`}
+                                                                                className={`absolute grid min-h-[52px] min-w-[118px] cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-l-4 px-2.5 py-1.5 text-xs shadow-sm transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-primary/45 dark:ring-primary/60' : ''} ${conflictCount > 0 ? 'ring-1 ring-red-500/70 dark:ring-red-400/70' : ''}`}
                                                                                 style={{
+                                                                                    ...colorStyle,
                                                                                     left: `${segment.leftPercent}%`,
                                                                                     top: `${7 + segment.lane * 64}px`,
                                                                                     width: `${segment.widthPercent}%`,

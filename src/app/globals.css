@@ -1,12 +1,31 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Safelist for ShootPlanner dynamic color palette — guarantees inclusion in production CSS */
-@source inline("border-l-blue-500 border-l-emerald-500 border-l-amber-500 border-l-rose-500 border-l-cyan-500 border-l-violet-500");
-@source inline("bg-blue-50 bg-emerald-50 bg-amber-50 bg-rose-50 bg-cyan-50 bg-violet-50");
-@source inline("text-blue-950 text-emerald-950 text-amber-950 text-rose-950 text-cyan-950 text-violet-950");
-@source inline("dark:bg-blue-950 dark:bg-emerald-950 dark:bg-amber-950 dark:bg-rose-950 dark:bg-cyan-950 dark:bg-violet-950");
-@source inline("dark:text-blue-100 dark:text-emerald-100 dark:text-amber-100 dark:text-rose-100 dark:text-cyan-100 dark:text-violet-100");
+/* Force Tailwind to scan ShootPlanner.tsx — its size or content tripped up the
+   oxide scanner on Vercel's Linux build, dropping classes like xl:sticky,
+   xl:grid-cols-[1fr_360px], etc. that worked in local Windows builds. */
+@source "../components/ShootPlanner.tsx";
+
+/* ShootPlanner palette — defined as CSS variables instead of Tailwind classes
+   so production builds cannot strip them via content-scan / oxide bugs.
+   Light mode values on :root, dark mode overrides on .dark.
+   Each shoot picks an index 0-5 and binds these to inline style. */
+:root {
+  --planner-0-border: #3b82f6; --planner-0-bg: #eff6ff; --planner-0-text: #172554;
+  --planner-1-border: #10b981; --planner-1-bg: #ecfdf5; --planner-1-text: #022c22;
+  --planner-2-border: #f59e0b; --planner-2-bg: #fffbeb; --planner-2-text: #451a03;
+  --planner-3-border: #f43f5e; --planner-3-bg: #fff1f2; --planner-3-text: #4c0519;
+  --planner-4-border: #06b6d4; --planner-4-bg: #ecfeff; --planner-4-text: #083344;
+  --planner-5-border: #8b5cf6; --planner-5-bg: #f5f3ff; --planner-5-text: #2e1065;
+}
+.dark {
+  --planner-0-bg: #172554; --planner-0-text: #dbeafe;
+  --planner-1-bg: #022c22; --planner-1-text: #d1fae5;
+  --planner-2-bg: #451a03; --planner-2-text: #fef3c7;
+  --planner-3-bg: #4c0519; --planner-3-text: #ffe4e6;
+  --planner-4-bg: #083344; --planner-4-text: #cffafe;
+  --planner-5-bg: #2e1065; --planner-5-text: #ede9fe;
+}
 
 @theme {
   --color-background: var(--background);
