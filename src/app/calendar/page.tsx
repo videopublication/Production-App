@@ -341,19 +341,26 @@ export default function CalendarPage() {
     return (
         <>
         <PullToRefresh onRefresh={handleRefresh}>
-            <div className="p-2 sm:p-6 space-y-6 w-full max-w-[1800px] mx-auto min-h-[calc(100vh-80px)]">
+            <div className={`p-2 sm:px-6 ${viewMode === 'planner' && canUsePlanner ? 'sm:py-3 space-y-3' : 'sm:py-6 space-y-6'} w-full max-w-[1800px] mx-auto min-h-[calc(100vh-80px)]`}>
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2 sm:px-0">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-2 sm:px-0">
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3 text-gray-900 dark:text-white">
-                            <CalendarIcon size={28} className="text-primary dark:text-primary" />
-                            {viewMode === 'planner' && canUsePlanner ? 'Planner' : 'Calendar'}
-                        </h1>
-                        <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">
-                            {viewMode === 'planner' && canUsePlanner
-                                ? `Plan upcoming ${labels.workPluralLower} across ${labels.teamPluralLower}`
-                                : `${shootsThisMonth} ${shootsThisMonth === 1 ? labels.workLower : labels.workPluralLower} scheduled in ${format(currentMonth, 'MMMM yyyy')}`}
-                        </p>
+                        {viewMode === 'planner' && canUsePlanner ? (
+                            <h1 className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                                <CalendarIcon size={20} className="text-primary" />
+                                Planner
+                            </h1>
+                        ) : (
+                            <>
+                                <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3 text-gray-900 dark:text-white">
+                                    <CalendarIcon size={28} className="text-primary dark:text-primary" />
+                                    Calendar
+                                </h1>
+                                <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">
+                                    {`${shootsThisMonth} ${shootsThisMonth === 1 ? labels.workLower : labels.workPluralLower} scheduled in ${format(currentMonth, 'MMMM yyyy')}`}
+                                </p>
+                            </>
+                        )}
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">

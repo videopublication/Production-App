@@ -25,6 +25,7 @@ interface BulkRow {
     model: string;
     serialNumber: string;
     location: string;
+    barcode?: string;
 }
 
 export default function BulkAddPage() {
@@ -43,6 +44,15 @@ export default function BulkAddPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [rows, setRows] = useState<BulkRow[]>([]);
+
+    const isBarcodeDuplicate = (barcode?: string, rowId?: string) => {
+        if (!barcode || !barcode.trim()) return false;
+        const trimmed = barcode.trim();
+        const inDb = existingItems.some(item => item.barcode === trimmed);
+        if (inDb) return true;
+        const inBatch = rows.some(r => r.id !== rowId && r.barcode?.trim() === trimmed);
+        return inBatch;
+    };
 
     useEffect(() => {
         const loadItems = async () => {
@@ -65,7 +75,8 @@ export default function BulkAddPage() {
             company: '',
             model: '',
             serialNumber: '',
-            location: defaultLocation
+            location: defaultLocation,
+            barcode: ''
         }]);
     };
 
@@ -83,6 +94,9 @@ export default function BulkAddPage() {
     };
 
     const getPreviewBarcode = (row: BulkRow, rowIndex: number) => {
+        if (row.barcode?.trim()) {
+            return row.barcode.trim();
+        }
         if (!row.category && !row.company && !row.model && !row.serialNumber) return '';
 
         const baseBarcode = getEquipmentBarcodeBase(row.category, row.model || row.serialNumber || 'GEN');
@@ -96,6 +110,7 @@ export default function BulkAddPage() {
         let pendingCount = 0;
         for (let i = 0; i < rowIndex; i++) {
             const prevRow = rows[i];
+            if (prevRow.barcode?.trim()) continue;
             const prevBase = getEquipmentBarcodeBase(prevRow.category, prevRow.model || prevRow.serialNumber || 'GEN');
             if (prevBase === baseBarcode) pendingCount++;
         }
@@ -111,11 +126,11 @@ export default function BulkAddPage() {
     };
 
     const handleDownloadTemplate = () => {
-        const headers = ['MATERIAL CATEGORY', 'COMPANY', 'MODEL', 'SERIAL NUMBER', 'Location'];
+        const headers = ['MATERIAL CATEGORY', 'COMPANY', 'MODEL', 'SERIAL NUMBER', 'Location', 'QR CODE'];
         const sampleRows = [
-            ['CAMERA', 'SONY', 'A7S3', '5777780', 'Suryakund Office'],
-            ['LENS', 'SONY G MASTER', '24 - 70', '2061797', 'Suryakund Office'],
-            ['TRIPOD', 'SACHTLER', 'ACE', 'S2150M17049920', 'Suryakund Office']
+            ['CAMERA', 'SONY', 'A7S3', '5777780', 'Suryakund Office', 'CAM-SONYA7S3-1'],
+            ['LENS', 'SONY G MASTER', '24 - 70', '2061797', 'Suryakund Office', ''],
+            ['TRIPOD', 'SACHTLER', 'ACE', 'S2150M17049920', 'Suryakund Office', '']
         ];
 
         const csvContent = [
@@ -137,6 +152,7 @@ export default function BulkAddPage() {
             const lines = text.split(/\r\n|\n/);
             const newRows: BulkRow[] = [];
             const duplicateSerials: string[] = [];
+            const duplicateBarcodes: string[] = [];
 
             // Heuristic to skip header: check if first row matches known headers
             const firstLine = lines[0]?.toLowerCase() || '';
@@ -154,9 +170,10 @@ export default function BulkAddPage() {
                 const model = cols[2]?.trim() || '';
                 const serialNumber = cols[3]?.trim() || '';
                 const loc = cols[4]?.trim() || defaultLocation;
+                const barcode = cols[5]?.trim() || '';
 
                 // Completely empty row detection from CSV
-                if (!categoryRaw && !company && !model && !serialNumber) continue;
+                if (!categoryRaw && !company && !model && !serialNumber && !barcode) continue;
 
                 // Apply defaults and normalizations
                 const category = categoryRaw || 'Camera';
@@ -173,13 +190,25 @@ export default function BulkAddPage() {
                     }
                 }
 
+                if (barcode) {
+                    // Check if barcode already exists in inventory or in current batch
+                    const isDuplicateInInventory = existingItems.some(item => item.barcode === barcode);
+                    const isDuplicateInBatch = newRows.some(row => row.barcode === barcode);
+
+                    if (isDuplicateInInventory || isDuplicateInBatch) {
+                        duplicateBarcodes.push(`${barcode} (${company} ${model})`);
+                        continue; // Skip processing this row
+                    }
+                }
+
                 newRows.push({
                     id: uuid(),
                     category: normalizedCategory,
                     company,
                     model,
                     serialNumber,
-                    location: loc
+                    location: loc,
+                    barcode
                 });
             }
 
@@ -187,11 +216,15 @@ export default function BulkAddPage() {
                 alert(`Warning: ${duplicateSerials.length} items were skipped because their Serial Numbers already exist:\n\n${duplicateSerials.slice(0, 5).join('\n')}${duplicateSerials.length > 5 ? '\n...' : ''}`);
             }
 
+            if (duplicateBarcodes.length > 0) {
+                alert(`Warning: ${duplicateBarcodes.length} items were skipped because their Barcodes/QR Codes already exist:\n\n${duplicateBarcodes.slice(0, 5).join('\n')}${duplicateBarcodes.length > 5 ? '\n...' : ''}`);
+            }
+
             if (newRows.length > 0) {
                 // Simply append new rows from CSV
                 setRows([...rows, ...newRows]);
-            } else if (duplicateSerials.length === 0) {
-                alert('No valid rows found in CSV. Make sure each row has at least Category, Company, or Model.');
+            } else if (duplicateSerials.length === 0 && duplicateBarcodes.length === 0) {
+                alert('No valid rows found in CSV. Make sure each row has at least Category, Company, Model, or QR Code.');
             }
         };
         reader.readAsText(file);
@@ -212,10 +245,24 @@ export default function BulkAddPage() {
             const newEquipment: Equipment[] = [];
             const baseCounts = new Map<string, number>();
 
-            // Pre-calculate existing counts for each base barcode
+            // Check for duplicate barcodes in the rows being imported
+            const customBarcodes = rows.map(r => r.barcode?.trim()).filter(Boolean) as string[];
+            const hasDuplicateInBatch = customBarcodes.some((bc, idx) => customBarcodes.indexOf(bc) !== idx);
+            const hasDuplicateInInventory = rows.some(r => {
+                const bc = r.barcode?.trim();
+                return bc && existingItems.some(item => item.barcode === bc);
+            });
+            if (hasDuplicateInBatch || hasDuplicateInInventory) {
+                alert('Cannot import items: One or more custom Barcode/QR Codes are duplicates. Please fix the duplicates highlighted in red.');
+                setSaving(false);
+                return;
+            }
+
+            // Pre-calculate existing counts for each base barcode (only for auto-generated ones)
             for (const row of rows) {
                 // Skip completely empty rows
-                if (!row.category && !row.company && !row.model && !row.serialNumber) continue;
+                if (!row.category && !row.company && !row.model && !row.serialNumber && !row.barcode) continue;
+                if (row.barcode?.trim()) continue;
 
                 // Fallback: If no model, use full Serial Number or 'GEN' (Generic)
                 // We use the full serial to ensure each item gets its own unique base barcode (1-to-1)
@@ -230,16 +277,19 @@ export default function BulkAddPage() {
 
             for (const row of rows) {
                 // Skip completely empty rows
-                if (!row.category && !row.company && !row.model && !row.serialNumber) continue;
+                if (!row.category && !row.company && !row.model && !row.serialNumber && !row.barcode) continue;
 
-                // Fallback: Use model OR Serial Number for barcode uniqueness
-                const modelStr = row.model || row.serialNumber || 'GEN';
-                const baseBarcode = getEquipmentBarcodeBase(row.category, modelStr);
+                let barcode = row.barcode?.trim();
+                if (!barcode) {
+                    // Fallback: Use model OR Serial Number for barcode uniqueness
+                    const modelStr = row.model || row.serialNumber || 'GEN';
+                    const baseBarcode = getEquipmentBarcodeBase(row.category, modelStr);
 
-                const currentCount = (baseCounts.get(baseBarcode) || 0) + 1;
-                baseCounts.set(baseBarcode, currentCount);
+                    const currentCount = (baseCounts.get(baseBarcode) || 0) + 1;
+                    baseCounts.set(baseBarcode, currentCount);
 
-                const barcode = `${baseBarcode}-${currentCount}`;
+                    barcode = `${baseBarcode}-${currentCount}`;
+                }
                 const name = row.company || row.model ? `${row.company} ${row.model}`.trim() : row.category;
 
                 newEquipment.push({
@@ -251,6 +301,11 @@ export default function BulkAddPage() {
                     location: row.location || 'Storage',
                     condition: 'OK',
                     serialNumber: row.serialNumber || undefined,
+                    metadata: {
+                        brand: row.company,
+                        model: row.model,
+                        serialNumber: row.serialNumber,
+                    },
                     assignedTo: undefined,
                     lastActivity: new Date().toISOString(),
                     departmentId: effectiveDeptId || undefined
@@ -374,6 +429,7 @@ export default function BulkAddPage() {
                                 <th className="py-3 px-2 font-medium text-muted-foreground min-w-[150px]">Company</th>
                                 <th className="py-3 px-2 font-medium text-muted-foreground w-[120px]">Model</th>
                                 <th className="py-3 px-2 font-medium text-muted-foreground min-w-[140px]">Serial Number</th>
+                                <th className="py-3 px-2 font-medium text-muted-foreground min-w-[140px]">QR Code (Opt)</th>
                                 <th className="py-3 px-2 font-medium text-muted-foreground w-[150px]">Location</th>
                                 <th className="py-3 px-2 font-medium text-muted-foreground min-w-[180px]">Preview</th>
                                 <th className="py-3 px-2 font-medium text-muted-foreground w-[50px]"></th>
@@ -418,6 +474,18 @@ export default function BulkAddPage() {
                                     </td>
                                     <td className="py-2 px-2">
                                         <input
+                                            className={`w-full bg-background border rounded px-2 py-1.5 outline-none font-mono text-xs ${
+                                                isBarcodeDuplicate(row.barcode, row.id)
+                                                    ? 'border-destructive focus:ring-1 focus:ring-destructive'
+                                                    : 'border-border'
+                                            }`}
+                                            value={row.barcode || ''}
+                                            onChange={(e) => updateRow(row.id, { barcode: e.target.value })}
+                                            placeholder="Auto-generated"
+                                        />
+                                    </td>
+                                    <td className="py-2 px-2">
+                                        <input
                                             className="w-full bg-background border border-border rounded px-2 py-1.5 outline-none"
                                             value={row.location}
                                             onChange={(e) => updateRow(row.id, { location: e.target.value })}
@@ -429,8 +497,13 @@ export default function BulkAddPage() {
                                                 <span className="text-xs text-foreground">{getPreviewName(row)}</span>
                                             )}
                                             {getPreviewBarcode(row, index) && (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary font-mono border border-primary/20 whitespace-nowrap">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono border whitespace-nowrap ${
+                                                    isBarcodeDuplicate(row.barcode, row.id)
+                                                        ? 'bg-destructive/10 text-destructive border-destructive/20'
+                                                        : 'bg-primary/10 text-primary border-primary/20'
+                                                }`}>
                                                     {getPreviewBarcode(row, index)}
+                                                    {isBarcodeDuplicate(row.barcode, row.id) && ' (Duplicate)'}
                                                 </span>
                                             )}
                                             {(!getPreviewBarcode(row, index)) && <span className="text-xs text-muted-foreground italic">Enter details...</span>}
@@ -503,6 +576,20 @@ export default function BulkAddPage() {
                                 </div>
 
                                 <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">QR Code (Optional)</label>
+                                    <input
+                                        className={`w-full bg-background border rounded px-3 py-2 outline-none font-mono text-xs ${
+                                            isBarcodeDuplicate(row.barcode, row.id)
+                                                ? 'border-destructive focus:ring-1 focus:ring-destructive'
+                                                : 'border-border'
+                                        }`}
+                                        value={row.barcode || ''}
+                                        onChange={(e) => updateRow(row.id, { barcode: e.target.value })}
+                                        placeholder="Auto-generated if empty"
+                                    />
+                                </div>
+
+                                <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Location</label>
                                     <input
                                         className="w-full bg-background border border-border rounded px-3 py-2 outline-none text-sm"
@@ -518,8 +605,13 @@ export default function BulkAddPage() {
                                             <span className="text-xs text-foreground">{getPreviewName(row)}</span>
                                         )}
                                         {getPreviewBarcode(row, index) && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary font-mono border border-primary/20 whitespace-nowrap">
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium font-mono border whitespace-nowrap ${
+                                                isBarcodeDuplicate(row.barcode, row.id)
+                                                    ? 'bg-destructive/10 text-destructive border-destructive/20'
+                                                    : 'bg-primary/10 text-primary border-primary/20'
+                                            }`}>
                                                 {getPreviewBarcode(row, index)}
+                                                {isBarcodeDuplicate(row.barcode, row.id) && ' (Duplicate)'}
                                             </span>
                                         )}
                                         {(!row.model) && <span className="text-xs text-muted-foreground italic">Enter model...</span>}
@@ -536,7 +628,7 @@ export default function BulkAddPage() {
                         <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                             Total: <span className="font-medium text-foreground">{rows.length}</span> items
                         </div>
-                        <Button onClick={handleSave} disabled={saving || rows.every(r => !r.company && !r.model && !r.serialNumber)} size="sm" className="flex-1 sm:flex-none">
+                        <Button onClick={handleSave} disabled={saving || rows.every(r => !r.company && !r.model && !r.serialNumber && !r.barcode)} size="sm" className="flex-1 sm:flex-none">
                             {saving ? 'Saving...' : 'Import All'}
                         </Button>
                     </div>

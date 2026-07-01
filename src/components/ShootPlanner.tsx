@@ -34,6 +34,8 @@ import {
     Trash2,
     UserCheck,
     Users,
+    X,
+    PanelRightOpen,
 } from 'lucide-react';
 import { Assignment, AssignmentSegment, Leave, PlannerDraftAssignment, Shoot, User } from '@/types';
 import { DepartmentLabels } from '@/lib/department-labels';
@@ -378,6 +380,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
         return 'WEEK';
     });
     const [assignmentMode, setAssignmentMode] = useState<PlannerAssignmentMode>('DRAFT');
+    const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [scheduleMode, setScheduleMode] = useState<PlannerScheduleMode>('FULL_SHOOT');
     const [customSegmentStart, setCustomSegmentStart] = useState('');
     const [customSegmentEnd, setCustomSegmentEnd] = useState('');
@@ -416,11 +419,11 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
     }, [visibleRangeEnd, visibleRangeStart]);
 
     const columnTemplate = useMemo(
-        () => `240px repeat(${plannerDays.length}, minmax(134px, 1fr))`,
+        () => `188px repeat(${plannerDays.length}, minmax(132px, 1fr))`,
         [plannerDays.length]
     );
 
-    const minGridWidth = useMemo(() => 240 + plannerDays.length * 134, [plannerDays.length]);
+    const minGridWidth = useMemo(() => 188 + plannerDays.length * 132, [plannerDays.length]);
 
     const shootById = useMemo(() => {
         return new Map(shoots.map(shoot => [shoot.id, shoot]));
@@ -1500,6 +1503,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
         setSelectedShootId(item.shoot.id);
         setSelectedPlanDate(selectedDay);
         setEditSegmentDay(format(selectedDay, 'yyyy-MM-dd'));
+        setIsPanelOpen(true);
 
         if (start) {
             setEditSegmentStart(formatDateTimeLocal(start));
@@ -2070,6 +2074,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
         );
 
         setSelectedShootId(firstUnassignedShoot?.id || dayShoots[0]?.id || '');
+        setIsPanelOpen(true);
     };
 
     const handleOpenShootPlan = (shoot: Shoot) => {
@@ -2080,6 +2085,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
         setSelectedShootId(shoot.id);
         setSelectedPlanDate(shootStart ? startOfDay(shootStart) : null);
         setScheduleMode('FULL_SHOOT');
+        setIsPanelOpen(true);
     };
 
     const handleSelectShootCrew = (employee: User) => {
@@ -2285,6 +2291,18 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
             : 'text-gray-600 hover:bg-white/60 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800/70 dark:hover:text-white'
         }`;
 
+    // Side panel is a slide-over drawer: grid stays full-width, panel opens ONLY on
+    // explicit intent (toolbar button, clicking a chip/cell/shoot). It must not derive
+    // from selectedShootId/selectedPlanDate — those get auto-populated on load, which
+    // would make the drawer open by default.
+    const panelOpen = isPanelOpen;
+    const closePanel = () => {
+        setIsPanelOpen(false);
+        setSelectedPlannerItemKey('');
+        setSelectedPlanDate(null);
+        setSelectedUserId('');
+    };
+
     return (
         <div
             className="space-y-4"
@@ -2296,21 +2314,21 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
             }}
         >
             <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-sm overflow-hidden">
-                <div className="px-4 sm:px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div>
-                        <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">{rangeTitle}</h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <div className="px-4 sm:px-5 py-3 border-b border-gray-200 dark:border-gray-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="flex items-baseline gap-2 min-w-0">
+                        <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">{rangeTitle}</h2>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                             {plannerViewMode === 'CREW'
-                                ? `${rangeLabel} - ${activeEmployees.length} crew - ${plannerShoots.length} visible ${plannerShoots.length === 1 ? labels.workLower : labels.workPluralLower}`
-                                : `${rangeLabel} - ${visiblePlannerShoots.length} ${visiblePlannerShoots.length === 1 ? labels.workLower : labels.workPluralLower} - ${selectableEmployees.length} crew in pool`}
-                        </p>
+                                ? `${activeEmployees.length} crew · ${plannerShoots.length} ${plannerShoots.length === 1 ? labels.workLower : labels.workPluralLower}`
+                                : `${visiblePlannerShoots.length} ${visiblePlannerShoots.length === 1 ? labels.workLower : labels.workPluralLower} · ${selectableEmployees.length} pool`}
+                        </span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className={`inline-flex h-9 overflow-hidden rounded-lg ${segmentedControlClass}`}>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <div className={`inline-flex h-8 overflow-hidden rounded-lg ${segmentedControlClass}`}>
                             {[
-                                { value: 'CREW' as const, label: 'Crew View' },
-                                { value: 'SHOOT' as const, label: `${labels.workSingular} View` },
+                                { value: 'CREW' as const, label: 'Crew' },
+                                { value: 'SHOOT' as const, label: labels.workSingular },
                             ].map(option => (
                                 <button
                                     key={option.value}
@@ -2322,17 +2340,17 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                             setSelectedUserId('');
                                         }
                                     }}
-                                    className={getSegmentButtonClass(plannerViewMode === option.value, 'rounded-md px-3 text-xs font-semibold')}
+                                    className={getSegmentButtonClass(plannerViewMode === option.value, 'rounded-md px-2.5 text-xs font-semibold')}
                                 >
                                     {option.label}
                                 </button>
                             ))}
                         </div>
-                        <div className={`inline-flex h-9 overflow-hidden rounded-lg ${segmentedControlClass}`}>
+                        <div className={`inline-flex h-8 overflow-hidden rounded-lg ${segmentedControlClass}`}>
                             {[
-                                { value: 'WEEK' as const, label: 'Week' },
-                                { value: 'TWO_WEEK' as const, label: '2 Weeks' },
-                                { value: 'MONTH' as const, label: 'Month' },
+                                { value: 'WEEK' as const, label: 'W' },
+                                { value: 'TWO_WEEK' as const, label: '2W' },
+                                { value: 'MONTH' as const, label: 'M' },
                             ].map(option => (
                                 <button
                                     key={option.value}
@@ -2344,7 +2362,8 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                             ? startOfMonth(prev)
                                             : startOfWeek(prev, { weekStartsOn: 0 }));
                                     }}
-                                    className={getSegmentButtonClass(plannerRange === option.value, 'rounded-md px-3 text-xs font-semibold')}
+                                    className={getSegmentButtonClass(plannerRange === option.value, 'rounded-md px-2.5 text-xs font-semibold')}
+                                    title={option.value === 'WEEK' ? 'Week' : option.value === 'TWO_WEEK' ? '2 Weeks' : 'Month'}
                                 >
                                     {option.label}
                                 </button>
@@ -2362,44 +2381,47 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                 Publish Drafts ({visibleDraftAssignments.length})
                             </Button>
                         )}
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setSelectedPlanDate(null);
-                                setWeekStart(prev => plannerRange === 'MONTH'
-                                    ? startOfMonth(addMonths(prev, -1))
-                                    : addDays(prev, -rangeStepDays));
-                            }}
-                            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                            title="Previous range"
-                        >
-                            <ChevronLeft size={18} />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setSelectedPlanDate(null);
-                                setWeekStart(plannerRange === 'MONTH'
-                                    ? startOfMonth(new Date())
-                                    : startOfWeek(new Date(), { weekStartsOn: 0 }));
-                            }}
-                            className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        >
-                            {plannerRange === 'MONTH' ? 'This Month' : 'This Week'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setSelectedPlanDate(null);
-                                setWeekStart(prev => plannerRange === 'MONTH'
-                                    ? startOfMonth(addMonths(prev, 1))
-                                    : addDays(prev, rangeStepDays));
-                            }}
-                            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                            title="Next range"
-                        >
-                            <ChevronRight size={18} />
-                        </button>
+                        <div className="inline-flex h-8 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedPlanDate(null);
+                                    setWeekStart(prev => plannerRange === 'MONTH'
+                                        ? startOfMonth(addMonths(prev, -1))
+                                        : addDays(prev, -rangeStepDays));
+                                }}
+                                className="w-8 inline-flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border-r border-gray-200 dark:border-gray-700"
+                                title="Previous range"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedPlanDate(null);
+                                    setWeekStart(plannerRange === 'MONTH'
+                                        ? startOfMonth(new Date())
+                                        : startOfWeek(new Date(), { weekStartsOn: 0 }));
+                                }}
+                                className="px-2.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border-r border-gray-200 dark:border-gray-700"
+                                title={plannerRange === 'MONTH' ? 'This Month' : 'This Week'}
+                            >
+                                Today
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedPlanDate(null);
+                                    setWeekStart(prev => plannerRange === 'MONTH'
+                                        ? startOfMonth(addMonths(prev, 1))
+                                        : addDays(prev, rangeStepDays));
+                                }}
+                                className="w-8 inline-flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                title="Next range"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
                         <Button
                             type="button"
                             size="sm"
@@ -2416,38 +2438,40 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                 New {labels.workSingular}
                             </Button>
                         </Link>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsPanelOpen(true)}
+                            className="gap-2"
+                            title="Open assign / draft panel"
+                        >
+                            <PanelRightOpen size={15} />
+                            Assign
+                        </Button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-gray-200 dark:divide-gray-800">
-                    <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Scheduled</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{plannerShoots.length}</p>
+                <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-800 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    {/* Inline stat pills */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        {[
+                            { label: 'Scheduled', value: plannerShoots.length, accent: 'text-gray-900 dark:text-white' },
+                            { label: 'Need', value: unassignedShoots.length, accent: 'text-amber-600 dark:text-amber-300' },
+                            { label: 'Drafts', value: visibleDraftAssignments.length, accent: 'text-amber-600 dark:text-amber-300' },
+                            { label: 'Crew', value: assignedCrewCount, accent: 'text-gray-900 dark:text-white' },
+                            { label: 'Conflicts', value: conflictItems.length, accent: conflictItems.length > 0 ? 'text-red-600 dark:text-red-300' : 'text-emerald-600 dark:text-emerald-300' },
+                        ].map(stat => (
+                            <span key={stat.label} className="inline-flex items-center gap-1">
+                                <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{stat.label}</span>
+                                <span className={`text-sm font-bold ${stat.accent}`}>{stat.value}</span>
+                            </span>
+                        ))}
                     </div>
-                    <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Need Planning</p>
-                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-300 mt-1">{unassignedShoots.length}</p>
-                    </div>
-                    <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Drafts</p>
-                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-300 mt-1">{visibleDraftAssignments.length}</p>
-                    </div>
-                    <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Crew Used</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{assignedCrewCount}</p>
-                    </div>
-                    <div className="p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Conflicts</p>
-                        <p className={`text-2xl font-bold mt-1 ${conflictItems.length > 0 ? 'text-red-600 dark:text-red-300' : 'text-emerald-600 dark:text-emerald-300'}`}>
-                            {conflictItems.length}
-                        </p>
-                    </div>
-                </div>
 
-                <div className="p-4 border-t border-gray-200 dark:border-gray-800 flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
-                    <div className="flex w-full flex-col gap-3 lg:max-w-2xl lg:flex-row">
-                        <div className="relative w-full lg:max-w-sm">
-                            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <div className="ml-auto flex flex-1 sm:flex-none items-center gap-2 min-w-[180px]">
+                        <div className="relative flex-1 sm:w-56">
+                            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input
                                 type="text"
                                 value={plannerViewMode === 'CREW' ? crewSearch : shootSearch}
@@ -2459,36 +2483,36 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                     }
                                 }}
                                 placeholder={plannerViewMode === 'CREW' ? 'Search crew...' : `Search ${labels.workPluralLower}...`}
-                                className="h-10 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 pl-9 pr-3 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="h-8 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 pl-8 pr-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
                             />
                         </div>
-                    </div>
 
-                    {crewFilter === 'ALL' && (
-                        <div className={`inline-flex h-10 overflow-hidden rounded-xl ${segmentedControlClass}`}>
-                            {[
-                                { value: 'CREW_ONLY' as const, label: 'Crew Only' },
-                                { value: 'ASSIGNED' as const, label: 'Assigned' },
-                                { value: 'ALL_ACTIVE' as const, label: 'Assignable' },
-                            ].map(option => (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => setCrewRosterMode(option.value)}
-                                    className={getSegmentButtonClass(crewRosterMode === option.value, 'rounded-lg px-3 text-xs sm:text-sm font-semibold')}
-                                >
-                                    {option.label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                        {crewFilter === 'ALL' && (
+                            <div className={`inline-flex h-8 shrink-0 overflow-hidden rounded-lg ${segmentedControlClass}`}>
+                                {[
+                                    { value: 'CREW_ONLY' as const, label: 'Crew' },
+                                    { value: 'ASSIGNED' as const, label: 'Assigned' },
+                                    { value: 'ALL_ACTIVE' as const, label: 'Assignable' },
+                                ].map(option => (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => setCrewRosterMode(option.value)}
+                                        className={getSegmentButtonClass(crewRosterMode === option.value, 'rounded-md px-2.5 text-xs font-semibold')}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 items-start">
+            <div className="w-full">
                 {plannerViewMode === 'CREW' ? (
                 <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-sm overflow-hidden">
-                    <div ref={plannerScrollRef} className="max-h-[calc(100vh-220px)] min-h-[520px] overflow-auto">
+                    <div ref={plannerScrollRef} className="max-h-[calc(100vh-150px)] min-h-[560px] overflow-auto">
                         <div style={{ minWidth: `${minGridWidth}px` }}>
                             <div
                                 className="sticky top-0 z-30 grid bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800 shadow-sm"
@@ -2500,14 +2524,21 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                         {crewFilter === 'ALL' ? 'All Crew' : 'Selected Crew'}
                                     </div>
                                 </div>
-                                {plannerDays.map(day => (
-                                    <div key={day.toISOString()} className="px-3 py-3 text-center border-r last:border-r-0 border-gray-200 dark:border-gray-800">
-                                        <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{format(day, 'EEE')}</p>
-                                        <p className={`mt-1 inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm font-bold ${isToday(day) ? 'bg-primary text-primary-foreground' : 'text-gray-900 dark:text-white'}`}>
-                                            {format(day, 'd')}
-                                        </p>
-                                    </div>
-                                ))}
+                                {plannerDays.map(day => {
+                                    const isWeekend = [0, 6].includes(day.getDay());
+                                    const isTodayCol = isToday(day);
+                                    return (
+                                        <div
+                                            key={day.toISOString()}
+                                            className={`px-2 py-1.5 flex items-center justify-center gap-1.5 border-r last:border-r-0 border-gray-200 dark:border-gray-800 ${isTodayCol ? 'bg-primary/[0.06] dark:bg-primary/[0.08]' : isWeekend ? 'bg-gray-100/50 dark:bg-white/[0.02]' : ''}`}
+                                        >
+                                            <p className={`text-[11px] font-semibold uppercase ${isTodayCol ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}`}>{format(day, 'EEE')}</p>
+                                            <p className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-bold ${isTodayCol ? 'bg-primary text-primary-foreground' : 'text-gray-900 dark:text-white'}`}>
+                                                {format(day, 'd')}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
                             </div>
 
                             {activeEmployees.length === 0 ? (
@@ -2518,205 +2549,154 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                                 activeEmployees.map(employee => {
                                     const weeklyHours = getWeeklyHours(employee.id);
                                     const rowAssignments = getAssignmentsForUserRange(employee.id);
-                                    const rowHasAssignments = rowAssignments.length > 0;
                                     const packedItems = getPackedPlannerItems(rowAssignments);
-                                    const rowTrackCount = Math.max(1, ...packedItems.map(item => item.lane + 1));
-                                    const rowMinHeight = rowHasAssignments
-                                        ? Math.max(112, rowTrackCount * 98 + 14)
-                                        : 80;
-                                    const dayColumnTemplate = `repeat(${plannerDays.length}, minmax(134px, 1fr))`;
+                                    // Fixed-height compact rows: each day shows up to CHIP_CAP slim chips, rest collapse to "+N".
+                                    const CHIP_CAP = 3;
+                                    const ROW_H = 86;
+                                    const dayColumnTemplate = `repeat(${plannerDays.length}, minmax(132px, 1fr))`;
+                                    // Row-level conflict count drives a quick indicator on the crew label.
+                                    const rowConflictCount = packedItems.reduce(
+                                        (sum, p) => sum + getPlannerItemConflictCount(p.item, rowAssignments), 0
+                                    );
 
                                     return (
                                         <div
                                             key={employee.id}
                                             className="grid border-b last:border-b-0 border-gray-100 dark:border-gray-800"
-                                            style={{ gridTemplateColumns: '240px minmax(0, 1fr)' }}
+                                            style={{ gridTemplateColumns: '188px minmax(0, 1fr)' }}
                                         >
                                             <div
-                                                className="sticky left-0 z-20 bg-white dark:bg-[#1c1c1e] px-4 py-3 border-r border-gray-100 dark:border-gray-800"
-                                                style={{ minHeight: `${rowMinHeight}px` }}
+                                                className="sticky left-0 z-20 flex items-center bg-white dark:bg-[#1c1c1e] pl-3 pr-3 py-2 border-r border-gray-100 dark:border-gray-800"
+                                                style={{ height: `${ROW_H}px` }}
                                             >
-                                                <div className="flex items-start gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-sm font-bold text-gray-700 dark:text-gray-200 shrink-0">
+                                                {/* Load rail: instant availability triage (red=conflict, green=busy, grey=free) */}
+                                                <span
+                                                    className={`absolute left-0 inset-y-2 w-1 rounded-full ${rowConflictCount > 0 ? 'bg-red-500' : rowAssignments.length > 0 ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                                    aria-hidden
+                                                />
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 ${rowAssignments.length > 0 ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200' : 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500'}`}>
                                                         {getInitials(employee.name)}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{employee.name}</p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{getRoleLabel(employee.role)}</p>
-                                                        <p className="text-xs font-semibold text-primary dark:text-primary mt-1">{weeklyHours} h planned</p>
+                                                        <p className={`text-[13px] font-bold truncate leading-tight ${rowAssignments.length > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{employee.name}</p>
+                                                        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate leading-tight">
+                                                            {getRoleLabel(employee.role)}
+                                                            {weeklyHours > 0
+                                                                ? <span className="font-semibold text-primary"> · {weeklyHours}h</span>
+                                                                : <span className="text-gray-400 dark:text-gray-600"> · free</span>}
+                                                            {rowConflictCount > 0 && (
+                                                                <span className="ml-1 inline-flex items-center gap-0.5 font-bold text-red-600 dark:text-red-400">
+                                                                    <AlertTriangle size={9} className="inline" />{rowConflictCount}
+                                                                </span>
+                                                            )}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="relative bg-white dark:bg-[#1c1c1e]" style={{ minHeight: `${rowMinHeight}px` }}>
-                                                <div
-                                                    className="absolute inset-0 grid"
-                                                    style={{ gridTemplateColumns: dayColumnTemplate }}
-                                                >
-                                                    {plannerDays.map(day => {
-                                                        const dayAssignments = getAssignmentsForUserDay(employee.id, day);
-                                                        const dayLeaves = getLeavesForUserDay(employee.id, day);
-                                                        const isSelectedPlanningCell = !!selectedPlanDate
-                                                            && selectedUserId === employee.id
-                                                            && format(selectedPlanDate, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd');
+                                            <div
+                                                className="grid bg-white dark:bg-[#1c1c1e]"
+                                                style={{ gridTemplateColumns: dayColumnTemplate, height: `${ROW_H}px` }}
+                                            >
+                                                {plannerDays.map(day => {
+                                                    const dayItems = packedItems
+                                                        .filter(p => itemOverlapsDay(p.item, day))
+                                                        .map(p => p.item)
+                                                        .sort((a, b) => (getShootStart(a.shoot)?.getTime() || 0) - (getShootStart(b.shoot)?.getTime() || 0));
+                                                    const dayLeaves = getLeavesForUserDay(employee.id, day);
+                                                    const totalEntries = dayLeaves.length + dayItems.length;
+                                                    const isEmpty = totalEntries === 0;
+                                                    const isSelectedPlanningCell = !!selectedPlanDate
+                                                        && selectedUserId === employee.id
+                                                        && format(selectedPlanDate, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd');
 
-                                                        return (
-                                                            <div
-                                                                key={`${employee.id}-${day.toISOString()}`}
-                                                                data-planner-day={format(day, 'yyyy-MM-dd')}
-                                                                data-planner-cell={`${employee.id}-${format(day, 'yyyy-MM-dd')}`}
-                                                                onClick={(event) => {
-                                                                    if (dayAssignments.length === 0) return;
+                                                    // Budget: leaves first, then items, capped at CHIP_CAP.
+                                                    const leaveShown = Math.min(dayLeaves.length, CHIP_CAP);
+                                                    const itemBudget = Math.max(0, CHIP_CAP - leaveShown);
+                                                    const itemsShown = dayItems.slice(0, itemBudget);
+                                                    const overflow = totalEntries - leaveShown - itemsShown.length;
+                                                    const isWeekend = [0, 6].includes(day.getDay());
+                                                    const isTodayCol = isToday(day);
+                                                    const cellTint = isSelectedPlanningCell
+                                                        ? 'bg-gray-100/80 dark:bg-gray-800/50 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]'
+                                                        : isTodayCol
+                                                            ? 'bg-primary/[0.05] dark:bg-primary/[0.07]'
+                                                            : isWeekend
+                                                                ? 'bg-gray-50/60 dark:bg-white/[0.015]'
+                                                                : '';
 
-                                                                    const candidates = packedItems.filter(candidate => itemOverlapsDay(candidate.item, day));
-                                                                    if (candidates.length === 0) return;
-
-                                                                    const rect = event.currentTarget.getBoundingClientRect();
-                                                                    const clickRatio = Math.max(0, Math.min(0.999, (event.clientY - rect.top) / Math.max(rect.height, 1)));
-                                                                    const clickedLane = Math.min(rowTrackCount - 1, Math.floor(clickRatio * rowTrackCount));
-                                                                    const selectedCandidate = candidates.find(candidate => candidate.lane === clickedLane)
-                                                                        || candidates
-                                                                            .slice()
-                                                                            .sort((a, b) => Math.abs(a.lane - clickedLane) - Math.abs(b.lane - clickedLane))[0];
-
-                                                                    handleSelectPlannerItem(selectedCandidate.item, employee.id, day);
-                                                                }}
-                                                                className={`relative p-2 border-r last:border-r-0 border-gray-100 dark:border-gray-800 ${dayAssignments.length > 0 ? 'cursor-pointer hover:bg-gray-50/80 dark:hover:bg-gray-800/40' : ''} ${isSelectedPlanningCell ? 'bg-gray-100/80 dark:bg-gray-800/60 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]' : ''}`}
-                                                                style={{ minHeight: `${rowMinHeight}px` }}
-                                                            >
-                                                                {isSelectedPlanningCell && (
-                                                                    <div className="absolute left-3 right-3 top-1 h-1 rounded-full bg-gray-400/70 dark:bg-gray-500/70" />
-                                                                )}
-                                                                <div className="space-y-2">
-                                                                    {dayLeaves.map(leave => (
-                                                                        <div
-                                                                            key={leave.id}
-                                                                            className="rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-2 py-1.5 text-xs text-red-700 dark:text-red-200"
-                                                                            title={leave.reason}
-                                                                        >
-                                                                            <div className="font-bold">Absent</div>
-                                                                            <div className="truncate opacity-80">{leave.reason}</div>
-                                                                        </div>
-                                                                    ))}
-
-                                                                    {dayAssignments.length === 0 && dayLeaves.length === 0 && (
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleOpenCrewDayPlan(employee.id, day)}
-                                                                            className="group absolute inset-1 flex items-center justify-center rounded-lg border border-dashed border-transparent text-gray-400 opacity-0 transition-all hover:opacity-100 hover:border-gray-200 hover:bg-gray-50/70 hover:text-primary focus:opacity-100 focus:border-primary focus:bg-primary/5 focus:text-primary focus:outline-none dark:text-gray-500 dark:hover:border-gray-700 dark:hover:bg-gray-900/50 dark:focus:border-primary dark:focus:bg-primary/10"
-                                                                            title={`Plan ${employee.name} on ${format(day, 'MMM d')}`}
-                                                                        >
-                                                                            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-current/30 bg-white/90 shadow-sm transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground dark:bg-gray-900/90">
-                                                                                <Plus size={15} />
-                                                                            </span>
-                                                                        </button>
-                                                                    )}
+                                                    return (
+                                                        <div
+                                                            key={`${employee.id}-${day.toISOString()}`}
+                                                            data-planner-day={format(day, 'yyyy-MM-dd')}
+                                                            data-planner-cell={`${employee.id}-${format(day, 'yyyy-MM-dd')}`}
+                                                            className={`group/cell relative flex flex-col gap-0.5 overflow-hidden border-r last:border-r-0 border-gray-100 dark:border-gray-800 p-1 ${cellTint}`}
+                                                        >
+                                                            {/* Leave chips */}
+                                                            {dayLeaves.slice(0, leaveShown).map(leave => (
+                                                                <div
+                                                                    key={leave.id}
+                                                                    className="flex items-center gap-1 rounded border-l-[3px] border-red-400 bg-red-50 px-1.5 py-1 text-[11px] leading-none text-red-700 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200"
+                                                                    title={`Off — ${leave.reason}`}
+                                                                >
+                                                                    <span className="shrink-0 font-bold">Off</span>
+                                                                    <span className="min-w-0 flex-1 truncate opacity-80">{leave.reason}</span>
                                                                 </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                            ))}
 
-                                                <div
-                                                    className="relative z-10 grid pointer-events-none"
-                                                    style={{
-                                                        gridTemplateColumns: dayColumnTemplate,
-                                                        gridTemplateRows: `repeat(${rowTrackCount}, minmax(104px, auto))`,
-                                                        minHeight: `${rowMinHeight}px`,
-                                                    }}
-                                                >
-                                                    {packedItems.map(({ item, placement, lane }) => {
-                                                        const shootIndex = plannerShoots.findIndex(shoot => shoot.id === item.shoot.id);
-                                                        const colorStyle = getPlannerColorStyle(shootIndex >= 0 ? shootIndex : 0);
-                                                        const isRemoving = removingAssignmentId === item.assignment.id;
-                                                        const itemConflictCount = getPlannerItemConflictCount(item, rowAssignments);
-                                                        const itemDateRange = formatPlannerItemDateRange(item);
-
-                                                        return (
-                                                            <div
-                                                                key={getPlannerItemKey(item)}
-                                                                onClick={event => handleSelectPlannerItem(
-                                                                    item,
-                                                                    employee.id,
-                                                                    getDayFromPlannerCardClick(event, placement)
-                                                                )}
-                                                                className={`pointer-events-auto relative my-2 flex min-h-[92px] flex-col rounded-lg border border-gray-200 dark:border-gray-700 border-l-4 px-3 py-2 text-xs shadow-sm hover:shadow-md transition-shadow ${selectedPlannerItemKey === getPlannerItemKey(item) ? 'ring-2 ring-gray-300 dark:ring-gray-600' : ''} ${itemConflictCount > 0 ? 'ring-1 ring-red-500/70 dark:ring-red-400/70' : ''} ${item.isDraft ? 'border-dashed ring-1 ring-amber-400/60' : ''}`}
-                                                                style={{
-                                                                    ...colorStyle,
-                                                                    gridColumn: `${placement.columnStart} / span ${placement.columnSpan}`,
-                                                                    gridRow: lane + 1,
-                                                                }}
-                                                                title={item.shoot.title}
-                                                            >
-                                                                {(item.isDraft || item.shoot.status === 'DRAFT') && (
-                                                                    <div className="mb-1 flex flex-wrap gap-1">
-                                                                        {item.shoot.status === 'DRAFT' && (
-                                                                            <span className="inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-200">
-                                                                                Draft Shoot
-                                                                            </span>
-                                                                        )}
-                                                                        {item.isDraft && (
-                                                                            <span className="inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-200">
-                                                                                Tentative
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                )}
-                                                                <div className="flex items-start justify-between gap-2">
-                                                                    <div className="min-w-0 flex-1">
-                                                                        <div className="flex min-w-0 items-center gap-1 font-bold leading-none">
-                                                                            <Clock size={11} className="shrink-0" />
-                                                                            <span className="min-w-0 truncate">
-                                                                                {formatPlannerItemTimeRange(item)}
-                                                                                {itemDateRange ? ` · ${itemDateRange}` : ''}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                    {itemConflictCount > 0 && (
-                                                                        <span
-                                                                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-sm"
-                                                                            title={`${itemConflictCount} overlapping ${itemConflictCount === 1 ? 'assignment' : 'assignments'}`}
-                                                                        >
-                                                                            <AlertTriangle size={12} />
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <div className="font-semibold mt-1 line-clamp-2">{item.shoot.title}</div>
-                                                                {item.shoot.location && (
-                                                                    <div className="flex items-center gap-1 mt-1 opacity-75">
-                                                                        <MapPin size={11} />
-                                                                        <span className="truncate">{item.shoot.location}</span>
-                                                                    </div>
-                                                                )}
-                                                                <div className="mt-1 text-[10px] uppercase font-bold opacity-70">
-                                                                    {item.assignment.role === 'Incharge' ? labels.leadLabel : getRoleLabel(item.assignment.role)}
-                                                                </div>
-                                                                <div className="mt-auto flex items-center gap-1 pt-2">
-                                                                    <Link
-                                                                        href={getShootPlannerHref(item.shoot.id)}
-                                                                        onClick={event => event.stopPropagation()}
-                                                                        className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded bg-white/60 dark:bg-black/20 px-2 text-[11px] font-bold hover:bg-white dark:hover:bg-black/30"
-                                                                    >
-                                                                        <ExternalLink size={12} />
-                                                                        View
-                                                                    </Link>
+                                                            {/* Shoot chips */}
+                                                            {itemsShown.map(item => {
+                                                                const shootIndex = plannerShoots.findIndex(shoot => shoot.id === item.shoot.id);
+                                                                const colorStyle = getPlannerColorStyle(shootIndex >= 0 ? shootIndex : 0);
+                                                                const conflict = getPlannerItemConflictCount(item, rowAssignments);
+                                                                const isDraft = item.isDraft || item.shoot.status === 'DRAFT';
+                                                                const start = getShootStart(item.shoot);
+                                                                const startsToday = !!start && isSameDay(start, day);
+                                                                const isSelected = selectedPlannerItemKey === getPlannerItemKey(item);
+                                                                const roleLabel = item.assignment.role === 'Incharge' ? labels.leadLabel : getRoleLabel(item.assignment.role);
+                                                                return (
                                                                     <button
+                                                                        key={getPlannerItemKey(item)}
                                                                         type="button"
-                                                                        onClick={(event) => {
-                                                                            event.stopPropagation();
-                                                                            handleRemoveAssignment(item);
-                                                                        }}
-                                                                        disabled={isRemoving}
-                                                                        className="inline-flex h-7 w-8 items-center justify-center rounded bg-white/60 dark:bg-black/20 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/40 disabled:opacity-50"
-                                                                        title={`Remove ${employee.name} from ${item.shoot.title}`}
+                                                                        onClick={(event) => { event.stopPropagation(); handleSelectPlannerItem(item, employee.id, day); }}
+                                                                        className={`flex w-full items-center gap-1 rounded border-l-[3px] px-1.5 py-1 text-left text-[11px] leading-none shadow-sm transition-shadow hover:shadow ${isSelected ? 'ring-1 ring-gray-500 dark:ring-gray-300' : ''} ${isDraft ? 'border-dashed' : ''}`}
+                                                                        style={colorStyle}
+                                                                        title={`${item.shoot.title}${item.shoot.location ? ` @ ${item.shoot.location}` : ''}\n${formatPlannerItemTimeRange(item)}${formatPlannerItemDateRange(item) ? ` · ${formatPlannerItemDateRange(item)}` : ''} · ${roleLabel}`}
                                                                     >
-                                                                        <Trash2 size={12} />
+                                                                        <span className="shrink-0 font-medium tabular-nums opacity-75">{startsToday ? format(start!, 'HH:mm') : '→'}</span>
+                                                                        <span className="min-w-0 flex-1 truncate font-semibold">{item.shoot.title}</span>
+                                                                        {isDraft && <span className="shrink-0 rounded-sm bg-amber-500/25 px-1 text-[8px] font-bold uppercase text-amber-800 dark:text-amber-100">D</span>}
+                                                                        {conflict > 0 && <AlertTriangle size={10} className="shrink-0 text-red-600 dark:text-red-400" />}
                                                                     </button>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                                );
+                                                            })}
+
+                                                            {/* Overflow */}
+                                                            {overflow > 0 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpenCrewDayPlan(employee.id, day)}
+                                                                    className="mt-px w-full rounded px-1.5 py-0.5 text-left text-[10px] font-semibold text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                                                                >
+                                                                    +{overflow} more
+                                                                </button>
+                                                            )}
+
+                                                            {/* Empty-day quick add */}
+                                                            {isEmpty && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpenCrewDayPlan(employee.id, day)}
+                                                                    className="absolute inset-1 flex items-center justify-center rounded-lg border border-dashed border-transparent text-gray-300 opacity-0 transition-all hover:opacity-100 hover:border-gray-200 hover:bg-gray-50/70 hover:text-primary focus:opacity-100 focus:outline-none dark:text-gray-600 dark:hover:border-gray-700 dark:hover:bg-gray-900/50"
+                                                                    title={`Plan ${employee.name} on ${format(day, 'MMM d')}`}
+                                                                >
+                                                                    <Plus size={14} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     );
@@ -2727,7 +2707,7 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                 </div>
                 ) : (
                     <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-sm overflow-hidden">
-                        <div ref={plannerScrollRef} className="max-h-[calc(100vh-220px)] min-h-[520px] overflow-auto">
+                        <div ref={plannerScrollRef} className="max-h-[calc(100vh-150px)] min-h-[560px] overflow-auto">
                             <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
@@ -3183,7 +3163,33 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                     </div>
                 )}
 
-                <div className="space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-32px)] xl:overflow-y-auto">
+                {/* Backdrop */}
+                {panelOpen && (
+                    <div
+                        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity"
+                        onClick={closePanel}
+                        aria-hidden
+                    />
+                )}
+                {/* Slide-over panel */}
+                <aside
+                    className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-[400px] flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 ease-out dark:border-gray-800 dark:bg-[#1c1c1e] ${panelOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                    aria-hidden={!panelOpen}
+                >
+                    <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800 shrink-0">
+                        <h2 className="text-sm font-bold text-gray-900 dark:text-white">
+                            {selectedPlannerItemKey ? 'Crew Timing' : selectedShootId ? `Crew for ${labels.workSingular}` : selectedPlanDate ? 'Assign Crew' : 'Planner Panel'}
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={closePanel}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+                            aria-label="Close panel"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                    <div className="flex-1 space-y-4 overflow-y-auto p-4">
                     {plannerViewMode === 'CREW' && (
                     <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] p-4 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
@@ -3953,7 +3959,8 @@ export const ShootPlanner: React.FC<ShootPlannerProps> = ({
                             </div>
                         </div>
                     )}
-                </div>
+                    </div>
+                </aside>
             </div>
         </div>
     );
