@@ -151,15 +151,21 @@ export default function CalendarPage() {
 
     const handleAdminLeaveSubmit = async (data: { userId: string, startDate: string, endDate: string, reason: string }) => {
         try {
-            await addLeave({
-                userId: data.userId,
-                departmentId: activeDepartmentId || undefined,
-                startDate: data.startDate,
-                endDate: data.endDate,
-                reason: data.reason,
-                status: 'APPROVED',
-                approverId: user?.id
+            const res = await fetch('/api/admin/leaves', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: data.userId,
+                    departmentId: activeDepartmentId || undefined,
+                    startDate: data.startDate,
+                    endDate: data.endDate,
+                    reason: data.reason
+                })
             });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to record absence');
+            }
             showToast('Absence recorded successfully', 'success');
             handleRefresh();
         } catch (error) {
@@ -842,7 +848,7 @@ export default function CalendarPage() {
                                         )}
                                         <Link href={`/shoots/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}>
                                             <button
-                                                className="p-2 rounded-full bg-primary text-primary dark:bg-primary/20 dark:text-primary hover:bg-primary dark:hover:bg-primary/20 transition-colors"
+                                                className="p-2 rounded-full bg-primary text-primary-foreground dark:bg-primary/20 dark:text-primary hover:bg-primary/90 dark:hover:bg-primary/20 transition-colors"
                                                 title={`Schedule another ${labels.workLower}`}
                                             >
                                                 <Plus size={20} />

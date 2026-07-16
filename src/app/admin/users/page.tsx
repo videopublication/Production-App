@@ -517,7 +517,7 @@ export default function UserManagementPage() {
             SUPER_ADMIN: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
             ADMIN: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
             FINANCE_MANAGER: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
-            MANAGER: 'bg-primary dark:bg-primary/20 text-primary dark:text-primary',
+            MANAGER: 'bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary',
             CREW: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
         };
         const showGlobalMarker = user?.role === 'SUPER_ADMIN' && role === 'SUPER_ADMIN';
@@ -670,7 +670,7 @@ export default function UserManagementPage() {
             <PullToRefresh onRefresh={fetchUsers}>
                 <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
                     {/* Sort Header (desktop) */}
-                    <div className="hidden lg:grid grid-cols-[minmax(280px\,1.45fr)_150px_120px_minmax(150px\,0.75fr)_minmax(560px\,1.25fr)] items-center gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <div className="hidden lg:grid items-center gap-4 px-5 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400" style={{ gridTemplateColumns: 'minmax(280px,1.45fr) 150px 120px minmax(150px,0.75fr) minmax(560px,1.25fr)' }}>
                         <button className="flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-left" onClick={() => handleSort('name')}>
                             Name <SortIcon active={sortKey === 'name'} dir={sortKey === 'name' ? sortDir : 'asc'} />
                         </button>
@@ -708,7 +708,7 @@ export default function UserManagementPage() {
                                     className={`p-4 sm:px-5 sm:py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${processingIds.has(u.id) ? 'opacity-60 pointer-events-none' : ''}`}
                                 >
                                     {/* Desktop Layout */}
-                                    <div className="hidden lg:grid grid-cols-[minmax(280px\,1.45fr)_150px_120px_minmax(150px\,0.75fr)_minmax(560px\,1.25fr)] items-center gap-4">
+                                    <div className="hidden lg:grid items-center gap-4" style={{ gridTemplateColumns: 'minmax(280px,1.45fr) 150px 120px minmax(150px,0.75fr) minmax(560px,1.25fr)' }}>
                                         {/* Name + Avatar */}
                                         <div className="flex items-center gap-3 min-w-0">
                                             <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-md ${avatarGradient(u.role)}`}>
@@ -818,7 +818,7 @@ export default function UserManagementPage() {
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-1.5 mb-0.5">
                                                     <span className="font-semibold text-[15px] text-gray-900 dark:text-white truncate">{u.name}</span>
-                                                    {user?.id === u.id && <span className="px-1.5 py-0.5 bg-primary dark:bg-primary/20 text-primary text-[9px] font-bold rounded-full shrink-0">YOU</span>}
+                                                    {user?.id === u.id && <span className="px-1.5 py-0.5 bg-primary/10 dark:bg-primary/20 text-primary text-[9px] font-bold rounded-full shrink-0">YOU</span>}
                                                 </div>
                                                 <p className="text-xs text-gray-400 truncate">{u.email}</p>
                                                 <div className="flex items-center gap-1.5 mt-1">

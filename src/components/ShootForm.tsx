@@ -377,7 +377,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                 <Card className="xl:col-span-2 space-y-4 dark:bg-[#1c1c1e] border-0">
                     <div className="flex items-center justify-between bg-primary/10 dark:bg-[var(--primary)]/10 -mx-3 -mt-3 p-3 sm:-mx-4 sm:-mt-4 sm:p-4 md:-mx-6 md:-mt-6 md:px-6 md:py-4 mb-4 border-b border-primary/30 dark:border-[var(--primary)]/20 rounded-t-3xl">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-primary dark:bg-[var(--primary)]/20 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 dark:bg-[var(--primary)]/20 flex items-center justify-center">
                                 <FileText size={16} className="text-primary dark:text-[var(--primary)]" />
                             </div>
                             <h3 className="text-[17px] font-semibold text-[#1d1d1f] dark:text-white">{labels.workSingular} Details</h3>

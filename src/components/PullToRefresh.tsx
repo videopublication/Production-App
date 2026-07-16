@@ -107,9 +107,13 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, childre
             {/* Content Wrapper */}
             <div
                 style={{
-                    transform: `translate3d(0, ${pullDistance}px, 0)`,
+                    // Only apply `transform`/`willChange` while actually offset - leaving them set
+                    // at rest (even to identity values) creates a containing block for
+                    // `position: fixed` descendants, which breaks fixed-positioned modals
+                    // rendered anywhere inside this tree (they'd center within this div's
+                    // height instead of the viewport).
+                    ...(pullDistance !== 0 ? { transform: `translate3d(0, ${pullDistance}px, 0)`, willChange: 'transform' } : {}),
                     transition: isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)',
-                    willChange: 'transform'
                 }}
             >
                 {children}

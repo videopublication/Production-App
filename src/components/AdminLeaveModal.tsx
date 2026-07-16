@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/Button';
 import { User } from '@/types';
 import { X, Search, ChevronDown, Check } from 'lucide-react';
@@ -46,6 +47,11 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
     const [userSearch, setUserSearch] = useState('');
     const dropdownRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
         if (isOpen) {
@@ -76,7 +82,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
-    if (!isOpen) return null;
+    if (!isOpen || !mounted) return null;
 
     const selectedUser = users.find(u => u.id === userId);
     const filteredUsers = users
@@ -97,7 +103,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
         }
     };
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white dark:bg-[#1c1c1e] w-full max-w-md rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                 <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-800">
@@ -231,6 +237,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

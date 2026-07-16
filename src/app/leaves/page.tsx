@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useLeaves } from '@/hooks/useLeaves';
@@ -14,7 +14,7 @@ import {
 import {
     Plus, CheckCircle, XCircle, Calendar,
     Download, Search, ExternalLink, Check, X,
-    Pencil,
+    Pencil, Filter, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/Button';
 import { Leave } from '@/types';
@@ -70,6 +70,7 @@ export default function LeavesPage() {
     );
     const [searchQuery, setSearchQuery] = useState('');
     const [monthFilter, setMonthFilter] = useState('');
+    const monthInputRef = useRef<HTMLInputElement>(null);
     const [isApplying, setIsApplying] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -194,15 +195,21 @@ export default function LeavesPage() {
 
     const handleAdminLeaveSubmit = async (data: { userId: string; startDate: string; endDate: string; reason: string }) => {
         try {
-            await addLeave({
-                userId: data.userId,
-                departmentId: activeDepartmentId || undefined,
-                startDate: data.startDate,
-                endDate: data.endDate,
-                reason: data.reason,
-                status: 'APPROVED',
-                approverId: user?.id,
+            const res = await fetch('/api/admin/leaves', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: data.userId,
+                    departmentId: activeDepartmentId || undefined,
+                    startDate: data.startDate,
+                    endDate: data.endDate,
+                    reason: data.reason,
+                }),
             });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to record absence');
+            }
             showToast('Absence recorded successfully', 'success');
             refetch();
         } catch (error) {
@@ -313,17 +320,20 @@ export default function LeavesPage() {
         setEditReason('');
     };
 
-    const handleEditSubmit = async (leaveId: string) => {
+    const handleEditSubmit = async (leave: Leave) => {
         if (!editStart || !editEnd || !editReason) return;
 
-        // Overlap check excluding this leave
+        // Overlap check excluding this leave, scoped to the leave's OWNER (not the
+        // signed-in user) so an admin editing someone else's absence is checked
+        // against that person's other leaves.
+        const ownerId = leave.userId;
         const newStart = new Date(editStart);
         const newEnd = new Date(editEnd);
         newStart.setHours(0, 0, 0, 0);
         newEnd.setHours(23, 59, 59, 999);
 
         const hasOverlap = leaves.some(l => {
-            if (l.id === leaveId || l.userId !== user?.id) return false;
+            if (l.id === leave.id || l.userId !== ownerId) return false;
             if (l.status === 'REJECTED') return false;
             const s = new Date(l.startDate); s.setHours(0, 0, 0, 0);
             const e = new Date(l.endDate); e.setHours(23, 59, 59, 999);
@@ -335,9 +345,25 @@ export default function LeavesPage() {
             return;
         }
 
+        // When an admin edits a leave they don't own, RLS blocks the browser
+        // client, so route through the service-role admin endpoint.
+        const isOwnLeave = leave.userId === user?.id;
         setIsEditSubmitting(true);
         try {
-            await updateLeave({ id: leaveId, updates: { startDate: editStart, endDate: editEnd, reason: editReason } });
+            if (isAdmin && !isOwnLeave) {
+                const res = await fetch('/api/admin/leaves', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: leave.id, startDate: editStart, endDate: editEnd, reason: editReason }),
+                });
+                if (!res.ok) {
+                    const b = await res.json().catch(() => ({}));
+                    throw new Error(b.error || 'Failed to update leave');
+                }
+                refetch();
+            } else {
+                await updateLeave({ id: leave.id, updates: { startDate: editStart, endDate: editEnd, reason: editReason } });
+            }
             showToast('Leave request updated', 'success');
             cancelEdit();
         } catch (error) {
@@ -361,14 +387,56 @@ export default function LeavesPage() {
         }
     };
 
-    const handleStatusUpdate = async (id: string, status: 'APPROVED' | 'REJECTED', applicantId: string) => {
+    // Admin delete of any leave (e.g. wrongly-recorded absence). Routed through
+    // the service-role endpoint since RLS blocks deleting another user's row.
+    const handleAdminDeleteLeave = async (leave: Leave) => {
+        const who = users.find(u => u.id === leave.userId)?.name || 'this member';
+        if (!window.confirm(`Delete this leave/absence for ${who}? This cannot be undone.`)) return;
+        setCancellingId(leave.id);
         try {
-            await updateLeave({ id, updates: { status, approverId: user?.id } });
+            const res = await fetch(`/api/admin/leaves?id=${encodeURIComponent(leave.id)}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const b = await res.json().catch(() => ({}));
+                throw new Error(b.error || 'Failed to delete leave');
+            }
+            showToast('Leave deleted', 'success');
+            refetch();
+        } catch (error) {
+            console.error('Failed to delete leave:', error);
+            showToast('Failed to delete leave', 'error');
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
+    const handleStatusUpdate = async (id: string, status: 'APPROVED' | 'REJECTED' | 'PENDING', applicantId: string) => {
+        // Wording per target status (also covers reopening a decided leave back to Pending)
+        const verb = status === 'APPROVED' ? 'Approved' : status === 'REJECTED' ? 'Rejected' : 'Reopened';
+        try {
+            // Admin changing another member's leave is blocked by the owner-only RLS
+            // update policy, so route through the service-role admin endpoint.
+            const isOwnLeave = applicantId === user?.id;
+            if (isAdmin && !isOwnLeave) {
+                const res = await fetch('/api/admin/leaves', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, status }),
+                });
+                if (!res.ok) {
+                    const b = await res.json().catch(() => ({}));
+                    throw new Error(b.error || 'Failed to update leave status');
+                }
+                refetch();
+            } else {
+                await updateLeave({ id, updates: { status, approverId: status === 'PENDING' ? undefined : user?.id } });
+            }
 
             const applicant = users.find(u => u.id === applicantId);
             const applicantName = applicant?.name || applicant?.email || 'Unknown User';
-            const notifTitle = `Leave Request ${status.charAt(0) + status.slice(1).toLowerCase()}`;
-            const notifMessage = `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`;
+            const notifTitle = `Leave Request ${verb}`;
+            const notifMessage = status === 'PENDING'
+                ? `Your leave request has been reopened for review by ${user?.name}.`
+                : `Your leave request has been ${status.toLowerCase()} by ${user?.name}.`;
 
             if (applicant) {
                 sendPushNotification({ userId: applicant.id, title: notifTitle, message: notifMessage, link: '/leaves' })
@@ -382,7 +450,7 @@ export default function LeavesPage() {
                     entityId: id,
                     userId: user!.id,
                     timestamp: new Date().toISOString(),
-                    details: `${status === 'APPROVED' ? 'Approved' : 'Rejected'} leave request from ${applicantName}`,
+                    details: `${verb} leave request from ${applicantName}`,
                     departmentId: activeDepartmentId || undefined,
                 }),
                 storage.addNotification({
@@ -393,6 +461,7 @@ export default function LeavesPage() {
                     link: '/leaves',
                 }),
             ]).catch(e => console.error('Failed to add log/notification', e));
+            showToast(`Leave ${verb.toLowerCase()}`, 'success');
         } catch (error) {
             console.error('Failed to update leave status:', error);
             showToast('Failed to update leave status.', 'error');
@@ -459,7 +528,7 @@ export default function LeavesPage() {
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            style={{ transform: `translateY(${pullDistance}px)` }}
+            style={pullDistance !== 0 ? { transform: `translateY(${pullDistance}px)` } : undefined}
         >
             {/* Pull-to-refresh indicator */}
             <div className="absolute top-0 left-0 right-0 flex justify-center -mt-12 transition-opacity duration-200" style={{ opacity: pullDistance > 10 ? 1 : 0 }}>
@@ -628,42 +697,53 @@ export default function LeavesPage() {
                         ))}
                     </div>
 
-                    {/* Search + month filter (admin only) */}
+                    {/* Search + month filter (admin only) - visually separated from the
+                        "Record Absence" action above so it can't be mistaken for it */}
                     {isAdmin && (
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(220px\,1fr)_180px_auto]">
-                            <div className="relative flex-1">
-                                <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Search by name..."
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    className="h-11 w-full rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                                />
+                        <div className="rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3">
+                            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                <Filter size={13} />
+                                Filter list
                             </div>
-                            <div className="relative">
-                                <Calendar size={18} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
-                                <input
-                                    type="month"
-                                    value={monthFilter}
-                                    onChange={e => setMonthFilter(e.target.value)}
-                                    aria-label="Filter by month"
-                                    className={`h-11 w-full rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 ${monthFilter ? 'text-gray-900 dark:text-white' : 'text-transparent dark:text-transparent'}`}
-                                />
-                                {!monthFilter && (
-                                    <span className="pointer-events-none absolute left-10 top-1/2 -translate-y-1/2 text-[15px] text-gray-400">
-                                        Month
-                                    </span>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <div className="relative flex-1">
+                                    <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name..."
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        className="h-11 w-full rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                    />
+                                </div>
+                                <div
+                                    className="relative cursor-pointer shrink-0 sm:w-[180px]"
+                                    onClick={() => {
+                                        const el = monthInputRef.current;
+                                        if (!el) return;
+                                        if (typeof el.showPicker === 'function') el.showPicker();
+                                        else el.focus();
+                                    }}
+                                >
+                                    <Calendar size={18} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
+                                    <input
+                                        ref={monthInputRef}
+                                        type="month"
+                                        value={monthFilter}
+                                        onChange={e => setMonthFilter(e.target.value)}
+                                        aria-label="Filter by month"
+                                        className={`h-11 w-full cursor-pointer rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 ${monthFilter ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}
+                                    />
+                                </div>
+                                {(searchQuery || monthFilter) && (
+                                    <button
+                                        onClick={() => { setSearchQuery(''); setMonthFilter(''); }}
+                                        className="h-11 shrink-0 rounded-2xl border border-gray-300 px-4 text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                                    >
+                                        Clear
+                                    </button>
                                 )}
                             </div>
-                            {(searchQuery || monthFilter) && (
-                                <button
-                                    onClick={() => { setSearchQuery(''); setMonthFilter(''); }}
-                                    className="h-11 rounded-2xl border border-gray-300 px-4 text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                                >
-                                    Clear
-                                </button>
-                            )}
                         </div>
                     )}
                 </div>
@@ -680,46 +760,32 @@ export default function LeavesPage() {
                             const employee = users.find(u => u.id === leave.userId);
                             const approver = users.find(u => u.id === leave.approverId);
                             const days = leaveDays(leave.startDate, leave.endDate);
+                            // Compact range: drop repeated year on the start, collapse single-day to one date
+                            const sameYear = parseISO(leave.startDate).getFullYear() === parseISO(leave.endDate).getFullYear();
+                            const endFmt = format(parseISO(leave.endDate), 'MMM d, yyyy');
+                            const rangeLabel = leave.startDate === leave.endDate
+                                ? endFmt
+                                : `${format(parseISO(leave.startDate), sameYear ? 'MMM d' : 'MMM d, yyyy')} – ${endFmt}`;
                             const canCancel = leave.userId === user?.id && leave.status === 'PENDING';
-                            const canEdit = leave.userId === user?.id && leave.status === 'PENDING';
+                            // Admins can edit/delete any leave (fix a wrong date or remove a
+                            // wrongly-recorded absence); crew can still edit their own pending ones.
+                            const canEdit = (leave.userId === user?.id && leave.status === 'PENDING') || isAdmin;
+                            const canAdminDelete = isAdmin;
                             const isEditing = editingLeaveId === leave.id;
 
                             return (
-                                <div key={leave.id} className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-[#242426] dark:hover:bg-gray-800/60 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-5 sm:shadow-none sm:dark:bg-transparent">
-                                    {/* Employee header — always shown */}
-                                    <div className="mb-4 flex items-start justify-between gap-3">
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${avatarColor(leave.userId)}`}>
-                                                {getInitials(employee?.name, employee?.email)}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <span className="block truncate text-[17px] font-bold leading-tight text-gray-900 dark:text-white sm:text-base">
-                                                    {employee?.name || employee?.email || 'Unknown Employee'}
-                                                </span>
-                                                <span className="mt-1 block text-xs text-gray-500">
-                                                    Applied {format(parseISO(leave.createdAt || new Date().toISOString()), 'MMM d, yyyy')}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="flex shrink-0 items-center gap-2">
-                                            {getStatusBadge(leave.status)}
-                                            {/* Per-card calendar deep-link (admin only) */}
-                                            {isAdmin && (
-                                                <Link
-                                                    href={`/calendar?user=${leave.userId}`}
-                                                    title="View on Calendar"
-                                                    className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-primary dark:hover:bg-gray-800"
-                                                >
-                                                    <Calendar size={17} />
-                                                </Link>
-                                            )}
-                                        </div>
-                                    </div>
-
+                                <div key={leave.id} className="rounded-2xl border border-gray-200 bg-white/70 p-3 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-[#242426] dark:hover:bg-gray-800/60 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-4 sm:py-3 sm:shadow-none sm:hover:bg-gray-50/70 sm:dark:hover:bg-gray-800/40">
                                     {/* Inline edit form */}
                                     {isEditing ? (
                                         <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 rounded-xl p-4 space-y-3">
-                                            <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Edit Leave Request</p>
+                                            <div className="flex items-center gap-2.5">
+                                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${avatarColor(leave.userId)}`}>
+                                                    {getInitials(employee?.name, employee?.email)}
+                                                </div>
+                                                <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                                                    Editing — {employee?.name || employee?.email || 'Unknown Employee'}
+                                                </p>
+                                            </div>
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
@@ -759,7 +825,7 @@ export default function LeavesPage() {
                                                     <X size={14} /> Discard
                                                 </button>
                                                 <button
-                                                    onClick={() => handleEditSubmit(leave.id)}
+                                                    onClick={() => handleEditSubmit(leave)}
                                                     disabled={isEditSubmitting || !editStart || !editEnd || !editReason}
                                                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
                                                 >
@@ -768,57 +834,86 @@ export default function LeavesPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <>
-                                            {/* Date + reason card */}
-                                            <div className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-800/60 dark:bg-[#2c2c2e] sm:bg-gray-50 sm:px-4 sm:py-3 sm:dark:bg-[#252528]">
-                                                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                                                    <div className="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-gray-900 dark:text-white">
-                                                        <Calendar size={16} className="shrink-0 text-gray-500" />
-                                                        {format(parseISO(leave.startDate), 'MMM d, yyyy')}
-                                                        <span className="text-gray-400">to</span>
-                                                        {format(parseISO(leave.endDate), 'MMM d, yyyy')}
-                                                    </div>
-                                                    <span className="rounded-full bg-gray-200 px-2.5 py-1 text-xs font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                                                        {days} {days === 1 ? 'day' : 'days'}
+                                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
+                                            {/* Identity */}
+                                            <div className="flex min-w-0 items-center gap-3 sm:w-56 sm:shrink-0">
+                                                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${avatarColor(leave.userId)}`}>
+                                                    {getInitials(employee?.name, employee?.email)}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <span className="block truncate text-[15px] font-semibold leading-tight text-gray-900 dark:text-white">
+                                                        {employee?.name || employee?.email || 'Unknown Employee'}
+                                                    </span>
+                                                    <span className="block text-[11px] text-gray-400">
+                                                        Applied {format(parseISO(leave.createdAt || new Date().toISOString()), 'MMM d, yyyy')}
                                                     </span>
                                                 </div>
-                                                <p className="text-[14px] leading-relaxed text-gray-600 dark:text-gray-400">{leave.reason}</p>
                                             </div>
 
-                                            {/* Approver info */}
-                                            {leave.status !== 'PENDING' && approver && (
-                                                <p className="text-xs text-gray-500 flex items-center gap-1.5 mb-3">
-                                                    <CheckCircle size={14} className={leave.status === 'APPROVED' ? 'text-green-500' : 'text-red-500'} />
-                                                    {leave.status === 'APPROVED' ? 'Approved' : 'Rejected'} by{' '}
-                                                    <span className="font-medium text-gray-700 dark:text-gray-300">{approver.name || approver.email}</span>
-                                                </p>
-                                            )}
+                                            {/* Dates + reason (single line, reason truncates) */}
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+                                                    <span className="inline-flex items-center gap-1.5 font-semibold text-gray-900 dark:text-white">
+                                                        <Calendar size={14} className="shrink-0 text-gray-400" />
+                                                        {rangeLabel}
+                                                    </span>
+                                                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                                        {days} {days === 1 ? 'day' : 'days'}
+                                                    </span>
+                                                    <span className="min-w-0 truncate text-gray-500 dark:text-gray-400" title={leave.reason}>
+                                                        · {leave.reason}
+                                                    </span>
+                                                </div>
+                                                {leave.status !== 'PENDING' && approver && (
+                                                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-400">
+                                                        <CheckCircle size={12} className={leave.status === 'APPROVED' ? 'text-green-500' : 'text-red-500'} />
+                                                        {leave.status === 'APPROVED' ? 'Approved' : 'Rejected'} by {approver.name || approver.email}
+                                                    </p>
+                                                )}
+                                            </div>
 
-                                            {/* Action buttons */}
-                                            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                                                {/* Admin approve/reject — compact horizontal pills */}
-                                                {isAdmin && leave.status === 'PENDING' && (
+                                            {/* Status + actions */}
+                                            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+                                                {getStatusBadge(leave.status)}
+
+                                                {/* Status controls — admin can set any leave to the states it
+                                                    isn't already in (approve/reject a pending one, flip a decision,
+                                                    or reopen a decided one back to pending for review). */}
+                                                {isAdmin && (
                                                     <>
-                                                        <button
-                                                            onClick={() => handleStatusUpdate(leave.id, 'APPROVED', leave.userId)}
-                                                            className="flex h-10 items-center justify-center gap-2 rounded-2xl bg-green-500 px-4 text-sm font-bold text-white transition-colors hover:bg-green-600 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
-                                                        >
-                                                            <Check size={13} /> Approve
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleStatusUpdate(leave.id, 'REJECTED', leave.userId)}
-                                                            className="flex h-10 items-center justify-center gap-2 rounded-2xl border border-red-300 px-4 text-sm font-bold text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
-                                                        >
-                                                            <X size={13} /> Reject
-                                                        </button>
+                                                        {leave.status !== 'APPROVED' && (
+                                                            <button
+                                                                onClick={() => handleStatusUpdate(leave.id, 'APPROVED', leave.userId)}
+                                                                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-green-500 px-2.5 text-xs font-bold text-white transition-colors hover:bg-green-600"
+                                                            >
+                                                                <Check size={13} /> Approve
+                                                            </button>
+                                                        )}
+                                                        {leave.status !== 'REJECTED' && (
+                                                            <button
+                                                                onClick={() => handleStatusUpdate(leave.id, 'REJECTED', leave.userId)}
+                                                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-300 px-2.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10"
+                                                            >
+                                                                <X size={13} /> Reject
+                                                            </button>
+                                                        )}
+                                                        {leave.status !== 'PENDING' && (
+                                                            <button
+                                                                onClick={() => handleStatusUpdate(leave.id, 'PENDING', leave.userId)}
+                                                                title="Reopen for review (set back to pending)"
+                                                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                                                            >
+                                                                <RotateCcw size={13} /> Reopen
+                                                            </button>
+                                                        )}
                                                     </>
                                                 )}
 
-                                                {/* Crew actions on their own pending leaves */}
                                                 {canEdit && (
                                                     <button
                                                         onClick={() => startEdit(leave)}
-                                                        className="flex h-10 items-center justify-center gap-2 rounded-2xl border border-gray-300 px-4 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
+                                                        title="Edit"
+                                                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                                                     >
                                                         <Pencil size={13} /> Edit
                                                     </button>
@@ -827,14 +922,33 @@ export default function LeavesPage() {
                                                     <button
                                                         onClick={() => handleCancelLeave(leave.id)}
                                                         disabled={cancellingId === leave.id}
-                                                        className="flex h-10 items-center justify-center gap-2 rounded-2xl border border-gray-300 px-4 text-sm font-bold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-red-400 sm:h-auto sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
+                                                        title="Cancel request"
+                                                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-red-400"
                                                     >
-                                                        <XCircle size={13} />
-                                                        {cancellingId === leave.id ? 'Cancelling...' : 'Cancel Request'}
+                                                        <XCircle size={13} /> {cancellingId === leave.id ? 'Cancelling…' : 'Cancel'}
                                                     </button>
                                                 )}
+                                                {canAdminDelete && !canCancel && (
+                                                    <button
+                                                        onClick={() => handleAdminDeleteLeave(leave)}
+                                                        disabled={cancellingId === leave.id}
+                                                        title="Delete"
+                                                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-red-400"
+                                                    >
+                                                        <XCircle size={13} /> {cancellingId === leave.id ? 'Deleting…' : 'Delete'}
+                                                    </button>
+                                                )}
+                                                {isAdmin && (
+                                                    <Link
+                                                        href={`/calendar?user=${leave.userId}`}
+                                                        title="View on Calendar"
+                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-primary dark:hover:bg-gray-800"
+                                                    >
+                                                        <Calendar size={15} />
+                                                    </Link>
+                                                )}
                                             </div>
-                                        </>
+                                        </div>
                                     )}
                                 </div>
                             );
