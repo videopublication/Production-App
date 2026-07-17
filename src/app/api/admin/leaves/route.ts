@@ -94,7 +94,11 @@ export async function POST(request: Request) {
         const result = createAdminLeaveSchema.safeParse(body);
         if (!result.success) {
             const formattedErrors = Object.entries(result.error.flatten().fieldErrors)
-                .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                .map(([field, msgs]) => {
+                    const val = body[field];
+                    const valStr = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                    return `${field}: ${msgs.join(', ')} (value was: ${JSON.stringify(valStr)})`;
+                })
                 .join('; ');
             console.error('Validation failed details:', formattedErrors);
             return NextResponse.json({ error: `Validation failed: ${formattedErrors}`, details: result.error.flatten() }, { status: 400 });
@@ -143,7 +147,11 @@ export async function PUT(request: Request) {
         const result = updateAdminLeaveSchema.safeParse(body);
         if (!result.success) {
             const formattedErrors = Object.entries(result.error.flatten().fieldErrors)
-                .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                .map(([field, msgs]) => {
+                    const val = body[field];
+                    const valStr = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                    return `${field}: ${msgs.join(', ')} (value was: ${JSON.stringify(valStr)})`;
+                })
                 .join('; ');
             console.error('Validation failed details:', formattedErrors);
             return NextResponse.json({ error: `Validation failed: ${formattedErrors}`, details: result.error.flatten() }, { status: 400 });
