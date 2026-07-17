@@ -84,12 +84,12 @@ const createAdminLeaveSchema = z.object({
 // Admin-recorded absence for another user. Must go through the service-role
 // client because the leaves RLS insert policy only allows auth.uid() = user_id.
 export async function POST(request: Request) {
-    const authCheck = await ensureAdmin();
-    if (authCheck.error) {
-        return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
-    }
-
     try {
+        const authCheck = await ensureAdmin();
+        if (authCheck.error) {
+            return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+        }
+
         const body = await request.json();
         const result = createAdminLeaveSchema.safeParse(body);
         if (!result.success) {
@@ -113,6 +113,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ message: 'Absence recorded successfully' });
     } catch (error: unknown) {
+        console.error('Error in POST /api/admin/leaves:', error);
         return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }
@@ -128,12 +129,12 @@ const updateAdminLeaveSchema = z.object({
 // Admin edit of any leave (e.g. fixing a wrong date on a recorded absence).
 // Service-role client bypasses the owner-only RLS update policy.
 export async function PUT(request: Request) {
-    const authCheck = await ensureAdmin();
-    if (authCheck.error) {
-        return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
-    }
-
     try {
+        const authCheck = await ensureAdmin();
+        if (authCheck.error) {
+            return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+        }
+
         const body = await request.json();
         const result = updateAdminLeaveSchema.safeParse(body);
         if (!result.success) {
@@ -153,6 +154,7 @@ export async function PUT(request: Request) {
 
         return NextResponse.json({ message: 'Leave updated successfully' });
     } catch (error: unknown) {
+        console.error('Error in PUT /api/admin/leaves:', error);
         return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }
@@ -160,12 +162,12 @@ export async function PUT(request: Request) {
 // Admin delete of any leave (e.g. removing a wrongly-recorded absence).
 // Service-role client bypasses the owner-only RLS delete policy.
 export async function DELETE(request: Request) {
-    const authCheck = await ensureAdmin();
-    if (authCheck.error) {
-        return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
-    }
-
     try {
+        const authCheck = await ensureAdmin();
+        if (authCheck.error) {
+            return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         if (!id) {
@@ -178,6 +180,7 @@ export async function DELETE(request: Request) {
 
         return NextResponse.json({ message: 'Leave deleted successfully' });
     } catch (error: unknown) {
+        console.error('Error in DELETE /api/admin/leaves:', error);
         return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

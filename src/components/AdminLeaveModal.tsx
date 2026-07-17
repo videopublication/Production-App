@@ -40,7 +40,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
     const [userId, setUserId] = useState(prefilledUserId || '');
     const [startDate, setStartDate] = useState(prefilledDate || '');
     const [endDate, setEndDate] = useState(prefilledDate || '');
-    const [reason, setReason] = useState('Emergency / Admin Recorded');
+    const [reason, setReason] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -58,7 +58,7 @@ export function AdminLeaveModal({ isOpen, onClose, onSubmit, users, prefilledUse
             setUserId(prefilledUserId || '');
             setStartDate(prefilledDate || '');
             setEndDate(prefilledDate || '');
-            setReason('Emergency / Admin Recorded');
+            setReason('');
             setIsDropdownOpen(false);
             setUserSearch('');
         }
