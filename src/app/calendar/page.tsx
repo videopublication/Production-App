@@ -170,7 +170,7 @@ export default function CalendarPage() {
             handleRefresh();
         } catch (error) {
             console.error('Failed to record absence:', error);
-            showToast('Failed to record absence', 'error');
+            showToast(error instanceof Error ? error.message : 'Failed to record absence', 'error');
         }
     };
 

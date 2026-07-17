@@ -93,7 +93,11 @@ export async function POST(request: Request) {
         const body = await request.json();
         const result = createAdminLeaveSchema.safeParse(body);
         if (!result.success) {
-            return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
+            const formattedErrors = Object.entries(result.error.flatten().fieldErrors)
+                .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                .join('; ');
+            console.error('Validation failed details:', formattedErrors);
+            return NextResponse.json({ error: `Validation failed: ${formattedErrors}`, details: result.error.flatten() }, { status: 400 });
         }
 
         const { userId, departmentId, startDate, endDate, reason } = result.data;
@@ -138,7 +142,11 @@ export async function PUT(request: Request) {
         const body = await request.json();
         const result = updateAdminLeaveSchema.safeParse(body);
         if (!result.success) {
-            return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
+            const formattedErrors = Object.entries(result.error.flatten().fieldErrors)
+                .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                .join('; ');
+            console.error('Validation failed details:', formattedErrors);
+            return NextResponse.json({ error: `Validation failed: ${formattedErrors}`, details: result.error.flatten() }, { status: 400 });
         }
 
         const { id, startDate, endDate, reason, status } = result.data;
