@@ -110,7 +110,7 @@ const createUserSchema = z.object({
     password: z.string().min(6),
     name: z.string().min(1),
     role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'FINANCE_MANAGER', 'CREW']),
-    departmentId: z.string().uuid().nullable().optional(),
+    departmentId: z.string().nullable().optional(),
     canBeAssignedToShoots: z.boolean().optional()
 });
 

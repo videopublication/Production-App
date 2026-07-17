@@ -74,8 +74,8 @@ async function ensureAdmin() {
 }
 
 const createAdminLeaveSchema = z.object({
-    userId: z.string().uuid(),
-    departmentId: z.string().uuid().nullable().optional(),
+    userId: z.string(),
+    departmentId: z.string().nullable().optional(),
     startDate: z.string().min(1),
     endDate: z.string().min(1),
     reason: z.string().min(1)
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
 }
 
 const updateAdminLeaveSchema = z.object({
-    id: z.string().uuid(),
+    id: z.string(),
     startDate: z.string().min(1).optional(),
     endDate: z.string().min(1).optional(),
     reason: z.string().min(1).optional(),
