@@ -357,6 +357,10 @@ function InventoryPageContent() {
     const handlePrintQR = async (e: React.MouseEvent, item: Equipment) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!item.barcode || !item.barcode.trim()) {
+            showToast('This item has no barcode to generate a QR code', 'error');
+            return;
+        }
         try {
             const qrModule = await import('qrcode');
             const QRCode = qrModule.default || qrModule;
@@ -371,7 +375,7 @@ function InventoryPageContent() {
                 errorCorrectionLevel: 'H'
             });
 
-            const pdf = new jsPDF({ orientation: 'landscape', format: [100, 60], unit: 'mm' });
+            const pdf = new jsPDF({ orientation: 'landscape', format: [100, 60], unit: 'mm', compress: true });
 
             pdf.setFontSize(14);
             pdf.text(item.name.substring(0, 30), 5, 8);
@@ -453,7 +457,11 @@ function InventoryPageContent() {
 
             if (!jsPDF) throw new Error('jsPDF not loaded');
 
-            const pdf = new jsPDF({ orientation: 'portrait', format: 'a4', unit: 'mm' });
+            // compress: true FlateDecode-compresses image streams. Without it jsPDF
+            // embeds each QR as raw ~0.75MB pixel data, so 550 items produced a ~410MB
+            // PDF that OOM-crashed the browser tab ("Failed to generate"). With
+            // compression the same job is ~1MB. See width note on toDataURL below.
+            const pdf = new jsPDF({ orientation: 'portrait', format: 'a4', unit: 'mm', compress: true });
             const pageWidth = 210;
             const pageHeight = 297;
 
@@ -475,7 +483,18 @@ function InventoryPageContent() {
             const contentWidth = serialWidth + qrSize;
             const marginLeft = (cellWidth - contentWidth) / 2;
 
-            const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
+            // Drop items with no barcode up front: QRCode.toDataURL throws
+            // "No input text" on an empty string, which would abort the whole PDF.
+            // Filtering here (rather than skipping mid-loop) keeps grid positions contiguous.
+            const allSelected = items.filter(item => selectedItems.has(item.id));
+            const selectedItemsArray = allSelected.filter(item => item.barcode && item.barcode.trim());
+            const skippedCount = allSelected.length - selectedItemsArray.length;
+
+            if (selectedItemsArray.length === 0) {
+                showToast('None of the selected items have a barcode to generate QR codes', 'error');
+                return;
+            }
+
             const itemsPerPage = cols * rows;
 
             for (let i = 0; i < selectedItemsArray.length; i++) {
@@ -524,8 +543,10 @@ function InventoryPageContent() {
                 // 2. Draw QR Code
                 const qrX = cellX + marginLeft + serialWidth;
                 const qrY = startY;
+                // 256px is ample for a printed 20-36mm label (~180-320dpi) and is
+                // ~4x cheaper to raster/embed than 512, cutting generation time too.
                 const qrUrl = await QRCode.toDataURL(item.barcode, {
-                    width: 512,
+                    width: 256,
                     margin: 4,
                     errorCorrectionLevel: 'H'
                 });
@@ -540,7 +561,13 @@ function InventoryPageContent() {
                 pdf.text(item.barcode, textX, textY, { align: 'center' });
             }
 
-            downloadFile(pdf.output('blob'), `QR_Codes_${size}_${selectedItems.size}_items.pdf`, 'application/pdf');
+            downloadFile(pdf.output('blob'), `QR_Codes_${size}_${selectedItemsArray.length}_items.pdf`, 'application/pdf');
+            showToast(
+                skippedCount > 0
+                    ? `Generated ${selectedItemsArray.length} QR codes (${skippedCount} skipped — no barcode)`
+                    : `Generated ${selectedItemsArray.length} QR codes`,
+                skippedCount > 0 ? 'info' : 'success'
+            );
             setSelectedItems(new Set());
         } catch (err) {
             console.error('Bulk QR Gen Failed', err);

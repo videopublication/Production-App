@@ -455,7 +455,8 @@ export default function ItemDetailsPage() {
             const doc = new jsPDF({
                 orientation: 'landscape',
                 unit: 'mm',
-                format: [50, 30] // 50mm x 30mm label
+                format: [50, 30], // 50mm x 30mm label
+                compress: true
             });
 
             doc.addImage(qrCode, 'PNG', 2, 2, 26, 26);
