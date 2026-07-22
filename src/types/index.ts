@@ -84,6 +84,7 @@ export interface Equipment {
     };
     assignedTo?: string; // User ID
     lastActivity?: string; // ISO Date
+    createdAt?: string; // ISO Date the item was added (from DB created_at, if present)
     departmentId?: string;
 }
 

@@ -126,6 +126,7 @@ class StorageService {
             serialNumber: item.serial_number,
             assignedTo: item.assigned_to,
             lastActivity: item.last_activity,
+            createdAt: item.created_at,
             departmentId: item.department_id
         })) as Equipment[];
     }

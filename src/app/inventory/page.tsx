@@ -7,6 +7,7 @@ import { Equipment, EquipmentStatus } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { MultiSelect } from '@/components/MultiSelect';
+import { storage } from '@/lib/storage';
 import { downloadFile } from '@/lib/download';
 import { Badge } from '@/components/Badge';
 import { MobileScanner, QRScanner } from '@/components/QRScanner';
@@ -255,6 +256,13 @@ function InventoryPageContent() {
     // Local loading state for non-query async actions if needed, though query handles most
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [isBulkEditMode, setIsBulkEditMode] = useState(false);
+    // Find & Replace across bulk fields
+    const [frOpen, setFrOpen] = useState(false);
+    const [frFind, setFrFind] = useState('');
+    const [frReplace, setFrReplace] = useState('');
+    const [frField, setFrField] = useState<'all' | 'name' | 'barcode' | 'category' | 'model'>('all');
+    const [frCase, setFrCase] = useState(false);
+    const [frApplying, setFrApplying] = useState(false);
     const [editDrafts, setEditDrafts] = useState<Record<string, Partial<Equipment>>>({});
     const [isSavingDrafts, setIsSavingDrafts] = useState(false);
 
@@ -599,6 +607,84 @@ function InventoryPageContent() {
         } finally {
             setIsActionLoading(false);
         }
+    };
+
+    // ---- Find & Replace across selected (or filtered) items -------------------
+    // Operates on the selection if any, else the whole filtered list.
+    const frTargets = useMemo(
+        () => (selectedItems.size > 0 ? items.filter(i => selectedItems.has(i.id)) : filteredItems),
+        [selectedItems, items, filteredItems]
+    );
+    const frFieldValue = (item: Equipment, f: 'name' | 'barcode' | 'category' | 'model') =>
+        f === 'model' ? (item.metadata?.model || '') : (((item as unknown as Record<string, unknown>)[f] as string) || '');
+    const frApplyStr = (val: string) => {
+        if (!frFind) return val;
+        if (frCase) return val.split(frFind).join(frReplace);
+        const re = new RegExp(frFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        return val.replace(re, frReplace);
+    };
+    const frChanges = useMemo(() => {
+        if (!frFind) return [] as { item: Equipment; upd: Record<string, string>; metaModel?: string }[];
+        const fields = frField === 'all' ? (['name', 'barcode', 'category', 'model'] as const) : [frField];
+        const out: { item: Equipment; upd: Record<string, string>; metaModel?: string }[] = [];
+        for (const item of frTargets) {
+            const upd: Record<string, string> = {};
+            let metaModel: string | undefined;
+            for (const f of fields) {
+                const cur = frFieldValue(item, f);
+                if (!cur) continue;
+                const next = frApplyStr(cur);
+                if (next !== cur) {
+                    if (f === 'model') metaModel = next; else upd[f] = next;
+                }
+            }
+            if (Object.keys(upd).length || metaModel !== undefined) out.push({ item, upd, metaModel });
+        }
+        return out;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [frFind, frReplace, frField, frCase, frTargets]);
+
+    // Write an EDIT entry to the activity log for an equipment change.
+    const logEquipmentEdit = async (item: Equipment, details: string) => {
+        if (!user) return;
+        try {
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'EDIT',
+                entityId: item.id,
+                userId: user.id,
+                timestamp: new Date().toISOString(),
+                details,
+                departmentId: item.departmentId || undefined,
+            });
+        } catch (e) {
+            console.error('Failed to write edit log:', e);
+        }
+    };
+
+    const runFindReplace = async () => {
+        if (frChanges.length === 0) return;
+        setFrApplying(true);
+        let err = false;
+        for (const { item, upd, metaModel } of frChanges) {
+            try {
+                const updates: Partial<Equipment> = { ...upd } as Partial<Equipment>;
+                if (metaModel !== undefined) updates.metadata = { ...(item.metadata || {}), model: metaModel };
+                await updateEquipment({ id: item.id, updates });
+                const parts = Object.entries(upd).map(([f, to]) => `${f} "${frFieldValue(item, f as 'name' | 'barcode' | 'category')}"→"${to}"`);
+                if (metaModel !== undefined) parts.push(`model "${item.metadata?.model || ''}"→"${metaModel}"`);
+                await logEquipmentEdit(item, `Find & replace on "${item.name}" (${item.barcode}): ${parts.join(', ')}`);
+            } catch (e) {
+                console.error('Find & replace update failed:', e);
+                err = true;
+            }
+        }
+        setFrApplying(false);
+        showToast(err ? 'Some updates failed' : `Replaced in ${frChanges.length} item${frChanges.length !== 1 ? 's' : ''}`, err ? 'error' : 'success');
+        setFrOpen(false);
+        setFrFind('');
+        setFrReplace('');
+        refresh();
     };
 
     const handleBulkDownloadQR = async (cfg: LabelConfig) => {
@@ -997,7 +1083,18 @@ function InventoryPageContent() {
                                                 let hasError = false;
                                                 for (const id of draftIds) {
                                                     try {
-                                                        await updateEquipment({ id, updates: editDrafts[id] });
+                                                        const d = editDrafts[id];
+                                                        await updateEquipment({ id, updates: d });
+                                                        const orig = items.find(i => i.id === id);
+                                                        if (orig) {
+                                                            const changed: string[] = [];
+                                                            if (d.name !== undefined) changed.push(`name→"${d.name}"`);
+                                                            if (d.category !== undefined) changed.push(`category→"${d.category}"`);
+                                                            if (d.barcode !== undefined) changed.push(`barcode→"${d.barcode}"`);
+                                                            if (d.serialNumber !== undefined) changed.push(`serial→"${d.serialNumber || ''}"`);
+                                                            if (d.metadata?.model !== undefined) changed.push(`model→"${d.metadata.model || ''}"`);
+                                                            if (changed.length) await logEquipmentEdit(orig, `Bulk edit "${orig.name}" (${orig.barcode}): ${changed.join(', ')}`);
+                                                        }
                                                     } catch (error) {
                                                         console.error(`Update failed for ${id}:`, error);
                                                         hasError = true;
@@ -1032,17 +1129,30 @@ function InventoryPageContent() {
                                         </Button>
                                     </>
                                 ) : (
-                                    <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={() => setIsBulkEditMode(true)}
-                                        className="gap-2"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
-                                        Bulk Edit
-                                    </Button>
+                                    <>
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => setFrOpen(true)}
+                                            className="gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 6a5 5 0 015 5m-5 5a5 5 0 100-10 5 5 0 000 10z" />
+                                            </svg>
+                                            Find & Replace
+                                        </Button>
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => setIsBulkEditMode(true)}
+                                            className="gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                            Bulk Edit
+                                        </Button>
+                                    </>
                                 )}
                             </>
                         )}
@@ -1188,6 +1298,9 @@ function InventoryPageContent() {
                                         <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('assignedToName')}>
                                             <div className="flex items-center">Assigned To <SortIcon active={sortConfig?.key === 'assignedToName'} direction={sortConfig?.direction || 'asc'} /></div>
                                         </th>
+                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('createdAt')}>
+                                            <div className="flex items-center whitespace-nowrap">Added <SortIcon active={sortConfig?.key === 'createdAt'} direction={sortConfig?.direction || 'asc'} /></div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1201,6 +1314,7 @@ function InventoryPageContent() {
                                                 <td className="px-6 py-4"><Skeleton className="w-20 h-6 rounded-full" /></td>
                                                 <td className="px-6 py-4"><Skeleton className="w-5 h-5 rounded" /></td>
                                                 <td className="px-6 py-4"><Skeleton className="w-32 h-4 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-20 h-4 rounded" /></td>
                                             </tr>
                                         ))
                                     ) : (
@@ -1279,6 +1393,11 @@ function InventoryPageContent() {
                                                     </button>
                                                 </td>
                                                 <td className="px-6 py-4 text-muted-foreground">{item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">
+                                                    {(item.createdAt || item.lastActivity)
+                                                        ? new Date(item.createdAt || item.lastActivity!).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                                                        : '—'}
+                                                </td>
                                             </tr>
                                             );
                                         })
@@ -1314,6 +1433,95 @@ function InventoryPageContent() {
             </PullToRefresh>
 
             {/* QR / Label options dialog — choose what to print before downloading */}
+            {/* Find & Replace dialog */}
+            {frOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setFrOpen(false)}>
+                    <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Find &amp; Replace</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    {selectedItems.size > 0
+                                        ? `${selectedItems.size} selected item${selectedItems.size !== 1 ? 's' : ''}`
+                                        : `all ${frTargets.length} filtered item${frTargets.length !== 1 ? 's' : ''}`}
+                                </p>
+                            </div>
+                            <button onClick={() => setFrOpen(false)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"><X size={18} /></button>
+                        </div>
+
+                        <div className="space-y-3 overflow-y-auto p-5">
+                            <div>
+                                <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Field</p>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                    {(['all', 'name', 'barcode', 'category', 'model'] as const).map(f => (
+                                        <button key={f} onClick={() => setFrField(f)}
+                                            className={`h-9 rounded-lg border text-xs font-semibold capitalize transition-colors ${frField === f ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
+                                            {f === 'all' ? 'All fields' : f}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">Find</label>
+                                <input value={frFind} onChange={e => setFrFind(e.target.value)} placeholder="Text to find…" autoFocus
+                                    className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary" />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-muted-foreground">Replace with</label>
+                                <input value={frReplace} onChange={e => setFrReplace(e.target.value)} placeholder="Replacement (leave empty to remove)"
+                                    className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary" />
+                            </div>
+
+                            <label className="flex cursor-pointer items-center gap-2">
+                                <input type="checkbox" checked={frCase} onChange={e => setFrCase(e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                <span className="text-sm text-foreground">Match case</span>
+                            </label>
+
+                            {/* Preview */}
+                            <div className="rounded-xl border border-border bg-secondary/30 p-3">
+                                {!frFind ? (
+                                    <p className="text-xs text-muted-foreground">Type text to find to preview changes.</p>
+                                ) : frChanges.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">No matches in the {selectedItems.size > 0 ? 'selected' : 'filtered'} items.</p>
+                                ) : (
+                                    <>
+                                        <p className="mb-2 text-xs font-semibold text-foreground">{frChanges.length} item{frChanges.length !== 1 ? 's' : ''} will change</p>
+                                        <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                            {frChanges.slice(0, 8).map(({ item, upd, metaModel }) => {
+                                                const parts: { f: string; from: string; to: string }[] = [];
+                                                Object.entries(upd).forEach(([f, to]) => parts.push({ f, from: frFieldValue(item, f as 'name' | 'barcode' | 'category'), to }));
+                                                if (metaModel !== undefined) parts.push({ f: 'model', from: item.metadata?.model || '', to: metaModel });
+                                                return (
+                                                    <div key={item.id} className="text-[11px] leading-tight">
+                                                        {parts.map((p, idx) => (
+                                                            <div key={idx} className="truncate">
+                                                                <span className="uppercase text-muted-foreground">{p.f}: </span>
+                                                                <span className="text-red-500 line-through">{p.from}</span>
+                                                                <span className="text-muted-foreground"> → </span>
+                                                                <span className="font-semibold text-green-600 dark:text-green-400">{p.to || '(empty)'}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })}
+                                            {frChanges.length > 8 && <p className="text-[11px] text-muted-foreground">…and {frChanges.length - 8} more</p>}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+                            <Button variant="outline" size="sm" onClick={() => setFrOpen(false)}>Cancel</Button>
+                            <Button variant="primary" size="sm" disabled={frApplying || !frFind || frChanges.length === 0} onClick={runFindReplace}>
+                                {frApplying ? 'Applying…' : `Replace${frChanges.length ? ` (${frChanges.length})` : ''}`}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {qrModalOpen && (() => {
                 const previewName = sampleLabelItem.barcode;
                 const previewSerial = maskSerialText(sampleLabelItem.serialNumber, labelConfig.maskSerial);
