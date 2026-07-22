@@ -204,6 +204,22 @@ function InventoryPageContent() {
         }));
     };
 
+    // Model lives in the JSONB metadata column. updateEquipment writes metadata as a
+    // whole-column replace, so we merge onto the existing metadata (draft-in-progress
+    // first, else the item's) to avoid clobbering brand / activeIssue / etc.
+    const handleMetadataDraftChange = (item: Equipment, key: string, value: string) => {
+        setEditDrafts(prev => {
+            const baseMeta = prev[item.id]?.metadata ?? item.metadata ?? {};
+            return {
+                ...prev,
+                [item.id]: {
+                    ...prev[item.id],
+                    metadata: { ...baseMeta, [key]: value },
+                },
+            };
+        });
+    };
+
     useEffect(() => {
         sessionStorage.setItem('inventoryViewMode', viewMode);
     }, [viewMode]);
@@ -1032,11 +1048,13 @@ function InventoryPageContent() {
                                                     {isBulkEditMode ? (
                                                         <div className="flex flex-col gap-1 w-48">
                                                             <InlineInput value={editDrafts[item.id]?.name ?? item.name} onChange={(val) => handleDraftChange(item.id, 'name', val)} placeholder="Name" />
+                                                            <InlineInput value={editDrafts[item.id]?.metadata?.model ?? item.metadata?.model ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'model', val)} placeholder="Model (Optional)" />
                                                             <InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N (Optional)" />
                                                         </div>
                                                     ) : (
                                                         <>
                                                             <div className="font-medium text-foreground">{item.name}</div>
+                                                            {item.metadata?.model && <div className="text-xs text-muted-foreground mt-0.5">Model: {item.metadata.model}</div>}
                                                             {item.serialNumber && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.serialNumber}</div>}
                                                             {issue && (
                                                                 <div className="mt-1 flex max-w-[320px] items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
