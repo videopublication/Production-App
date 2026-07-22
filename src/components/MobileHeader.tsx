@@ -65,6 +65,8 @@ export const MobileHeader = () => {
                     {/* Left Action / Spacer */}
                     <div className="flex-none w-[110px] flex items-center justify-start">
                         {(pathname === '/profile' ||
+                            pathname === '/notifications' ||
+                            (pathname.startsWith('/inventory/') && pathname !== '/inventory') ||
                             (pathname.startsWith('/shoots/') && pathname !== '/shoots') ||
                             (pathname.startsWith('/transactions/') && pathname !== '/transactions')
                         ) && (

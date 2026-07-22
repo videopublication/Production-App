@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { storage } from '@/lib/storage';
 import { Equipment, EquipmentStatus, Condition, Log, Transaction, Shoot, EquipmentIssueSeverity, EquipmentIssueType } from '@/types';
 import { Button } from '@/components/Button';
@@ -19,6 +20,8 @@ import {
     EQUIPMENT_ISSUE_SEVERITY_OPTIONS,
     EQUIPMENT_ISSUE_TYPE_LABELS,
     EQUIPMENT_ISSUE_TYPE_OPTIONS,
+    conditionToIssueSeverity,
+    conditionToIssueType,
     getEquipmentIssue,
     getIssueSummary,
     isIssueCondition,
@@ -72,6 +75,9 @@ export default function ItemDetailsPage() {
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
+    const [actionSaving, setActionSaving] = useState<null | 'return' | 'verify'>(null);
+    const [showVerifyPanel, setShowVerifyPanel] = useState(false);
+    const [verifyNote, setVerifyNote] = useState('');
 
     useEffect(() => {
         if (item) {
@@ -447,6 +453,149 @@ export default function ItemDetailsPage() {
         setIsEditing(false);
     };
 
+    // The open transaction this item is currently out on (if any).
+    const activeTransaction = itemTransactions.find(t => t.status === 'OPEN' && t.items.includes(item?.id || ''));
+
+    // Force-return this item straight to AVAILABLE on behalf of the holder, and close
+    // the transaction if it was the last item out. Mirrors the transaction page flow so
+    // managers can resolve a stuck item without hunting for its transaction.
+    const handleForceReturnItem = async () => {
+        if (!item || !canManage) return;
+        const holderName = (item.assignedTo && users.find(u => u.id === item.assignedTo)?.name)
+            || (activeTransaction && users.find(u => u.id === activeTransaction.userId)?.name)
+            || 'the user';
+        if (!window.confirm(`Force return "${item.name}"? It will be marked AVAILABLE on behalf of ${holderName}.`)) return;
+
+        setActionSaving('return');
+        try {
+            await updateEquipment({
+                id: item.id,
+                updates: {
+                    status: 'AVAILABLE',
+                    assignedTo: null as unknown as string,
+                    lastActivity: new Date().toISOString(),
+                },
+            });
+
+            let closedTxn = false;
+            if (activeTransaction) {
+                const updatedConditions: Record<string, Condition> = {
+                    ...(activeTransaction.postReturnConditions || {}),
+                    [item.id]: 'OK',
+                };
+                const allReturned = activeTransaction.items.every(id => updatedConditions[id] !== undefined);
+                const txnUpdates: Partial<Transaction> = { postReturnConditions: updatedConditions };
+                if (allReturned) {
+                    txnUpdates.status = 'CLOSED';
+                    txnUpdates.timestampIn = new Date().toISOString();
+                    closedTxn = true;
+                }
+                await storage.updateTransaction(activeTransaction.id, txnUpdates);
+            }
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'RETURN',
+                entityId: activeTransaction?.id || item.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${holderName} - Verified by ${user!.name}${closedTxn ? ' (Transaction Closed)' : ''}`,
+                departmentId: effectiveDeptId || undefined,
+            });
+
+            setSaveMessage(`${item.name} force-returned successfully.`);
+        } catch (err) {
+            console.error('Force return failed:', err);
+            setSaveMessage('Failed to force return item.');
+        } finally {
+            setActionSaving(null);
+        }
+    };
+
+    // Verify a pending item back into stock. Mirrors the verification page: outcomes are
+    // Available (clean), Available-with-issue (keeps a note/condition), or Maintenance.
+    const handleVerifyItem = async (
+        status: 'AVAILABLE' | 'MAINTENANCE',
+        options?: { issueNote?: string; keepAvailableWithIssue?: boolean }
+    ) => {
+        if (!item || !canManage) return;
+        const note = options?.issueNote?.trim();
+        if ((status === 'MAINTENANCE' || options?.keepAvailableWithIssue) && !note) {
+            setSaveMessage('Please add a note describing the issue.');
+            return;
+        }
+
+        setActionSaving('verify');
+        try {
+            const cleanVerify = status === 'AVAILABLE' && !options?.keepAvailableWithIssue;
+            const issueCondition: Condition = isIssueCondition(item.condition)
+                ? item.condition
+                : (status === 'MAINTENANCE' ? 'NOT_FUNCTIONING' : 'DAMAGED');
+            const existingIssue = getEquipmentIssue(item);
+            const activeIssue = note
+                ? {
+                    condition: issueCondition,
+                    issueType: conditionToIssueType(issueCondition),
+                    severity: conditionToIssueSeverity(issueCondition),
+                    note,
+                    source: 'verification' as const,
+                    reportedAt: existingIssue?.reportedAt || new Date().toISOString(),
+                    reportedBy: existingIssue?.reportedBy,
+                    reporterName: existingIssue?.reporterName,
+                    verifiedAt: new Date().toISOString(),
+                    verifiedBy: user?.id,
+                }
+                : null;
+            const nextCondition: Condition = cleanVerify ? 'OK' : issueCondition;
+
+            await updateEquipment({
+                id: item.id,
+                updates: {
+                    status,
+                    condition: nextCondition,
+                    assignedTo: null as unknown as string,
+                    lastActivity: new Date().toISOString(),
+                    metadata: withActiveIssue(item.metadata, activeIssue),
+                },
+            });
+
+            const projectText = activeTransaction ? ` for project "${activeTransaction.project || 'Unspecified'}"` : '';
+            const issueText = activeIssue ? `, Issue: ${getIssueSummary(activeIssue)} - ${activeIssue.note}` : '';
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'VERIFY',
+                entityId: item.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Verified item "${item.name}" (${item.barcode}) as ${status}${issueText}${projectText}`,
+                departmentId: effectiveDeptId || undefined,
+            });
+
+            if (activeTransaction) {
+                const updatedConditions: Record<string, Condition> = {
+                    ...(activeTransaction.postReturnConditions || {}),
+                    [item.id]: cleanVerify ? 'OK' : nextCondition,
+                };
+                const allReturned = activeTransaction.items.every(id => updatedConditions[id] !== undefined);
+                const txnUpdates: Partial<Transaction> = { postReturnConditions: updatedConditions };
+                if (allReturned) {
+                    txnUpdates.status = 'CLOSED';
+                    txnUpdates.timestampIn = new Date().toISOString();
+                }
+                await storage.updateTransaction(activeTransaction.id, txnUpdates);
+            }
+
+            setShowVerifyPanel(false);
+            setVerifyNote('');
+            setSaveMessage(`${item.name} verified as ${status === 'MAINTENANCE' ? 'sent to maintenance' : 'available'}.`);
+        } catch (err) {
+            console.error('Verify failed:', err);
+            setSaveMessage('Failed to verify item.');
+        } finally {
+            setActionSaving(null);
+        }
+    };
+
     const downloadLabel = async () => {
         if (!item || !qrCode) return;
 
@@ -516,30 +665,22 @@ export default function ItemDetailsPage() {
 
     return (
         <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
+            {/* Desktop-only Back row — the mobile app header already shows Back, and Print
+                QR now lives on the QR Code card below. Static, so it never overlaps content. */}
+            <div className="hidden md:flex -mx-4 items-center border-b border-border/40 px-4 pb-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+                <button
+                    onClick={() => router.back()}
+                    className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-medium text-sm transition-colors"
+                >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                    <span>Inventory</span>
+                </button>
+            </div>
+
             {/* Header Section - Clean Mobile Layout */}
             <div className="space-y-4">
-                {/* Top Row: Back Button + Print Label */}
-                <div className="flex items-center justify-between">
-                    <button
-                        onClick={() => router.back()}
-                        className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-medium text-sm transition-colors"
-                    >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                        </svg>
-                        <span className="hidden sm:inline">Inventory</span>
-                    </button>
-                    <button
-                        onClick={downloadLabel}
-                        className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-medium text-sm transition-colors"
-                    >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                        </svg>
-                        Print QR
-                    </button>
-                </div>
-
                 {/* Hero Section: Equipment Name + Status */}
                 <div className="bg-card rounded-2xl p-5 shadow-sm border border-border/30">
                     <div className="flex items-start justify-between gap-3">
@@ -723,6 +864,95 @@ export default function ItemDetailsPage() {
                     </>
                 )}
             </div>
+
+            {/* Manager quick actions.
+                - CHECKED_OUT: item is still out → Force Return (mark returned + available).
+                - PENDING_VERIFICATION: item is already returned, only awaiting a decision
+                  → Verify (with condition outcome), no force return. */}
+            {canManage && (item.status === 'CHECKED_OUT' || item.status === 'PENDING_VERIFICATION') && (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">Manager actions</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                {item.status === 'CHECKED_OUT'
+                                    ? 'Item is checked out. Force it back into stock if the holder cannot return it.'
+                                    : 'Item is returned and awaiting verification. Verify it back into stock.'}
+                            </p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                            {item.status === 'PENDING_VERIFICATION' && (
+                                <button
+                                    onClick={() => setShowVerifyPanel(v => !v)}
+                                    disabled={actionSaving !== null}
+                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-green-500 px-4 text-sm font-bold text-white transition-colors hover:bg-green-600 disabled:opacity-60"
+                                >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Verify
+                                </button>
+                            )}
+                            {item.status === 'CHECKED_OUT' && (
+                                <button
+                                    onClick={handleForceReturnItem}
+                                    disabled={actionSaving !== null}
+                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-orange-500 px-4 text-sm font-bold text-white transition-colors hover:bg-orange-600 disabled:opacity-60"
+                                >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                    </svg>
+                                    {actionSaving === 'return' ? 'Returning…' : 'Force Return'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Verify outcome panel — choose the item's condition, like the Verification page */}
+                    {item.status === 'PENDING_VERIFICATION' && showVerifyPanel && (
+                        <div className="mt-4 space-y-3 border-t border-primary/15 pt-4">
+                            <label className="block">
+                                <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                                    Issue note (required for damaged / maintenance)
+                                </span>
+                                <textarea
+                                    value={verifyNote}
+                                    onChange={(e) => setVerifyNote(e.target.value)}
+                                    rows={2}
+                                    placeholder="e.g. Lens cap missing, records fine"
+                                    className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                />
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    onClick={() => handleVerifyItem('AVAILABLE')}
+                                    disabled={actionSaving !== null}
+                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-green-500 px-4 text-sm font-bold text-white transition-colors hover:bg-green-600 disabled:opacity-60"
+                                >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    {actionSaving === 'verify' ? 'Saving…' : 'Available (OK)'}
+                                </button>
+                                <button
+                                    onClick={() => handleVerifyItem('AVAILABLE', { issueNote: verifyNote, keepAvailableWithIssue: true })}
+                                    disabled={actionSaving !== null}
+                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-amber-500 px-4 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:opacity-60"
+                                >
+                                    Available with issue
+                                </button>
+                                <button
+                                    onClick={() => handleVerifyItem('MAINTENANCE', { issueNote: verifyNote })}
+                                    disabled={actionSaving !== null}
+                                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-red-500 px-4 text-sm font-bold text-white transition-colors hover:bg-red-600 disabled:opacity-60"
+                                >
+                                    Send to Maintenance
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">
@@ -1039,7 +1269,13 @@ export default function ItemDetailsPage() {
                                             const activeTxn = itemTransactions.find(t => t.status === 'OPEN');
                                             return activeTxn ? (
                                                 <p className="text-sm text-muted-foreground">
-                                                    Since {new Date(activeTxn.timestampOut).toLocaleDateString()} • {activeTxn.id}
+                                                    Since {new Date(activeTxn.timestampOut).toLocaleDateString()} •{' '}
+                                                    <Link
+                                                        href={`/transactions/${activeTxn.id}`}
+                                                        className="font-medium text-primary underline-offset-2 hover:underline"
+                                                    >
+                                                        {activeTxn.id}
+                                                    </Link>
                                                 </p>
                                             ) : (
                                                 <p className="text-sm text-muted-foreground">Active</p>
@@ -1085,15 +1321,29 @@ export default function ItemDetailsPage() {
                                     </div>
                                 )}
 
-                                {/* Transaction Project */}
+                                {/* Transaction Project — links to the shoot when one is
+                                    attached. CREW aren't linked through here: the shoot page
+                                    only lets assigned crew in, so a link would often dead-end
+                                    on Access Denied. Managers/admins/finance always link. */}
                                 {(() => {
                                     const activeTxn = itemTransactions.find(t => t.status === 'OPEN');
-                                    return activeTxn?.project ? (
+                                    if (!activeTxn?.project) return null;
+                                    const canOpenShoot = activeTxn.shootId && user?.role !== 'CREW';
+                                    return (
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                             <span className="font-medium">Project:</span>
-                                            <span>{activeTxn.project}</span>
+                                            {canOpenShoot ? (
+                                                <Link
+                                                    href={`/shoots/${activeTxn.shootId}`}
+                                                    className="font-medium text-primary underline-offset-2 hover:underline"
+                                                >
+                                                    {activeTxn.project}
+                                                </Link>
+                                            ) : (
+                                                <span>{activeTxn.project}</span>
+                                            )}
                                         </div>
-                                    ) : null;
+                                    );
                                 })()}
                             </div>
                         </Card>
@@ -1117,6 +1367,16 @@ export default function ItemDetailsPage() {
                             <p className="text-sm text-center text-muted-foreground max-w-xs">
                                 Scan this code to quickly access item details or add to checkout.
                             </p>
+                            <button
+                                onClick={downloadLabel}
+                                disabled={!qrCode}
+                                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                            >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                </svg>
+                                Print QR Label
+                            </button>
                         </div>
                     </Card>
                 </div>

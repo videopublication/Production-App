@@ -154,6 +154,43 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         ? mobileDropdownStyle
         : { boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)' };
 
+    // Bulk actions operate on the currently filtered options, so with an active
+    // search "Select all" grabs just the matches (Excel-style).
+    const allFilteredSelected = filteredOptions.length > 0 && filteredOptions.every(o => value.includes(o.value));
+    const selectAllFiltered = () => {
+        const set = new Set(value);
+        filteredOptions.forEach(o => set.add(o.value));
+        onChange(Array.from(set));
+    };
+    const clearAll = () => onChange([]);
+
+    const renderBulkActions = () => {
+        if (options.length === 0) return null;
+        return (
+            <div className="mb-1 flex items-center justify-between border-b border-border px-1.5 pb-2">
+                <span className="text-[12px] text-muted-foreground">{value.length} selected</span>
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        onClick={selectAllFiltered}
+                        disabled={allFilteredSelected}
+                        className="rounded-md px-2 py-1 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
+                    >
+                        {search ? 'Select filtered' : 'Select all'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={clearAll}
+                        disabled={value.length === 0}
+                        className="rounded-md px-2 py-1 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+                    >
+                        Clear
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     const renderOptionsList = () => {
         if (filteredOptions.length === 0) {
             return (
@@ -281,8 +318,11 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                         className="absolute z-[100] mt-2 w-full overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] border border-border"
                         style={dropdownStyle}
                     >
-                        <div className="max-h-64 overflow-auto p-2">
-                            {renderOptionsList()}
+                        <div className="p-2">
+                            {renderBulkActions()}
+                            <div className="max-h-[20rem] overflow-auto">
+                                {renderOptionsList()}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -330,8 +370,11 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                                 )}
                             </div>
                         </div>
+                        <div className="shrink-0 px-2 pt-2">
+                            {renderBulkActions()}
+                        </div>
                         <div
-                            className="flex-1 min-h-0 overflow-auto p-2"
+                            className="flex-1 min-h-0 overflow-auto px-2 pb-2"
                             style={{ maxHeight: mobileOptionsMaxHeight }}
                         >
                             {renderOptionsList()}

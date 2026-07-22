@@ -6,11 +6,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Equipment, EquipmentStatus } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { MultiSelect } from '@/components/MultiSelect';
 import { downloadFile } from '@/lib/download';
 import { Badge } from '@/components/Badge';
 import { MobileScanner, QRScanner } from '@/components/QRScanner';
 import { useAuth } from '@/lib/auth';
-import { ScanLine, Search } from 'lucide-react';
+import { ScanLine, Search, X } from 'lucide-react';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
@@ -19,6 +20,54 @@ import { useEquipment, useUpdateEquipment, useDeleteEquipment } from '@/hooks/us
 import { useUsers } from '@/hooks/useUsers';
 import { useTransactions } from '@/hooks/useTransactions';
 import { getEquipmentIssue, getIssueSummary, hasEquipmentIssue } from '@/lib/equipment-issues';
+
+// Normalize a category for grouping/matching: trim, collapse whitespace, lowercase.
+const normalizeCat = (c?: string) => (c || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+// ---- QR label designer config (persisted per-device) --------------------------
+type LabelPos = 'top' | 'bottom' | 'left' | 'right';
+interface LabelConfig {
+    size: 'standard' | 'small';
+    qrMargin: number;    // QR quiet-zone in modules — lower = bigger QR / less white space
+    gap: number;         // mm between QR and adjacent text
+    fontSize: number;    // pt, shared by name + serial
+    showQr: boolean;
+    showName: boolean;
+    namePos: LabelPos;
+    showSerial: boolean;
+    serialPos: LabelPos;
+    maskSerial: boolean;
+}
+const DEFAULT_LABEL_CONFIG: LabelConfig = {
+    size: 'standard',
+    qrMargin: 2,
+    gap: 1.5,
+    fontSize: 8,
+    showQr: true,
+    showName: true,
+    namePos: 'bottom',
+    showSerial: false,
+    serialPos: 'bottom',
+    maskSerial: true,
+};
+const LABEL_CONFIG_KEY = 'vpub_qr_label_config';
+const loadLabelConfig = (): LabelConfig => {
+    if (typeof window === 'undefined') return DEFAULT_LABEL_CONFIG;
+    try {
+        const raw = localStorage.getItem(LABEL_CONFIG_KEY);
+        if (!raw) return DEFAULT_LABEL_CONFIG;
+        return { ...DEFAULT_LABEL_CONFIG, ...JSON.parse(raw) };
+    } catch {
+        return DEFAULT_LABEL_CONFIG;
+    }
+};
+const maskSerialText = (s: string, mask: boolean) => {
+    const t = (s || '').trim();
+    if (!t) return '';
+    if (!mask) return `S/N ${t}`;
+    if (t.length <= 4) return `S/N ${t}`;
+    return `S/N ****${t.slice(-4)}`;
+};
 
 const InlineInput = ({ value, onChange, placeholder }: { value: string, onChange: (v: string) => void, placeholder?: string }) => {
     const [val, setVal] = useState(value);
@@ -169,7 +218,12 @@ function InventoryPageContent() {
     };
 
     // ... (rest of component state) ...
-    const [search, setSearch] = useState('');
+    // Persist search so navigating into an item and back (which remounts this page)
+    // doesn't wipe the query and force the user to search again.
+    const [search, setSearch] = useState(() => {
+        if (typeof window !== 'undefined') return sessionStorage.getItem('inventorySearch') || '';
+        return '';
+    });
     const [showInventoryScanner, setShowInventoryScanner] = useState(false);
     const searchParams = useSearchParams();
     const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL' | 'NEEDS_ATTENTION'>(() => {
@@ -179,6 +233,8 @@ function InventoryPageContent() {
         }
         return 'ALL';
     });
+    // Multiple categories can be active at once. Empty array = all categories.
+    const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
         if (typeof window !== 'undefined') {
             return (sessionStorage.getItem('inventoryViewMode') as 'grid' | 'list') || 'grid';
@@ -188,6 +244,14 @@ function InventoryPageContent() {
     const [sortConfig, setSortConfig] = useState<{ key: keyof Equipment | 'assignedToName'; direction: 'asc' | 'desc' } | null>(null);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [isGeneratingQR, setIsGeneratingQR] = useState(false);
+    // QR label designer: live-editable config, persisted per device.
+    const [qrModalOpen, setQrModalOpen] = useState(false);
+    const [labelConfig, setLabelConfig] = useState<LabelConfig>(DEFAULT_LABEL_CONFIG);
+    const [previewQr, setPreviewQr] = useState('');
+    const setCfg = <K extends keyof LabelConfig>(key: K, val: LabelConfig[K]) => setLabelConfig(c => ({ ...c, [key]: val }));
+
+    // Hydrate saved config on mount (client only, avoids SSR mismatch).
+    useEffect(() => { setLabelConfig(loadLabelConfig()); }, []);
     // Local loading state for non-query async actions if needed, though query handles most
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [isBulkEditMode, setIsBulkEditMode] = useState(false);
@@ -223,6 +287,67 @@ function InventoryPageContent() {
     useEffect(() => {
         sessionStorage.setItem('inventoryViewMode', viewMode);
     }, [viewMode]);
+
+    useEffect(() => {
+        sessionStorage.setItem('inventorySearch', search);
+    }, [search]);
+
+    // Sample item that drives the label designer's live preview.
+    const sampleLabelItem = useMemo(() => {
+        const sel = items.find(i => selectedItems.has(i.id) && i.barcode?.trim());
+        const any = sel || items.find(i => i.barcode?.trim());
+        return {
+            barcode: any?.barcode || 'CAM-SAMPLE-1',
+            serialNumber: any?.serialNumber || '1234567890',
+        };
+    }, [items, selectedItems]);
+
+    // Regenerate the preview QR when the designer is open and its inputs change.
+    useEffect(() => {
+        if (!qrModalOpen) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const QRCode = (await import('qrcode')).default;
+                const url = await QRCode.toDataURL(sampleLabelItem.barcode, {
+                    width: 256,
+                    margin: labelConfig.qrMargin,
+                    errorCorrectionLevel: 'H',
+                });
+                if (!cancelled) setPreviewQr(url);
+            } catch { /* ignore */ }
+        })();
+        return () => { cancelled = true; };
+    }, [qrModalOpen, labelConfig.qrMargin, sampleLabelItem.barcode]);
+
+    // Open an item detail while remembering where we were: save the list scroll
+    // position so returning (via the sticky Back) lands on the same spot with the
+    // same search still applied.
+    const openItem = (barcode: string) => {
+        if (typeof window !== 'undefined') {
+            const scroller = document.querySelector('.app-main-scroll');
+            sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
+        }
+        router.push(`/inventory/${barcode}`);
+    };
+
+    // Restore scroll on return. rAF defers past AppLayout's on-navigation
+    // scroll-to-top (a parent effect that would otherwise win) so ours sticks.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const saved = sessionStorage.getItem('inventoryScroll');
+        // Consume it: one-shot, so a later fresh visit to Inventory starts at top
+        // instead of jumping to a stale saved position.
+        sessionStorage.removeItem('inventoryScroll');
+        const y = Number(saved);
+        if (!y) return;
+        const raf = requestAnimationFrame(() => {
+            const scroller = document.querySelector('.app-main-scroll');
+            if (scroller) scroller.scrollTop = y;
+        });
+        return () => cancelAnimationFrame(raf);
+        // Run once on mount — after data (React Query cache) has rendered rows.
+    }, []);
 
     const parseInventoryScanCode = (decodedText: string) => {
         try {
@@ -315,6 +440,10 @@ function InventoryPageContent() {
             }
         }
 
+        if (categoryFilter.length > 0) {
+            result = result.filter(item => categoryFilter.includes(normalizeCat(item.category)));
+        }
+
         if (sortConfig) {
             result = [...result].sort((a, b) => {
                 let aValue: string | number | null | undefined = a[sortConfig.key as keyof Equipment] as string | number | null | undefined;
@@ -335,7 +464,23 @@ function InventoryPageContent() {
         }
 
         return result;
-    }, [items, search, statusFilter, sortConfig, getUserName]);
+    }, [items, search, statusFilter, categoryFilter, sortConfig, getUserName]);
+
+    // Category options for the filter. Dedupe case/whitespace variants (e.g. "Battery"
+    // vs "Battery ") under one normalized key so the list has no visual duplicates and
+    // selecting one matches every variant.
+    const categoryOptions = useMemo(() => {
+        const map = new Map<string, string>(); // normalized key -> display label
+        for (const it of items) {
+            const raw = (it.category || '').trim().replace(/\s+/g, ' ');
+            if (!raw) continue;
+            const key = raw.toLowerCase();
+            if (!map.has(key)) map.set(key, raw);
+        }
+        return Array.from(map.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }, [items]);
 
     const getStatusVariant = (status: EquipmentStatus) => {
         switch (status) {
@@ -456,11 +601,15 @@ function InventoryPageContent() {
         }
     };
 
-    const handleBulkDownloadQR = async (size: 'standard' | 'small') => {
+    const handleBulkDownloadQR = async (cfg: LabelConfig) => {
         if (isGeneratingQR) return;
 
         if (selectedItems.size === 0) {
             alert('Please select at least one item');
+            return;
+        }
+        if (!cfg.showQr && !cfg.showName && !cfg.showSerial) {
+            showToast('Pick at least one thing to print', 'error');
             return;
         }
 
@@ -470,114 +619,122 @@ function InventoryPageContent() {
             const QRCode = qrModule.default || qrModule;
             const pdfModule = await import('jspdf');
             const jsPDF = pdfModule.jsPDF || pdfModule.default;
-
             if (!jsPDF) throw new Error('jsPDF not loaded');
 
-            // compress: true FlateDecode-compresses image streams. Without it jsPDF
-            // embeds each QR as raw ~0.75MB pixel data, so 550 items produced a ~410MB
-            // PDF that OOM-crashed the browser tab ("Failed to generate"). With
-            // compression the same job is ~1MB. See width note on toDataURL below.
+            // compress: true keeps the file small (raw QR pixels would balloon it to
+            // hundreds of MB and OOM the tab). See earlier fix.
             const pdf = new jsPDF({ orientation: 'portrait', format: 'a4', unit: 'mm', compress: true });
             const pageWidth = 210;
             const pageHeight = 297;
 
-            // Configuration based on size
-            const isSmall = size === 'small';
+            const isSmall = cfg.size === 'small';
             const cols = isSmall ? 7 : 4;
             const rows = isSmall ? 9 : 5;
             const qrSize = isSmall ? 20 : 36;
-            const fontSize = isSmall ? 6 : 9;
-            const serialFontSize = isSmall ? 7 : 10;
+            const fontSize = cfg.fontSize;
+            const gap = cfg.gap;
 
             const cellWidth = pageWidth / cols;
             const cellHeight = (pageHeight - 20) / rows;
             const marginTop = 10;
+            const ptToMm = 0.3528;
+            const lineH = fontSize * ptToMm * 1.15;
+            const gapLines = Math.max(0.3, gap * 0.4);
 
-            // Calculate offsets to center content in cell
-            // Content width = serialWidth (approx 5mm) + qrSize
-            const serialWidth = isSmall ? 4 : 6;
-            const contentWidth = serialWidth + qrSize;
-            const marginLeft = (cellWidth - contentWidth) / 2;
-
-            // Drop items with no barcode up front: QRCode.toDataURL throws
-            // "No input text" on an empty string, which would abort the whole PDF.
-            // Filtering here (rather than skipping mid-loop) keeps grid positions contiguous.
             const allSelected = items.filter(item => selectedItems.has(item.id));
             const selectedItemsArray = allSelected.filter(item => item.barcode && item.barcode.trim());
             const skippedCount = allSelected.length - selectedItemsArray.length;
-
             if (selectedItemsArray.length === 0) {
                 showToast('None of the selected items have a barcode to generate QR codes', 'error');
                 return;
             }
 
             const itemsPerPage = cols * rows;
+            const qrCache = new Map<string, string>();
 
             for (let i = 0; i < selectedItemsArray.length; i++) {
                 const item = selectedItemsArray[i];
                 const positionOnPage = i % itemsPerPage;
                 const row = Math.floor(positionOnPage / cols);
                 const col = positionOnPage % cols;
-
-                if (positionOnPage === 0 && i > 0) {
-                    pdf.addPage();
-                }
+                if (positionOnPage === 0 && i > 0) pdf.addPage();
 
                 const cellX = col * cellWidth;
                 const cellY = marginTop + row * cellHeight;
 
-                // Center everything vertically in the cell
-                // QR Height + Barcode Text Height approx qrSize + 5
-                const contentHeight = qrSize + 5;
-                const startY = cellY + (cellHeight - contentHeight) / 2;
+                // Collect texts with their chosen sides.
+                const texts: { text: string; pos: LabelPos; muted: boolean }[] = [];
+                if (cfg.showName) texts.push({ text: item.barcode, pos: cfg.namePos, muted: false });
+                if (cfg.showSerial && item.serialNumber) texts.push({ text: maskSerialText(item.serialNumber, cfg.maskSerial), pos: cfg.serialPos, muted: true });
 
-                // 1. Draw Serial Number (Rotated 90deg on the left)
-                if (item.serialNumber) {
-                    // Check if text fits in the height provided (qrSize)
-                    pdf.setFont('helvetica', 'bold');
-                    let currentFontSize = serialFontSize;
-                    pdf.setFontSize(currentFontSize);
+                const top = texts.filter(t => t.pos === 'top');
+                const bottom = texts.filter(t => t.pos === 'bottom');
+                const left = texts.filter(t => t.pos === 'left');
+                const right = texts.filter(t => t.pos === 'right');
+                const stackH = (n: number) => (n > 0 ? n * lineH + (n - 1) * gapLines : 0);
+                const colW = (n: number) => (n > 0 ? n * lineH + (n - 1) * gapLines : 0);
 
-                    const textWidth = pdf.getTextWidth(item.serialNumber);
-                    const availableHeight = qrSize; // It's rotated, so width matches height constraint
+                const qrW = cfg.showQr ? qrSize : 0;
+                const qrH = cfg.showQr ? qrSize : 0;
+                const topH = stackH(top.length);
+                const bottomH = stackH(bottom.length);
+                const leftW = colW(left.length);
+                const rightW = colW(right.length);
 
-                    if (textWidth > availableHeight) {
-                        // Scale down to fit
-                        currentFontSize = Math.floor(currentFontSize * (availableHeight / textWidth) * 10) / 10;
-                        // Set hard minimums
-                        const minSize = isSmall ? 3 : 4;
-                        if (currentFontSize < minSize) currentFontSize = minSize;
-                        pdf.setFontSize(currentFontSize);
+                const contentW = leftW + (leftW ? gap : 0) + Math.max(qrW, 0) + (rightW ? gap : 0) + rightW;
+                const contentH = topH + (topH ? gap : 0) + Math.max(qrH, 0) + (bottomH ? gap : 0) + bottomH;
+                const blockX = cellX + (cellWidth - contentW) / 2;
+                const blockY = cellY + (cellHeight - contentH) / 2;
+
+                const qrX = blockX + leftW + (leftW ? gap : 0);
+                const qrY = blockY + topH + (topH ? gap : 0);
+                const qrCenterX = qrX + qrW / 2;
+                const qrMidY = qrY + qrH / 2;
+
+                if (cfg.showQr) {
+                    let qrUrl = qrCache.get(item.barcode);
+                    if (!qrUrl) {
+                        qrUrl = await QRCode.toDataURL(item.barcode, { width: 256, margin: cfg.qrMargin, errorCorrectionLevel: 'H' });
+                        qrCache.set(item.barcode, qrUrl);
                     }
-
-                    // Position: Left of QR, vertically centered relative to QR
-                    const serialX = cellX + marginLeft + 2;
-                    const serialY = startY + qrSize; // align bottom with QR bottom
-                    pdf.text(item.serialNumber, serialX, serialY, { angle: 90 });
+                    pdf.addImage(qrUrl, 'PNG', qrX, qrY, qrSize, qrSize);
                 }
 
-                // 2. Draw QR Code
-                const qrX = cellX + marginLeft + serialWidth;
-                const qrY = startY;
-                // 256px is ample for a printed 20-36mm label (~180-320dpi) and is
-                // ~4x cheaper to raster/embed than 512, cutting generation time too.
-                const qrUrl = await QRCode.toDataURL(item.barcode, {
-                    width: 256,
-                    margin: 4,
-                    errorCorrectionLevel: 'H'
-                });
-                pdf.addImage(qrUrl, 'PNG', qrX, qrY, qrSize, qrSize);
-
-                // 3. Draw Barcode Text (Below QR)
-                pdf.setFontSize(fontSize);
                 pdf.setFont('helvetica', 'normal');
-                // Center text relative to the QR code
-                const textX = qrX + (qrSize / 2);
-                const textY = qrY + qrSize + (isSmall ? 3 : 4);
-                pdf.text(item.barcode, textX, textY, { align: 'center' });
+                const fitFont = (text: string, avail: number, min: number) => {
+                    let fs = fontSize;
+                    pdf.setFontSize(fs);
+                    const w = pdf.getTextWidth(text);
+                    if (w > avail) { fs = Math.max(min, Math.floor(fs * (avail / w) * 10) / 10); pdf.setFontSize(fs); }
+                    return fs;
+                };
+                const minFs = isSmall ? 3.5 : 4.5;
+
+                // Horizontal stacks (top above QR, bottom below), centered on the QR.
+                let ty = blockY + lineH * 0.78;
+                top.forEach(t => { fitFont(t.text, cellWidth - 2, minFs); pdf.setTextColor(t.muted ? 110 : 20); pdf.text(t.text, qrCenterX, ty, { align: 'center' }); ty += lineH + gapLines; });
+                let by = qrY + qrH + (bottomH ? gap : 0) + lineH * 0.78;
+                bottom.forEach(t => { fitFont(t.text, cellWidth - 2, minFs); pdf.setTextColor(t.muted ? 110 : 20); pdf.text(t.text, qrCenterX, by, { align: 'center' }); by += lineH + gapLines; });
+
+                // Rotated side columns (vertical), centered on the QR height.
+                left.forEach((t, k) => {
+                    fitFont(t.text, qrH || (cellHeight - 4), minFs);
+                    const tw = pdf.getTextWidth(t.text);
+                    const baseX = blockX + lineH * 0.78 + k * (lineH + gapLines);
+                    pdf.setTextColor(t.muted ? 110 : 20);
+                    pdf.text(t.text, baseX, qrMidY + tw / 2, { angle: 90 });
+                });
+                right.forEach((t, k) => {
+                    fitFont(t.text, qrH || (cellHeight - 4), minFs);
+                    const tw = pdf.getTextWidth(t.text);
+                    const baseX = qrX + qrW + (rightW ? gap : 0) + lineH * 0.78 + k * (lineH + gapLines);
+                    pdf.setTextColor(t.muted ? 110 : 20);
+                    pdf.text(t.text, baseX, qrMidY + tw / 2, { angle: 90 });
+                });
+                pdf.setTextColor(0);
             }
 
-            downloadFile(pdf.output('blob'), `QR_Codes_${size}_${selectedItemsArray.length}_items.pdf`, 'application/pdf');
+            downloadFile(pdf.output('blob'), `QR_Codes_${cfg.size}_${selectedItemsArray.length}_items.pdf`, 'application/pdf');
             showToast(
                 skippedCount > 0
                     ? `Generated ${selectedItemsArray.length} QR codes (${skippedCount} skipped — no barcode)`
@@ -748,21 +905,49 @@ function InventoryPageContent() {
                     </div>
                 )}
 
-                <div className="w-full overflow-hidden -mx-3 px-3">
-                    <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
-                            <button
-                                key={status}
-                                onClick={() => setStatusFilter(status)}
-                                className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${statusFilter === status
-                                    ? 'bg-[#1d1d1f] text-white dark:bg-white dark:text-black'
-                                    : 'bg-transparent text-[#86868b] hover:bg-[#e8e8ed] hover:text-[#1d1d1f] dark:hover:bg-[#2c2c2e] dark:hover:text-white'
-                                    }`}
-                                style={{ WebkitTapHighlightColor: 'transparent' }}
-                            >
-                                {status === 'ALL' ? 'All' : status === 'NEEDS_ATTENTION' ? 'Needs Attention' : status === 'PENDING_VERIFICATION' ? 'Pending' : status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                            </button>
-                        ))}
+                {/* Filter bar: status tabs on the left, searchable category picker on the
+                    right (one row on desktop, stacked on mobile). Pick filters, then
+                    Select all + Export/QR/Bulk Edit act on the filtered rows. */}
+                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-4">
+                    <div className="min-w-0 overflow-x-auto scrollbar-hide lg:flex-1">
+                        <div className="flex gap-1.5 sm:gap-2 pb-0.5">
+                            {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
+                                <button
+                                    key={status}
+                                    onClick={() => setStatusFilter(status)}
+                                    className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${statusFilter === status
+                                        ? 'bg-[#1d1d1f] text-white dark:bg-white dark:text-black'
+                                        : 'bg-transparent text-[#86868b] hover:bg-[#e8e8ed] hover:text-[#1d1d1f] dark:hover:bg-[#2c2c2e] dark:hover:text-white'
+                                        }`}
+                                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                                >
+                                    {status === 'ALL' ? 'All' : status === 'NEEDS_ATTENTION' ? 'Needs Attention' : status === 'PENDING_VERIFICATION' ? 'Pending' : status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 lg:shrink-0">
+                        <MultiSelect
+                            value={categoryFilter}
+                            onChange={setCategoryFilter}
+                            options={categoryOptions}
+                            placeholder="All categories"
+                            className="w-full sm:w-64"
+                        />
+                        {(categoryFilter.length > 0 || statusFilter !== 'ALL' || search) && (
+                            <div className="flex items-center gap-3 whitespace-nowrap text-[13px]">
+                                <span className="text-muted-foreground">
+                                    {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
+                                </span>
+                                <button
+                                    onClick={() => { setCategoryFilter([]); setStatusFilter('ALL'); setSearch(''); }}
+                                    className="font-medium text-primary hover:underline"
+                                >
+                                    Clear filters
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -866,26 +1051,14 @@ function InventoryPageContent() {
                                 <Button
                                     variant="secondary"
                                     size="sm"
-                                    onClick={() => handleBulkDownloadQR('standard')}
+                                    onClick={() => setQrModalOpen(true)}
                                     disabled={isGeneratingQR}
                                     className="gap-2"
                                 >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                                     </svg>
-                                    Standard QR
-                                </Button>
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => handleBulkDownloadQR('small')}
-                                    disabled={isGeneratingQR}
-                                    className="gap-2"
-                                >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                    </svg>
-                                    Small QR
+                                    {isGeneratingQR ? 'Generating…' : 'Print QR / Labels'}
                                 </Button>
                                 {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
                                     <Button
@@ -920,7 +1093,15 @@ function InventoryPageContent() {
                             const issue = getEquipmentIssue(item);
 
                             return (
-                            <Link key={item.id} href={`/inventory/${item.barcode}`} className="block h-full">
+                            <Link
+                                key={item.id}
+                                href={`/inventory/${item.barcode}`}
+                                onClick={() => {
+                                    const scroller = document.querySelector('.app-main-scroll');
+                                    sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
+                                }}
+                                className="block h-full"
+                            >
                                 <div className="group bg-white dark:bg-[#1c1c1e] rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-md transition-all cursor-pointer h-full flex flex-col">
                                     <div className="flex items-start justify-between gap-2 mb-2">
                                         <div className="flex-1 min-w-0 pr-6">
@@ -1031,7 +1212,7 @@ function InventoryPageContent() {
                                                 key={item.id}
                                                 onClick={() => {
                                                     if (!isBulkEditMode) {
-                                                        router.push(`/inventory/${item.barcode}`);
+                                                        openItem(item.barcode);
                                                     }
                                                 }}
                                                 className={`border-b border-border transition-colors ${!isBulkEditMode && 'cursor-pointer hover:bg-secondary/50'} ${selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
@@ -1119,10 +1300,10 @@ function InventoryPageContent() {
                         <p className="text-gray-500 mt-1 mb-6 max-w-sm">
                             We could not find any items matching your current filters. Try adjusting your search criteria.
                         </p>
-                        {(search || statusFilter !== 'ALL') && (
+                        {(search || statusFilter !== 'ALL' || categoryFilter.length > 0) && (
                             <Button
                                 variant="outline"
-                                onClick={() => { setSearch(''); setStatusFilter('ALL'); }}
+                                onClick={() => { setSearch(''); setStatusFilter('ALL'); setCategoryFilter([]); }}
                                 className="bg-white hover:bg-gray-50 dark:bg-transparent dark:hover:bg-gray-800"
                             >
                                 Clear all filters
@@ -1131,6 +1312,152 @@ function InventoryPageContent() {
                     </div>
                 )}
             </PullToRefresh>
+
+            {/* QR / Label options dialog — choose what to print before downloading */}
+            {qrModalOpen && (() => {
+                const previewName = sampleLabelItem.barcode;
+                const previewSerial = maskSerialText(sampleLabelItem.serialNumber, labelConfig.maskSerial);
+                type Tk = { text: string; muted: boolean };
+                const texts: (Tk & { pos: LabelPos })[] = [];
+                if (labelConfig.showName) texts.push({ text: previewName, muted: false, pos: labelConfig.namePos });
+                if (labelConfig.showSerial && previewSerial) texts.push({ text: previewSerial, muted: true, pos: labelConfig.serialPos });
+                const at = (p: LabelPos) => texts.filter(t => t.pos === p);
+                const fontPx = labelConfig.fontSize * 1.7;
+                const gapPx = Math.max(2, labelConfig.gap * 5);
+                const rotStyle: React.CSSProperties = { writingMode: 'vertical-rl', transform: 'rotate(180deg)' };
+                const line = (t: Tk, i: number, rotate = false) => (
+                    <span key={i} style={{ fontSize: fontPx, ...(rotate ? rotStyle : {}) }}
+                        className={`whitespace-nowrap font-medium leading-tight ${t.muted ? 'text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                        {t.text}
+                    </span>
+                );
+                const PosPicker = ({ value, onPick }: { value: LabelPos; onPick: (p: LabelPos) => void }) => (
+                    <div className="grid grid-cols-4 gap-1">
+                        {(['top', 'bottom', 'left', 'right'] as const).map(p => (
+                            <button key={p} onClick={() => onPick(p)}
+                                className={`h-8 rounded-lg border text-xs font-semibold capitalize transition-colors ${value === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
+                                {p}
+                            </button>
+                        ))}
+                    </div>
+                );
+                const Slider = ({ label, val, min, max, step, unit, onChange }: { label: string; val: number; min: number; max: number; step: number; unit?: string; onChange: (v: number) => void }) => (
+                    <div>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="font-semibold text-muted-foreground">{label}</span>
+                            <span className="tabular-nums text-foreground">{val}{unit}</span>
+                        </div>
+                        <input type="range" min={min} max={max} step={step} value={val} onChange={e => onChange(Number(e.target.value))} className="w-full accent-primary" />
+                    </div>
+                );
+
+                return (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setQrModalOpen(false)}>
+                        <div
+                            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Label designer</h3>
+                                    <p className="text-xs text-muted-foreground">{selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected</p>
+                                </div>
+                                <button onClick={() => setQrModalOpen(false)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"><X size={18} /></button>
+                            </div>
+
+                            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[1fr_260px]">
+                                {/* Controls */}
+                                <div className="space-y-4 p-5">
+                                    <div>
+                                        <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Label size</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {(['standard', 'small'] as const).map(sz => (
+                                                <button key={sz} onClick={() => setCfg('size', sz)}
+                                                    className={`h-9 rounded-lg border text-sm font-semibold transition-colors ${labelConfig.size === sz ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground hover:bg-muted'}`}>
+                                                    {sz === 'standard' ? 'Standard · 4/row' : 'Small · 7/row'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* QR */}
+                                    <label className="flex cursor-pointer items-center gap-3">
+                                        <input type="checkbox" checked={labelConfig.showQr} onChange={e => setCfg('showQr', e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                        <span className="text-sm font-semibold text-foreground">QR code</span>
+                                    </label>
+                                    {labelConfig.showQr && (
+                                        <div className="pl-7">
+                                            <Slider label="QR quiet zone (white border)" val={labelConfig.qrMargin} min={0} max={4} step={1} onChange={v => setCfg('qrMargin', v)} />
+                                            <p className="mt-1 text-[11px] text-muted-foreground">Lower = bigger QR / less white space. Keep ≥1 so scanners still read it.</p>
+                                        </div>
+                                    )}
+
+                                    {/* Name */}
+                                    <div>
+                                        <label className="flex cursor-pointer items-center gap-3">
+                                            <input type="checkbox" checked={labelConfig.showName} onChange={e => setCfg('showName', e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                            <span className="text-sm font-semibold text-foreground">Name / barcode</span>
+                                        </label>
+                                        {labelConfig.showName && <div className="mt-2 pl-7"><PosPicker value={labelConfig.namePos} onPick={p => setCfg('namePos', p)} /></div>}
+                                    </div>
+
+                                    {/* Serial */}
+                                    <div>
+                                        <label className="flex cursor-pointer items-center gap-3">
+                                            <input type="checkbox" checked={labelConfig.showSerial} onChange={e => setCfg('showSerial', e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                            <span className="text-sm font-semibold text-foreground">Serial number</span>
+                                        </label>
+                                        {labelConfig.showSerial && (
+                                            <div className="mt-2 space-y-2 pl-7">
+                                                <PosPicker value={labelConfig.serialPos} onPick={p => setCfg('serialPos', p)} />
+                                                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-2 py-1.5 dark:border-amber-900/50 dark:bg-amber-950/20">
+                                                    <input type="checkbox" checked={labelConfig.maskSerial} onChange={e => setCfg('maskSerial', e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                                    <span className="text-[12px] text-amber-800 dark:text-amber-200">Show last 4 only <span className="opacity-70">(recommended)</span></span>
+                                                </label>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <Slider label="Text size" val={labelConfig.fontSize} min={5} max={12} step={0.5} unit="pt" onChange={v => setCfg('fontSize', v)} />
+                                    <Slider label="Gap (QR ↔ text)" val={labelConfig.gap} min={0} max={6} step={0.5} unit="mm" onChange={v => setCfg('gap', v)} />
+                                </div>
+
+                                {/* Live preview */}
+                                <div className="flex flex-col items-center justify-center gap-3 border-t border-border bg-gray-50 p-5 dark:bg-[#151517] md:border-l md:border-t-0">
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Live preview</p>
+                                    <div className="flex items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white p-4 shadow-sm dark:border-gray-700" style={{ minWidth: 190, minHeight: 190 }}>
+                                        <div className="flex flex-col items-center" style={{ gap: gapPx }}>
+                                            {at('top').map((t, i) => line(t, i))}
+                                            <div className="flex items-center" style={{ gap: gapPx }}>
+                                                {at('left').map((t, i) => line(t, i, true))}
+                                                {labelConfig.showQr && previewQr && (
+                                                    <img src={previewQr} alt="preview" style={{ width: labelConfig.size === 'small' ? 96 : 128, height: labelConfig.size === 'small' ? 96 : 128, imageRendering: 'pixelated' }} />
+                                                )}
+                                                {at('right').map((t, i) => line(t, i, true))}
+                                            </div>
+                                            {at('bottom').map((t, i) => line(t, i))}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setLabelConfig(DEFAULT_LABEL_CONFIG)} className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline">Reset to default</button>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+                                <Button variant="outline" size="sm" onClick={() => setQrModalOpen(false)}>Cancel</Button>
+                                <Button variant="secondary" size="sm" onClick={() => { try { localStorage.setItem(LABEL_CONFIG_KEY, JSON.stringify(labelConfig)); showToast('Label settings saved', 'success'); } catch { /* ignore */ } }}>Save settings</Button>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={isGeneratingQR || (!labelConfig.showQr && !labelConfig.showName && !labelConfig.showSerial)}
+                                    onClick={() => { try { localStorage.setItem(LABEL_CONFIG_KEY, JSON.stringify(labelConfig)); } catch { /* ignore */ } setQrModalOpen(false); handleBulkDownloadQR(labelConfig); }}
+                                >
+                                    {isGeneratingQR ? 'Generating…' : 'Download PDF'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

@@ -9,11 +9,13 @@ import { ActiveSessions } from '@/components/ActiveSessions';
 import { APP_CONFIG } from '@/lib/config';
 import { useToast } from '@/lib/toast-context';
 import { getRoleLabel } from '@/lib/roles';
+import { useDepartment } from '@/lib/department-context';
 
 export default function ProfilePage() {
     const router = useRouter();
     const { user, logout } = useAuth();
     const { showToast } = useToast();
+    const { department, allDepartments, switchDepartment } = useDepartment();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     if (!user) return null;
@@ -118,6 +120,39 @@ User Agent: ${navigator.userAgent}
                     </div>
                 </div>
             </div>
+
+            {/* Default view (Super Admin only) — pick which department loads on startup */}
+            {user.role === 'SUPER_ADMIN' && switchDepartment && (
+                <div className="space-y-2">
+                    <p className="section-header-ios">Preferences</p>
+                    <div className="grouped-container">
+                        <div className="list-item-native flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <span className="block text-[15px] text-[#1d1d1f] dark:text-gray-100">Default department</span>
+                                <span className="block text-[13px] text-[#86868b] dark:text-gray-400">Loads on app start</span>
+                            </div>
+                            <select
+                                value={department?.id || ''}
+                                onChange={(e) => {
+                                    switchDepartment(e.target.value || null);
+                                    showToast(
+                                        e.target.value
+                                            ? `Default set to ${allDepartments.find(d => d.id === e.target.value)?.name || 'department'}`
+                                            : 'Default set to Global view',
+                                        'success'
+                                    );
+                                }}
+                                className="max-w-[55%] shrink-0 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-[15px] text-[#1d1d1f] outline-none focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-[#2c2c2e] dark:text-white"
+                            >
+                                <option value="">Global (all departments)</option>
+                                {allDepartments.map(dept => (
+                                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Quick Actions for Managers/Admins */}
             {visibleMenuItems.length > 0 && (

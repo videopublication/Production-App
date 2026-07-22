@@ -14,6 +14,8 @@ interface SelectProps {
     placeholder?: string;
     className?: string;
     onOpenChange?: (isOpen: boolean) => void;
+    /** Compact rows — fits many more options on screen at once (long lists). */
+    dense?: boolean;
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -23,7 +25,8 @@ export const Select: React.FC<SelectProps> = ({
     options,
     placeholder = 'Select an option',
     className = '',
-    onOpenChange
+    onOpenChange,
+    dense = false
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [isMobilePicker, setIsMobilePicker] = useState(false);
@@ -168,15 +171,17 @@ export const Select: React.FC<SelectProps> = ({
                     setIsOpen(false);
                     setSearch('');
                 }}
-                className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[15px] transition-colors ${index < filteredOptions.length - 1 ? 'mb-1' : ''
+                className={`flex cursor-pointer items-center justify-between transition-colors ${dense
+                    ? `rounded-lg px-2.5 py-1.5 text-[14px] ${index < filteredOptions.length - 1 ? 'mb-0.5' : ''}`
+                    : `rounded-xl px-3 py-2.5 text-[15px] ${index < filteredOptions.length - 1 ? 'mb-1' : ''}`
                     } ${value === option.value
-                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                        ? (dense ? 'bg-primary/10 font-semibold text-primary' : 'bg-primary text-primary-foreground shadow-lg shadow-primary/20')
                         : 'text-foreground hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e]'
                     }`}
             >
-                <span>{option.label}</span>
+                <span className="truncate">{option.label}</span>
                 {value === option.value && (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <svg className="ml-2 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                 )}
@@ -228,11 +233,6 @@ export const Select: React.FC<SelectProps> = ({
                     />
 
                     <div className="flex items-center gap-1">
-                        {selectedOption && selectedOption.value && !search && (
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-primary/10 text-primary">
-                                Selected
-                            </span>
-                        )}
                         <div
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -264,7 +264,7 @@ export const Select: React.FC<SelectProps> = ({
                         className="absolute z-[100] mt-2 w-full overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] border border-border"
                         style={dropdownStyle}
                     >
-                        <div className="max-h-56 overflow-auto p-2">
+                        <div className="max-h-[22rem] overflow-auto p-2">
                             {renderOptionsList()}
                         </div>
                     </div>

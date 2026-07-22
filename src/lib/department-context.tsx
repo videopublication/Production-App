@@ -16,6 +16,10 @@ interface DepartmentContextType {
 
 const DepartmentContext = createContext<DepartmentContextType | undefined>(undefined);
 
+// Super Admins default to the "Global" view, but can pin a default department here
+// (set from Profile / the header switcher). Stored per-device. 'GLOBAL' = all departments.
+const SUPERADMIN_DEFAULT_DEPT_KEY = 'vpub_default_department';
+
 export function DepartmentProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
     const [department, setDepartment] = useState<Department | null>(null);
@@ -53,13 +57,14 @@ export function DepartmentProvider({ children }: { children: React.ReactNode }) 
         }
     };
 
-    const fetchAllDepartments = async () => {
+    const fetchAllDepartments = async (): Promise<Department[]> => {
         try {
             // Use the admin API to bypass RLS policies that restrict view to assigned department
             const res = await fetch('/api/admin/departments');
             if (!res.ok) throw new Error('Failed to fetch departments');
             const data = await res.json();
             setAllDepartments(data);
+            return data;
         } catch (error) {
             console.error('Error fetching all departments:', error);
             // Fallback to RLS query if API fails (though API is preferred for Super Admin)
@@ -73,12 +78,19 @@ export function DepartmentProvider({ children }: { children: React.ReactNode }) 
                     settings: d.settings || {}
                 }));
                 setAllDepartments(formatted);
+                return formatted;
             }
+            return [];
         }
     };
 
     const switchDepartment = async (deptId: string | null) => {
         if (user?.role !== 'SUPER_ADMIN') return;
+
+        // Remember the choice so it becomes the default on next load.
+        try {
+            localStorage.setItem(SUPERADMIN_DEFAULT_DEPT_KEY, deptId ?? 'GLOBAL');
+        } catch { /* ignore storage errors */ }
 
         if (deptId === null) {
             setDepartment(null); // Switch to "Global" view
@@ -96,11 +108,16 @@ export function DepartmentProvider({ children }: { children: React.ReactNode }) 
         const init = async () => {
             setIsLoading(true);
             if (user?.role === 'SUPER_ADMIN') {
-                await fetchAllDepartments();
-                // If user has a personal department, start there? Or start Global?
-                // User requested "overall view" for Super Admin. So start Global (null).
-                // But check if they manually switched previously? (Persist choice implemented later if needed)
-                setDepartment(null);
+                const departments = await fetchAllDepartments();
+                // Restore the pinned default department (set via Profile / header switcher).
+                // Falls back to Global when unset, set to 'GLOBAL', or pointing at a
+                // department that no longer exists.
+                let saved: string | null = null;
+                try { saved = localStorage.getItem(SUPERADMIN_DEFAULT_DEPT_KEY); } catch { /* ignore */ }
+                const target = saved && saved !== 'GLOBAL'
+                    ? departments.find(d => d.id === saved)
+                    : null;
+                setDepartment(target || null);
             } else if (user?.departmentId) {
                 await fetchDepartment(user.departmentId);
             } else {
