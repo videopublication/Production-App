@@ -1210,16 +1210,26 @@ function InventoryPageContent() {
                         </div>
                     </div>
 
+                    {/* Inline-styled widths (not Tailwind sm:w-*) so the compact sizing
+                        survives this repo's Vercel Tailwind content-scan divergence. */}
                     <div className="flex flex-wrap items-center gap-2">
-                        <MultiSelect value={categoryFilter} onChange={setCategoryFilter} options={categoryOptions} placeholder="All categories" className="w-full sm:w-52" />
+                        <div style={{ flex: '1 1 13rem', maxWidth: '16rem' }} className="min-w-0">
+                            <MultiSelect value={categoryFilter} onChange={setCategoryFilter} options={categoryOptions} placeholder="All categories" className="w-full" />
+                        </div>
                         {brandOptions.length > 0 && (
-                            <MultiSelect value={brandFilter} onChange={setBrandFilter} options={brandOptions} placeholder="All brands" className="w-full sm:w-44" />
+                            <div style={{ flex: '1 1 11rem', maxWidth: '14rem' }} className="min-w-0">
+                                <MultiSelect value={brandFilter} onChange={setBrandFilter} options={brandOptions} placeholder="All brands" className="w-full" />
+                            </div>
                         )}
                         {sizeOptions.length > 0 && (
-                            <MultiSelect value={sizeFilter} onChange={setSizeFilter} options={sizeOptions} placeholder="All sizes" className="w-full sm:w-40" />
+                            <div style={{ flex: '1 1 10rem', maxWidth: '13rem' }} className="min-w-0">
+                                <MultiSelect value={sizeFilter} onChange={setSizeFilter} options={sizeOptions} placeholder="All sizes" className="w-full" />
+                            </div>
                         )}
                         {endOptions.length > 0 && (
-                            <MultiSelect value={endFilter} onChange={setEndFilter} options={endOptions} placeholder="Any connector end" className="w-full sm:w-48" />
+                            <div style={{ flex: '1 1 12rem', maxWidth: '15rem' }} className="min-w-0">
+                                <MultiSelect value={endFilter} onChange={setEndFilter} options={endOptions} placeholder="Any connector end" className="w-full" />
+                            </div>
                         )}
                         {(categoryFilter.length > 0 || brandFilter.length > 0 || sizeFilter.length > 0 || endFilter.length > 0 || statusFilter !== 'ALL' || search) && (
                             <div className="flex items-center gap-3 whitespace-nowrap text-[13px]">
