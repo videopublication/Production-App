@@ -64,6 +64,12 @@ export interface Equipment {
     metadata?: {
         brand?: string;
         model?: string;
+        size?: string;
+        // Connector/cable ends (structured, for filtering + auto name/barcode).
+        endA?: string;
+        endAGender?: 'M' | 'F' | '';
+        endB?: string;
+        endBGender?: 'M' | 'F' | '';
         serialNumber?: string;
         activeIssue?: {
             condition?: Condition;

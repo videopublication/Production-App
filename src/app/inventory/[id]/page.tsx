@@ -1246,6 +1246,12 @@ export default function ItemDetailsPage() {
                                     <dd className="text-sm font-medium">{item.metadata.model}</dd>
                                 </div>
                             )}
+                            {item.metadata?.size && (
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm font-medium text-muted-foreground">Size</dt>
+                                    <dd className="text-sm font-medium">{item.metadata.size}</dd>
+                                </div>
+                            )}
                         </dl>
                     </Card>
 

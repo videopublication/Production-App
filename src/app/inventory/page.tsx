@@ -21,6 +21,8 @@ import { useEquipment, useUpdateEquipment, useDeleteEquipment } from '@/hooks/us
 import { useUsers } from '@/hooks/useUsers';
 import { useTransactions } from '@/hooks/useTransactions';
 import { getEquipmentIssue, getIssueSummary, hasEquipmentIssue } from '@/lib/equipment-issues';
+import { getEquipmentBarcodeBase, getMaxBarcodeNumber } from '@/lib/equipment-barcodes';
+import { isConnectorCategory, buildConnectorName, buildConnectorCode, parseConnectorName, EndGender, ParsedConnector } from '@/lib/connectors';
 
 // Normalize a category for grouping/matching: trim, collapse whitespace, lowercase.
 const normalizeCat = (c?: string) => (c || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -234,8 +236,11 @@ function InventoryPageContent() {
         }
         return 'ALL';
     });
-    // Multiple categories can be active at once. Empty array = all categories.
+    // Multiple categories/brands/sizes can be active at once. Empty array = all.
     const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+    const [brandFilter, setBrandFilter] = useState<string[]>([]);
+    const [sizeFilter, setSizeFilter] = useState<string[]>([]);
+    const [endFilter, setEndFilter] = useState<string[]>([]); // connector ends (matches either end)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
         if (typeof window !== 'undefined') {
             return (sessionStorage.getItem('inventoryViewMode') as 'grid' | 'list') || 'grid';
@@ -260,9 +265,16 @@ function InventoryPageContent() {
     const [frOpen, setFrOpen] = useState(false);
     const [frFind, setFrFind] = useState('');
     const [frReplace, setFrReplace] = useState('');
-    const [frField, setFrField] = useState<'all' | 'name' | 'barcode' | 'category' | 'model'>('all');
+    const [frField, setFrField] = useState<'all' | 'name' | 'barcode' | 'category' | 'model' | 'size'>('all');
     const [frCase, setFrCase] = useState(false);
     const [frApplying, setFrApplying] = useState(false);
+    // Bulk barcode generation (standard scheme: Category prefix + Model code + №)
+    const [bcOpen, setBcOpen] = useState(false);
+    const [bcApplying, setBcApplying] = useState(false);
+    // Normalize connectors (group by name → structured ends/size)
+    const [ncOpen, setNcOpen] = useState(false);
+    const [ncApplying, setNcApplying] = useState(false);
+    const [ncEdits, setNcEdits] = useState<Record<string, ParsedConnector>>({});
     const [editDrafts, setEditDrafts] = useState<Record<string, Partial<Equipment>>>({});
     const [isSavingDrafts, setIsSavingDrafts] = useState(false);
 
@@ -331,10 +343,14 @@ function InventoryPageContent() {
     // Open an item detail while remembering where we were: save the list scroll
     // position so returning (via the sticky Back) lands on the same spot with the
     // same search still applied.
+    // Briefly flash the row/card we return to.
+    const [flashBarcode, setFlashBarcode] = useState('');
+
     const openItem = (barcode: string) => {
         if (typeof window !== 'undefined') {
             const scroller = document.querySelector('.app-main-scroll');
             sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
+            sessionStorage.setItem('inventoryFlash', barcode);
         }
         router.push(`/inventory/${barcode}`);
     };
@@ -344,17 +360,44 @@ function InventoryPageContent() {
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const saved = sessionStorage.getItem('inventoryScroll');
-        // Consume it: one-shot, so a later fresh visit to Inventory starts at top
-        // instead of jumping to a stale saved position.
+        const flash = sessionStorage.getItem('inventoryFlash');
+        // Consume both: one-shot, so a later fresh visit to Inventory starts at top
+        // instead of jumping to a stale saved position / flashing a stale row.
         sessionStorage.removeItem('inventoryScroll');
+        sessionStorage.removeItem('inventoryFlash');
+        if (flash) setFlashBarcode(flash);
         const y = Number(saved);
-        if (!y) return;
-        const raf = requestAnimationFrame(() => {
-            const scroller = document.querySelector('.app-main-scroll');
-            if (scroller) scroller.scrollTop = y;
-        });
-        return () => cancelAnimationFrame(raf);
+        let raf = 0;
+        if (y) {
+            raf = requestAnimationFrame(() => {
+                const scroller = document.querySelector('.app-main-scroll');
+                if (scroller) scroller.scrollTop = y;
+            });
+        }
+        return () => { if (raf) cancelAnimationFrame(raf); };
         // Run once on mount — after data (React Query cache) has rendered rows.
+    }, []);
+
+    // Auto-clear the flash after a moment (own effect keyed on flashBarcode, so the
+    // timer survives StrictMode double-invoke of the trigger effects → fade-out works).
+    useEffect(() => {
+        if (!flashBarcode) return;
+        const t = setTimeout(() => setFlashBarcode(''), 2200);
+        return () => clearTimeout(t);
+    }, [flashBarcode]);
+
+    // Back navigation may reuse this page from the App Router cache WITHOUT remounting,
+    // so the mount effect above won't re-run. This popstate listener (persists while the
+    // page is cached) catches Back and flashes the row we returned to.
+    useEffect(() => {
+        const onPop = () => {
+            const flash = sessionStorage.getItem('inventoryFlash');
+            if (!flash) return;
+            sessionStorage.removeItem('inventoryFlash');
+            setFlashBarcode(flash);
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
     }, []);
 
     const parseInventoryScanCode = (decodedText: string) => {
@@ -427,17 +470,21 @@ function InventoryPageContent() {
         // No need to re-filter by department here — it would cause items to appear empty
         // if item.departmentId isn't mapped correctly.
 
-        if (search) {
+        if (search.trim()) {
+            // Token-AND search: every word in the query must appear somewhere across the
+            // item's fields (name/category/barcode/serial/model), separator-insensitive
+            // and order-independent. So "fz 100 battery" matches an item named "Battery"
+            // with model "FZ-100", and "fz-100"/"fz100"/"fz 100" all behave the same.
             const normalize = (str: string) => str.toLowerCase().replace(/[\s\-_]/g, '');
-            const normalizedQ = normalize(search);
-            const basicQ = search.toLowerCase().trim();
-            result = result.filter(item =>
-                item.name.toLowerCase().includes(basicQ) ||
-                item.category.toLowerCase().includes(basicQ) ||
-                normalize(item.barcode).includes(normalizedQ) ||
-                (item.serialNumber && normalize(item.serialNumber).includes(normalizedQ)) ||
-                normalize(item.name).includes(normalizedQ)
-            );
+            const tokens = search.trim().split(/\s+/).map(normalize).filter(Boolean);
+            result = result.filter(item => {
+                const hay = normalize(
+                    [item.name, item.category, item.barcode, item.serialNumber, item.metadata?.model, item.metadata?.brand, item.metadata?.size, item.metadata?.endA, item.metadata?.endB]
+                        .filter(Boolean)
+                        .join(' ')
+                );
+                return tokens.every(t => hay.includes(t));
+            });
         }
 
         if (statusFilter !== 'ALL') {
@@ -450,6 +497,27 @@ function InventoryPageContent() {
 
         if (categoryFilter.length > 0) {
             result = result.filter(item => categoryFilter.includes(normalizeCat(item.category)));
+        }
+
+        if (brandFilter.length > 0) {
+            result = result.filter(item => brandFilter.includes(normalizeCat(item.metadata?.brand || '')));
+        }
+
+        if (sizeFilter.length > 0) {
+            // '__none__' matches items with no size set.
+            result = result.filter(item => {
+                const sz = normalizeCat(item.metadata?.size || '');
+                return sizeFilter.includes(sz || '__none__');
+            });
+        }
+
+        if (endFilter.length > 0) {
+            // Match items where EITHER connector end is a selected end.
+            result = result.filter(item => {
+                const a = normalizeCat(item.metadata?.endA || '');
+                const b = normalizeCat(item.metadata?.endB || '');
+                return endFilter.includes(a) || endFilter.includes(b);
+            });
         }
 
         if (sortConfig) {
@@ -472,15 +540,13 @@ function InventoryPageContent() {
         }
 
         return result;
-    }, [items, search, statusFilter, categoryFilter, sortConfig, getUserName]);
+    }, [items, search, statusFilter, categoryFilter, brandFilter, sizeFilter, endFilter, sortConfig, getUserName]);
 
-    // Category options for the filter. Dedupe case/whitespace variants (e.g. "Battery"
-    // vs "Battery ") under one normalized key so the list has no visual duplicates and
-    // selecting one matches every variant.
-    const categoryOptions = useMemo(() => {
-        const map = new Map<string, string>(); // normalized key -> display label
+    // Build deduped {value,label} options for a facet, keyed by normalized value.
+    const buildOptions = (pick: (i: Equipment) => string | undefined) => {
+        const map = new Map<string, string>();
         for (const it of items) {
-            const raw = (it.category || '').trim().replace(/\s+/g, ' ');
+            const raw = (pick(it) || '').trim().replace(/\s+/g, ' ');
             if (!raw) continue;
             const key = raw.toLowerCase();
             if (!map.has(key)) map.set(key, raw);
@@ -488,6 +554,29 @@ function InventoryPageContent() {
         return Array.from(map.entries())
             .map(([value, label]) => ({ value, label }))
             .sort((a, b) => a.label.localeCompare(b.label));
+    };
+    // Category / Brand / Size options for the filters (deduped).
+    const categoryOptions = useMemo(() => buildOptions(i => i.category), [items]);
+    const brandOptions = useMemo(() => buildOptions(i => i.metadata?.brand), [items]);
+    const sizeOptions = useMemo(() => {
+        const opts = buildOptions(i => i.metadata?.size);
+        // Add a "No size" bucket if any item lacks a size.
+        const hasNone = items.some(i => !(i.metadata?.size || '').trim());
+        return hasNone ? [...opts, { value: '__none__', label: 'No size' }] : opts;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [items]);
+    // Distinct connector ends across BOTH ends (deduped, normalized key).
+    const endOptions = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const it of items) {
+            for (const raw of [it.metadata?.endA, it.metadata?.endB]) {
+                const v = (raw || '').trim().replace(/\s+/g, ' ');
+                if (!v) continue;
+                const key = v.toLowerCase();
+                if (!map.has(key)) map.set(key, v);
+            }
+        }
+        return Array.from(map.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
     }, [items]);
 
     const getStatusVariant = (status: EquipmentStatus) => {
@@ -615,8 +704,8 @@ function InventoryPageContent() {
         () => (selectedItems.size > 0 ? items.filter(i => selectedItems.has(i.id)) : filteredItems),
         [selectedItems, items, filteredItems]
     );
-    const frFieldValue = (item: Equipment, f: 'name' | 'barcode' | 'category' | 'model') =>
-        f === 'model' ? (item.metadata?.model || '') : (((item as unknown as Record<string, unknown>)[f] as string) || '');
+    const frFieldValue = (item: Equipment, f: 'name' | 'barcode' | 'category' | 'model' | 'size') =>
+        (f === 'model' || f === 'size') ? (item.metadata?.[f] || '') : (((item as unknown as Record<string, unknown>)[f] as string) || '');
     const frApplyStr = (val: string) => {
         if (!frFind) return val;
         if (frCase) return val.split(frFind).join(frReplace);
@@ -624,21 +713,21 @@ function InventoryPageContent() {
         return val.replace(re, frReplace);
     };
     const frChanges = useMemo(() => {
-        if (!frFind) return [] as { item: Equipment; upd: Record<string, string>; metaModel?: string }[];
-        const fields = frField === 'all' ? (['name', 'barcode', 'category', 'model'] as const) : [frField];
-        const out: { item: Equipment; upd: Record<string, string>; metaModel?: string }[] = [];
+        if (!frFind) return [] as { item: Equipment; upd: Record<string, string>; meta: Record<string, string> }[];
+        const fields = frField === 'all' ? (['name', 'barcode', 'category', 'model', 'size'] as const) : [frField];
+        const out: { item: Equipment; upd: Record<string, string>; meta: Record<string, string> }[] = [];
         for (const item of frTargets) {
             const upd: Record<string, string> = {};
-            let metaModel: string | undefined;
+            const meta: Record<string, string> = {};
             for (const f of fields) {
                 const cur = frFieldValue(item, f);
                 if (!cur) continue;
                 const next = frApplyStr(cur);
                 if (next !== cur) {
-                    if (f === 'model') metaModel = next; else upd[f] = next;
+                    if (f === 'model' || f === 'size') meta[f] = next; else upd[f] = next;
                 }
             }
-            if (Object.keys(upd).length || metaModel !== undefined) out.push({ item, upd, metaModel });
+            if (Object.keys(upd).length || Object.keys(meta).length) out.push({ item, upd, meta });
         }
         return out;
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -666,13 +755,15 @@ function InventoryPageContent() {
         if (frChanges.length === 0) return;
         setFrApplying(true);
         let err = false;
-        for (const { item, upd, metaModel } of frChanges) {
+        for (const { item, upd, meta } of frChanges) {
             try {
                 const updates: Partial<Equipment> = { ...upd } as Partial<Equipment>;
-                if (metaModel !== undefined) updates.metadata = { ...(item.metadata || {}), model: metaModel };
+                if (Object.keys(meta).length) updates.metadata = { ...(item.metadata || {}), ...meta };
                 await updateEquipment({ id: item.id, updates });
-                const parts = Object.entries(upd).map(([f, to]) => `${f} "${frFieldValue(item, f as 'name' | 'barcode' | 'category')}"→"${to}"`);
-                if (metaModel !== undefined) parts.push(`model "${item.metadata?.model || ''}"→"${metaModel}"`);
+                const parts = [
+                    ...Object.entries(upd).map(([f, to]) => `${f} "${frFieldValue(item, f as 'name' | 'barcode' | 'category')}"→"${to}"`),
+                    ...Object.entries(meta).map(([f, to]) => `${f} "${frFieldValue(item, f as 'model' | 'size')}"→"${to}"`),
+                ];
                 await logEquipmentEdit(item, `Find & replace on "${item.name}" (${item.barcode}): ${parts.join(', ')}`);
             } catch (e) {
                 console.error('Find & replace update failed:', e);
@@ -684,6 +775,112 @@ function InventoryPageContent() {
         setFrOpen(false);
         setFrFind('');
         setFrReplace('');
+        refresh();
+    };
+
+    // ---- Bulk barcode generation (standard scheme) ----------------------------
+    // Regenerate each target's barcode as <CATEGORY_PREFIX>-<MODEL_CODE>-<№>, the same
+    // rule Add/Import use. Numbering continues after the highest existing number for
+    // that base among items NOT being regenerated (collision-safe), then increments
+    // per item within the batch.
+    const openBarcodeGen = () => setBcOpen(true);
+
+    const bcChanges = useMemo(() => {
+        const changingIds = new Set(frTargets.map(i => i.id));
+        const outside = items.filter(i => !changingIds.has(i.id));
+        const nextByBase = new Map<string, number>(); // base -> next number to assign
+        return frTargets.map(item => {
+            const base = getEquipmentBarcodeBase(item.category, item.metadata?.model || item.serialNumber || 'GEN');
+            const start = nextByBase.has(base)
+                ? nextByBase.get(base)!
+                : getMaxBarcodeNumber(base, outside) + 1;
+            nextByBase.set(base, start + 1);
+            return { item, barcode: `${base}-${start}` };
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [frTargets, items]);
+
+    const runBarcodeGen = async () => {
+        if (bcChanges.length === 0) return;
+        setBcApplying(true);
+        let err = false, changed = 0;
+        for (const { item, barcode } of bcChanges) {
+            if (barcode === item.barcode) continue;
+            try {
+                await updateEquipment({ id: item.id, updates: { barcode } });
+                await logEquipmentEdit(item, `Generated barcode for "${item.name}": "${item.barcode}"→"${barcode}"`);
+                changed++;
+            } catch (e) {
+                console.error('Barcode generation failed:', e);
+                err = true;
+            }
+        }
+        setBcApplying(false);
+        showToast(err ? 'Some updates failed' : `Regenerated ${changed} barcode${changed !== 1 ? 's' : ''}`, err ? 'error' : 'success');
+        setBcOpen(false);
+        refresh();
+    };
+
+    // ---- Normalize connectors -------------------------------------------------
+    // Connector targets (category is Connector/Cable/Adapter) grouped by current name.
+    const ncGroups = useMemo(() => {
+        const conns = frTargets.filter(i => isConnectorCategory(i.category));
+        const map = new Map<string, Equipment[]>();
+        for (const it of conns) {
+            const key = (it.name || '').trim() || '(no name)';
+            (map.get(key) || map.set(key, []).get(key)!).push(it);
+        }
+        return Array.from(map.entries()).map(([name, list]) => ({ name, list })).sort((a, b) => a.name.localeCompare(b.name));
+    }, [frTargets]);
+    const ncConnectorCount = useMemo(() => ncGroups.reduce((n, g) => n + g.list.length, 0), [ncGroups]);
+
+    const openNormalize = () => {
+        const seed: Record<string, ParsedConnector> = {};
+        for (const g of ncGroups) seed[g.name] = parseConnectorName(g.name);
+        setNcEdits(seed);
+        setNcOpen(true);
+    };
+    const setNcEdit = (group: string, patch: Partial<ParsedConnector>) =>
+        setNcEdits(prev => ({ ...prev, [group]: { ...prev[group], ...patch } }));
+
+    const runNormalize = async () => {
+        setNcApplying(true);
+        let err = false, changed = 0;
+        for (const g of ncGroups) {
+            const e = ncEdits[g.name];
+            if (!e) continue;
+            const newName = buildConnectorName(e.endA, e.endAGender, e.endB, e.endBGender);
+            const code = buildConnectorCode(e.endA, e.endAGender, e.endB, e.endBGender);
+            if (!newName) continue; // skip groups the user cleared out
+            for (const item of g.list) {
+                try {
+                    await updateEquipment({
+                        id: item.id,
+                        updates: {
+                            name: newName,
+                            category: (item.category || '').trim(),
+                            metadata: {
+                                ...(item.metadata || {}),
+                                endA: e.endA.trim() || undefined,
+                                endAGender: e.endAGender || undefined,
+                                endB: e.endB.trim() || undefined,
+                                endBGender: e.endBGender || undefined,
+                                size: e.size.trim() || item.metadata?.size || undefined,
+                                model: code || item.metadata?.model,
+                            },
+                        },
+                    });
+                    await logEquipmentEdit(item, `Normalized connector "${item.name}" → "${newName}" (code ${code}${e.size ? `, size ${e.size}` : ''})`);
+                    changed++;
+                } catch (ex) {
+                    console.error('Normalize failed:', ex);
+                    err = true;
+                }
+            }
+        }
+        setNcApplying(false);
+        showToast(err ? 'Some updates failed' : `Normalized ${changed} connector${changed !== 1 ? 's' : ''}. Now Regenerate barcodes.`, err ? 'error' : 'success');
+        setNcOpen(false);
         refresh();
     };
 
@@ -932,7 +1129,7 @@ function InventoryPageContent() {
                     <Search className="h-5 w-5 shrink-0 text-muted-foreground sm:h-6 sm:w-6" />
                     <input
                         type="search"
-                        placeholder="Search name, barcode, serial..."
+                        placeholder="Search name, barcode, serial, model..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         onKeyDown={(e) => {
@@ -991,11 +1188,11 @@ function InventoryPageContent() {
                     </div>
                 )}
 
-                {/* Filter bar: status tabs on the left, searchable category picker on the
-                    right (one row on desktop, stacked on mobile). Pick filters, then
-                    Select all + Export/QR/Bulk Edit act on the filtered rows. */}
-                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-4">
-                    <div className="min-w-0 overflow-x-auto scrollbar-hide lg:flex-1">
+                {/* Filter bar: status tabs, then Category / Brand / Size facet pickers.
+                    Pick any combination, then Select all + Export/QR/Bulk Edit act on the
+                    filtered rows. */}
+                <div className="space-y-2.5">
+                    <div className="w-full overflow-x-auto scrollbar-hide">
                         <div className="flex gap-1.5 sm:gap-2 pb-0.5">
                             {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
                                 <button
@@ -1013,21 +1210,24 @@ function InventoryPageContent() {
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 lg:shrink-0">
-                        <MultiSelect
-                            value={categoryFilter}
-                            onChange={setCategoryFilter}
-                            options={categoryOptions}
-                            placeholder="All categories"
-                            className="w-full sm:w-64"
-                        />
-                        {(categoryFilter.length > 0 || statusFilter !== 'ALL' || search) && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <MultiSelect value={categoryFilter} onChange={setCategoryFilter} options={categoryOptions} placeholder="All categories" className="w-full sm:w-52" />
+                        {brandOptions.length > 0 && (
+                            <MultiSelect value={brandFilter} onChange={setBrandFilter} options={brandOptions} placeholder="All brands" className="w-full sm:w-44" />
+                        )}
+                        {sizeOptions.length > 0 && (
+                            <MultiSelect value={sizeFilter} onChange={setSizeFilter} options={sizeOptions} placeholder="All sizes" className="w-full sm:w-40" />
+                        )}
+                        {endOptions.length > 0 && (
+                            <MultiSelect value={endFilter} onChange={setEndFilter} options={endOptions} placeholder="Any connector end" className="w-full sm:w-48" />
+                        )}
+                        {(categoryFilter.length > 0 || brandFilter.length > 0 || sizeFilter.length > 0 || endFilter.length > 0 || statusFilter !== 'ALL' || search) && (
                             <div className="flex items-center gap-3 whitespace-nowrap text-[13px]">
                                 <span className="text-muted-foreground">
                                     {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
                                 </span>
                                 <button
-                                    onClick={() => { setCategoryFilter([]); setStatusFilter('ALL'); setSearch(''); }}
+                                    onClick={() => { setCategoryFilter([]); setBrandFilter([]); setSizeFilter([]); setEndFilter([]); setStatusFilter('ALL'); setSearch(''); }}
                                     className="font-medium text-primary hover:underline"
                                 >
                                     Clear filters
@@ -1130,6 +1330,30 @@ function InventoryPageContent() {
                                     </>
                                 ) : (
                                     <>
+                                        {ncConnectorCount > 0 && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={openNormalize}
+                                                className="gap-2"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                                </svg>
+                                                Normalize Connectors
+                                            </Button>
+                                        )}
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={openBarcodeGen}
+                                            className="gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h1m3 0h1m3 0h1m3 0h1M4 18h1m3 0h1m3 0h1m3 0h1M4 12h16" />
+                                            </svg>
+                                            Generate Barcodes
+                                        </Button>
                                         <Button
                                             variant="secondary"
                                             size="sm"
@@ -1209,10 +1433,11 @@ function InventoryPageContent() {
                                 onClick={() => {
                                     const scroller = document.querySelector('.app-main-scroll');
                                     sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
+                                    sessionStorage.setItem('inventoryFlash', item.barcode);
                                 }}
                                 className="block h-full"
                             >
-                                <div className="group bg-white dark:bg-[#1c1c1e] rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-md transition-all cursor-pointer h-full flex flex-col">
+                                <div className={`group bg-white dark:bg-[#1c1c1e] rounded-xl p-4 border transition-all duration-700 cursor-pointer h-full flex flex-col ${item.barcode === flashBarcode ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-inset ring-primary/30' : 'border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-md'}`}>
                                     <div className="flex items-start justify-between gap-2 mb-2">
                                         <div className="flex-1 min-w-0 pr-6">
                                             <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-primary transition-colors">
@@ -1281,13 +1506,19 @@ function InventoryPageContent() {
                                             />
                                         </th>
                                         <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('name')}>
-                                            <div className="flex items-center">Name <SortIcon active={sortConfig?.key === 'name'} direction={sortConfig?.direction || 'asc'} /></div>
+                                            <div className="flex items-center whitespace-nowrap">Equipment Name <SortIcon active={sortConfig?.key === 'name'} direction={sortConfig?.direction || 'asc'} /></div>
                                         </th>
+                                        <th className="px-6 py-3">Brand</th>
+                                        <th className="px-6 py-3">Model</th>
+                                        <th className="px-6 py-3">Size</th>
                                         <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('category')}>
                                             <div className="flex items-center">Category <SortIcon active={sortConfig?.key === 'category'} direction={sortConfig?.direction || 'asc'} /></div>
                                         </th>
                                         <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('barcode')}>
                                             <div className="flex items-center">Barcode <SortIcon active={sortConfig?.key === 'barcode'} direction={sortConfig?.direction || 'asc'} /></div>
+                                        </th>
+                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('serialNumber')}>
+                                            <div className="flex items-center whitespace-nowrap">S/N <SortIcon active={sortConfig?.key === 'serialNumber'} direction={sortConfig?.direction || 'asc'} /></div>
                                         </th>
                                         <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('status')}>
                                             <div className="flex items-center">Status <SortIcon active={sortConfig?.key === 'status'} direction={sortConfig?.direction || 'asc'} /></div>
@@ -1308,9 +1539,13 @@ function InventoryPageContent() {
                                         Array.from({ length: 8 }).map((_, i) => (
                                             <tr key={i} className="border-b border-border bg-background/50">
                                                 <td className="px-4 py-4"><Skeleton className="w-4 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-48 h-5 rounded" /><Skeleton className="w-24 h-3 mt-1 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-40 h-5 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-20 h-4 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-20 h-4 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-16 h-4 rounded" /></td>
                                                 <td className="px-6 py-4"><Skeleton className="w-24 h-4 rounded" /></td>
                                                 <td className="px-6 py-4"><Skeleton className="w-28 h-4 rounded" /></td>
+                                                <td className="px-6 py-4"><Skeleton className="w-24 h-4 rounded" /></td>
                                                 <td className="px-6 py-4"><Skeleton className="w-20 h-6 rounded-full" /></td>
                                                 <td className="px-6 py-4"><Skeleton className="w-5 h-5 rounded" /></td>
                                                 <td className="px-6 py-4"><Skeleton className="w-32 h-4 rounded" /></td>
@@ -1325,11 +1560,12 @@ function InventoryPageContent() {
                                             <tr
                                                 key={item.id}
                                                 onClick={() => {
-                                                    if (!isBulkEditMode) {
-                                                        openItem(item.barcode);
-                                                    }
+                                                    if (isBulkEditMode) return;
+                                                    // Don't navigate if the user is selecting text in the row.
+                                                    if (typeof window !== 'undefined' && window.getSelection()?.toString()) return;
+                                                    openItem(item.barcode);
                                                 }}
-                                                className={`border-b border-border transition-colors ${!isBulkEditMode && 'cursor-pointer hover:bg-secondary/50'} ${selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
+                                                className={`border-b border-border transition-[background-color,box-shadow,border-color] duration-700 ${!isBulkEditMode && 'cursor-pointer hover:bg-secondary/50'} ${item.barcode === flashBarcode ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
                                             >
                                                 <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                                                     <input
@@ -1341,16 +1577,12 @@ function InventoryPageContent() {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     {isBulkEditMode ? (
-                                                        <div className="flex flex-col gap-1 w-48">
+                                                        <div className="w-40">
                                                             <InlineInput value={editDrafts[item.id]?.name ?? item.name} onChange={(val) => handleDraftChange(item.id, 'name', val)} placeholder="Name" />
-                                                            <InlineInput value={editDrafts[item.id]?.metadata?.model ?? item.metadata?.model ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'model', val)} placeholder="Model (Optional)" />
-                                                            <InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N (Optional)" />
                                                         </div>
                                                     ) : (
                                                         <>
                                                             <div className="font-medium text-foreground">{item.name}</div>
-                                                            {item.metadata?.model && <div className="text-xs text-muted-foreground mt-0.5">Model: {item.metadata.model}</div>}
-                                                            {item.serialNumber && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.serialNumber}</div>}
                                                             {issue && (
                                                                 <div className="mt-1 flex max-w-[320px] items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                                                                     <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1361,6 +1593,21 @@ function InventoryPageContent() {
                                                             )}
                                                         </>
                                                     )}
+                                                </td>
+                                                <td className="px-6 py-4 text-muted-foreground">
+                                                    {isBulkEditMode ? (
+                                                        <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.brand ?? item.metadata?.brand ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'brand', val)} placeholder="Brand" /></div>
+                                                    ) : (item.metadata?.brand || '—')}
+                                                </td>
+                                                <td className="px-6 py-4 text-muted-foreground">
+                                                    {isBulkEditMode ? (
+                                                        <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.model ?? item.metadata?.model ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'model', val)} placeholder="Model" /></div>
+                                                    ) : (item.metadata?.model || '—')}
+                                                </td>
+                                                <td className="px-6 py-4 text-muted-foreground">
+                                                    {isBulkEditMode ? (
+                                                        <div className="w-24"><InlineInput value={editDrafts[item.id]?.metadata?.size ?? item.metadata?.size ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'size', val)} placeholder="Size" /></div>
+                                                    ) : (item.metadata?.size || '—')}
                                                 </td>
                                                 <td className="px-6 py-4 text-muted-foreground">
                                                     {isBulkEditMode ? (
@@ -1375,6 +1622,11 @@ function InventoryPageContent() {
                                                             <InlineInput value={editDrafts[item.id]?.barcode ?? item.barcode} onChange={(val) => handleDraftChange(item.id, 'barcode', val)} placeholder="Barcode" />
                                                         </div>
                                                     ) : item.barcode}
+                                                </td>
+                                                <td className="px-6 py-4 font-mono text-muted-foreground">
+                                                    {isBulkEditMode ? (
+                                                        <div className="w-28"><InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N" /></div>
+                                                    ) : (item.serialNumber || '—')}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <Badge variant={getDisplayStatusVariant(item)}>
@@ -1419,10 +1671,10 @@ function InventoryPageContent() {
                         <p className="text-gray-500 mt-1 mb-6 max-w-sm">
                             We could not find any items matching your current filters. Try adjusting your search criteria.
                         </p>
-                        {(search || statusFilter !== 'ALL' || categoryFilter.length > 0) && (
+                        {(search || statusFilter !== 'ALL' || categoryFilter.length > 0 || brandFilter.length > 0 || sizeFilter.length > 0 || endFilter.length > 0) && (
                             <Button
                                 variant="outline"
-                                onClick={() => { setSearch(''); setStatusFilter('ALL'); setCategoryFilter([]); }}
+                                onClick={() => { setSearch(''); setStatusFilter('ALL'); setCategoryFilter([]); setBrandFilter([]); setSizeFilter([]); setEndFilter([]); }}
                                 className="bg-white hover:bg-gray-50 dark:bg-transparent dark:hover:bg-gray-800"
                             >
                                 Clear all filters
@@ -1433,10 +1685,131 @@ function InventoryPageContent() {
             </PullToRefresh>
 
             {/* QR / Label options dialog — choose what to print before downloading */}
+            {/* Normalize Connectors dialog */}
+            {ncOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]">
+                        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Normalize connectors</h3>
+                                <p className="text-xs text-muted-foreground">{ncGroups.length} name group{ncGroups.length !== 1 ? 's' : ''} · {ncConnectorCount} item{ncConnectorCount !== 1 ? 's' : ''}. Auto-parsed from the current name — review & fix, then Apply.</p>
+                            </div>
+                            <button onClick={() => setNcOpen(false)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"><X size={18} /></button>
+                        </div>
+
+                        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                            {/* header row */}
+                            <div className="hidden gap-2 px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground sm:grid sm:grid-cols-[1.4fr_1fr_2.6rem_1fr_2.6rem_0.9fr]">
+                                <span>Current (×count)</span><span>End A</span><span>M/F</span><span>End B</span><span>M/F</span><span>Size</span>
+                            </div>
+                            <div className="space-y-2">
+                                {ncGroups.map(g => {
+                                    const e = ncEdits[g.name];
+                                    if (!e) return null;
+                                    const newName = buildConnectorName(e.endA, e.endAGender, e.endB, e.endBGender);
+                                    const code = buildConnectorCode(e.endA, e.endAGender, e.endB, e.endBGender);
+                                    return (
+                                        <div key={g.name} className="rounded-lg border border-border bg-secondary/20 p-2">
+                                            <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.4fr_1fr_2.6rem_1fr_2.6rem_0.9fr]">
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-[13px] font-medium text-foreground" title={g.name}>{g.name}</div>
+                                                    <div className="text-[11px] text-muted-foreground">×{g.list.length}</div>
+                                                </div>
+                                                <input value={e.endA} onChange={ev => setNcEdit(g.name, { endA: ev.target.value })} placeholder="End A"
+                                                    className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary" />
+                                                <select value={e.endAGender} onChange={ev => setNcEdit(g.name, { endAGender: ev.target.value as EndGender })}
+                                                    className="h-9 w-full rounded-lg border border-border bg-background px-1 text-sm outline-none focus:ring-2 focus:ring-primary">
+                                                    <option value="">—</option><option value="M">M</option><option value="F">F</option>
+                                                </select>
+                                                <input value={e.endB} onChange={ev => setNcEdit(g.name, { endB: ev.target.value })} placeholder="End B"
+                                                    className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary" />
+                                                <select value={e.endBGender} onChange={ev => setNcEdit(g.name, { endBGender: ev.target.value as EndGender })}
+                                                    className="h-9 w-full rounded-lg border border-border bg-background px-1 text-sm outline-none focus:ring-2 focus:ring-primary">
+                                                    <option value="">—</option><option value="M">M</option><option value="F">F</option>
+                                                </select>
+                                                <input value={e.size} onChange={ev => setNcEdit(g.name, { size: ev.target.value })} placeholder="Size"
+                                                    className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary" />
+                                            </div>
+                                            <div className="mt-1 flex flex-wrap gap-x-4 px-1 text-[11px]">
+                                                <span className="text-muted-foreground">→ <span className="font-semibold text-foreground">{newName || '(cleared — will skip)'}</span></span>
+                                                {code && <span className="text-muted-foreground">code <span className="font-mono text-foreground">{code}</span></span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-3">
+                            <span className="text-[11px] text-muted-foreground">Applies Name + ends + size + model code. Then use <b>Generate Barcodes</b> to renumber.</span>
+                            <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={() => setNcOpen(false)}>Cancel</Button>
+                                <Button variant="primary" size="sm" disabled={ncApplying || ncGroups.length === 0} onClick={runNormalize}>
+                                    {ncApplying ? 'Applying…' : `Apply to ${ncConnectorCount}`}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Generate Barcodes dialog */}
+            {bcOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]">
+                        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Generate barcodes</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    {selectedItems.size > 0
+                                        ? `${selectedItems.size} selected item${selectedItems.size !== 1 ? 's' : ''}`
+                                        : `all ${frTargets.length} filtered item${frTargets.length !== 1 ? 's' : ''}`}
+                                </p>
+                            </div>
+                            <button onClick={() => setBcOpen(false)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"><X size={18} /></button>
+                        </div>
+
+                        <div className="space-y-3 overflow-y-auto p-5">
+                            <div className="rounded-lg border border-border bg-secondary/30 px-3 py-2 text-[12px] text-muted-foreground">
+                                Regenerates using the standard scheme <span className="font-mono text-foreground">CATEGORY-MODEL-№</span> (e.g. <span className="font-mono text-foreground">BAT-NPF970-1</span>). Numbering continues after existing barcodes — same as Add / Import. Items with the same category + model are numbered together.
+                            </div>
+
+                            <div className="rounded-xl border border-border bg-secondary/30 p-3">
+                                {bcChanges.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">No items to regenerate.</p>
+                                ) : (
+                                    <>
+                                        <p className="mb-2 text-xs font-semibold text-foreground">{bcChanges.length} item{bcChanges.length !== 1 ? 's' : ''}</p>
+                                        <div className="max-h-52 space-y-1 overflow-y-auto">
+                                            {bcChanges.slice(0, 12).map(({ item, barcode }) => (
+                                                <div key={item.id} className="flex items-center gap-2 text-[11px] leading-tight">
+                                                    <span className="truncate text-muted-foreground">{item.name}</span>
+                                                    <span className="ml-auto shrink-0 font-mono text-red-500 line-through">{item.barcode}</span>
+                                                    <span className="shrink-0 text-muted-foreground">→</span>
+                                                    <span className="shrink-0 font-mono font-semibold text-green-600 dark:text-green-400">{barcode}</span>
+                                                </div>
+                                            ))}
+                                            {bcChanges.length > 12 && <p className="text-[11px] text-muted-foreground">…and {bcChanges.length - 12} more</p>}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+                            <Button variant="outline" size="sm" onClick={() => setBcOpen(false)}>Cancel</Button>
+                            <Button variant="primary" size="sm" disabled={bcApplying || bcChanges.length === 0} onClick={runBarcodeGen}>
+                                {bcApplying ? 'Applying…' : `Regenerate (${bcChanges.length})`}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Find & Replace dialog */}
             {frOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setFrOpen(false)}>
-                    <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]" onClick={(e) => e.stopPropagation()}>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]">
                         <div className="flex items-center justify-between border-b border-border px-5 py-3">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Find &amp; Replace</h3>
@@ -1453,7 +1826,7 @@ function InventoryPageContent() {
                             <div>
                                 <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Field</p>
                                 <div className="grid grid-cols-3 gap-1.5">
-                                    {(['all', 'name', 'barcode', 'category', 'model'] as const).map(f => (
+                                    {(['all', 'name', 'barcode', 'category', 'model', 'size'] as const).map(f => (
                                         <button key={f} onClick={() => setFrField(f)}
                                             className={`h-9 rounded-lg border text-xs font-semibold capitalize transition-colors ${frField === f ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
                                             {f === 'all' ? 'All fields' : f}
@@ -1488,10 +1861,10 @@ function InventoryPageContent() {
                                     <>
                                         <p className="mb-2 text-xs font-semibold text-foreground">{frChanges.length} item{frChanges.length !== 1 ? 's' : ''} will change</p>
                                         <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                                            {frChanges.slice(0, 8).map(({ item, upd, metaModel }) => {
+                                            {frChanges.slice(0, 8).map(({ item, upd, meta }) => {
                                                 const parts: { f: string; from: string; to: string }[] = [];
                                                 Object.entries(upd).forEach(([f, to]) => parts.push({ f, from: frFieldValue(item, f as 'name' | 'barcode' | 'category'), to }));
-                                                if (metaModel !== undefined) parts.push({ f: 'model', from: item.metadata?.model || '', to: metaModel });
+                                                Object.entries(meta).forEach(([f, to]) => parts.push({ f, from: frFieldValue(item, f as 'model' | 'size'), to }));
                                                 return (
                                                     <div key={item.id} className="text-[11px] leading-tight">
                                                         {parts.map((p, idx) => (
@@ -1560,10 +1933,9 @@ function InventoryPageContent() {
                 );
 
                 return (
-                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setQrModalOpen(false)}>
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
                         <div
                             className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]"
-                            onClick={(e) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between border-b border-border px-5 py-3">
                                 <div>

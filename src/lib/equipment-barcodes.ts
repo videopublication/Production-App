@@ -47,14 +47,26 @@ export const getEquipmentBarcodeBase = (category: string, modelOrSerial: string)
     return `${getEquipmentCategoryPrefix(category)}-${normalizeEquipmentModelCode(modelOrSerial || 'GEN')}`;
 };
 
+// Highest trailing number already used for a base (e.g. "BAT-NPF970" -> 3 for
+// "BAT-NPF970-3"). Uses MAX (not count) so deleting a unit never causes the next
+// barcode to reuse an existing number → no duplicates.
+export const getMaxBarcodeNumber = (
+    baseBarcode: string,
+    existingItems: Pick<Equipment, 'barcode'>[]
+): number => {
+    const re = new RegExp(`^${baseBarcode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`, 'i');
+    let max = 0;
+    for (const it of existingItems) {
+        const m = (it.barcode || '').match(re);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return max;
+};
+
 export const getNextEquipmentBarcode = (
     item: Pick<Equipment, 'category'> & { model?: string; serialNumber?: string },
     existingItems: Pick<Equipment, 'barcode'>[]
 ): string => {
     const baseBarcode = getEquipmentBarcodeBase(item.category, item.model || item.serialNumber || 'GEN');
-    const existingCount = existingItems.filter(existingItem =>
-        existingItem.barcode.startsWith(`${baseBarcode}-`)
-    ).length;
-
-    return `${baseBarcode}-${existingCount + 1}`;
+    return `${baseBarcode}-${getMaxBarcodeNumber(baseBarcode, existingItems) + 1}`;
 };

@@ -9,7 +9,7 @@ import { downloadFile } from '@/lib/download';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
-import { EQUIPMENT_CATEGORY_PREFIXES, getEquipmentBarcodeBase } from '@/lib/equipment-barcodes';
+import { EQUIPMENT_CATEGORY_PREFIXES, getEquipmentBarcodeBase, getMaxBarcodeNumber } from '@/lib/equipment-barcodes';
 
 const uuid = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -101,12 +101,11 @@ export default function BulkAddPage() {
 
         const baseBarcode = getEquipmentBarcodeBase(row.category, row.model || row.serialNumber || 'GEN');
 
-        // Count existing items with this base barcode
-        const existingCount = existingItems.filter(i =>
-            i.barcode.startsWith(baseBarcode + '-')
-        ).length;
+        // Continue after the HIGHEST existing number for this base (matches the actual
+        // import + Add logic — never reuses a number after a deletion).
+        const existingMax = getMaxBarcodeNumber(baseBarcode, existingItems);
 
-        // Count pending items with same base barcode before this row
+        // Count pending rows above this one that share the same base.
         let pendingCount = 0;
         for (let i = 0; i < rowIndex; i++) {
             const prevRow = rows[i];
@@ -115,7 +114,7 @@ export default function BulkAddPage() {
             if (prevBase === baseBarcode) pendingCount++;
         }
 
-        const sequenceNumber = existingCount + pendingCount + 1;
+        const sequenceNumber = existingMax + pendingCount + 1;
         return `${baseBarcode}-${sequenceNumber}`;
     };
 
@@ -270,8 +269,9 @@ export default function BulkAddPage() {
                 const baseBarcode = getEquipmentBarcodeBase(row.category, modelStr);
 
                 if (!baseCounts.has(baseBarcode)) {
-                    const count = existingItems.filter(i => i.barcode.startsWith(baseBarcode + '-')).length;
-                    baseCounts.set(baseBarcode, count);
+                    // Continue after the HIGHEST existing number (not the count), so a
+                    // prior deletion can never make us reuse an existing barcode.
+                    baseCounts.set(baseBarcode, getMaxBarcodeNumber(baseBarcode, existingItems));
                 }
             }
 
