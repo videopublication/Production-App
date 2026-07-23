@@ -1,10 +1,12 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Force Tailwind to scan ShootPlanner.tsx — its size or content tripped up the
-   oxide scanner on Vercel's Linux build, dropping classes like xl:sticky,
-   xl:grid-cols-[1fr_360px], etc. that worked in local Windows builds. */
-@source "../components/ShootPlanner.tsx";
+/* Force Tailwind to scan ALL app source. The oxide scanner on Vercel's Linux
+   build intermittently drops classes from large files (ShootPlanner.tsx, and
+   now inventory/page.tsx) — arbitrary values like grid-cols-[…], max-h-[22rem],
+   sm:w-… vanished in prod while working in local Windows builds. An explicit
+   @source glob makes detection deterministic across platforms. */
+@source "../**/*.{ts,tsx}";
 
 /* ShootPlanner palette — defined as CSS variables instead of Tailwind classes
    so production builds cannot strip them via content-scan / oxide bugs.
