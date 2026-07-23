@@ -320,7 +320,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                     >
                         <div className="p-2">
                             {renderBulkActions()}
-                            <div className="max-h-[20rem] overflow-auto">
+                            <div className="overflow-auto" style={{ maxHeight: '20rem' }}>
                                 {renderOptionsList()}
                             </div>
                         </div>

@@ -1709,7 +1709,7 @@ function InventoryPageContent() {
 
                         <div className="min-h-0 flex-1 overflow-y-auto p-4">
                             {/* header row */}
-                            <div className="hidden gap-2 px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground sm:grid sm:grid-cols-[1.4fr_1fr_2.6rem_1fr_2.6rem_0.9fr]">
+                            <div className="nc-row-grid hidden px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground sm:grid">
                                 <span>Current (×count)</span><span>End A</span><span>M/F</span><span>End B</span><span>M/F</span><span>Size</span>
                             </div>
                             <div className="space-y-2">
@@ -1720,7 +1720,7 @@ function InventoryPageContent() {
                                     const code = buildConnectorCode(e.endA, e.endAGender, e.endB, e.endBGender);
                                     return (
                                         <div key={g.name} className="rounded-lg border border-border bg-secondary/20 p-2">
-                                            <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1.4fr_1fr_2.6rem_1fr_2.6rem_0.9fr]">
+                                            <div className="nc-row-grid">
                                                 <div className="min-w-0">
                                                     <div className="truncate text-[13px] font-medium text-foreground" title={g.name}>{g.name}</div>
                                                     <div className="text-[11px] text-muted-foreground">×{g.list.length}</div>
@@ -1955,7 +1955,7 @@ function InventoryPageContent() {
                                 <button onClick={() => setQrModalOpen(false)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"><X size={18} /></button>
                             </div>
 
-                            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[1fr_260px]">
+                            <div className="designer-grid min-h-0 flex-1 overflow-y-auto">
                                 {/* Controls */}
                                 <div className="space-y-4 p-5">
                                     <div>

@@ -264,7 +264,7 @@ export const Select: React.FC<SelectProps> = ({
                         className="absolute z-[100] mt-2 w-full overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] border border-border"
                         style={dropdownStyle}
                     >
-                        <div className="max-h-[22rem] overflow-auto p-2">
+                        <div className="overflow-auto p-2" style={{ maxHeight: '22rem' }}>
                             {renderOptionsList()}
                         </div>
                     </div>

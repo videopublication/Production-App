@@ -784,3 +784,28 @@ textarea:focus {
   }
 }
 
+/* Literal-CSS layouts for the inventory dialogs. These live here (not as Tailwind
+   arbitrary utilities) because Vercel's oxide scanner intermittently drops
+   arbitrary classes from the very large inventory/page.tsx — see the @source note
+   above. Literal CSS is never scanned, so it always ships. */
+.nc-row-grid {                 /* Normalize-connectors row */
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  align-items: center;
+}
+@media (min-width: 640px) {
+  .nc-row-grid {
+    grid-template-columns: 1.4fr 1fr 2.6rem 1fr 2.6rem 0.9fr;
+  }
+}
+.designer-grid {               /* Label designer: controls | preview */
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 768px) {
+  .designer-grid {
+    grid-template-columns: 1fr 260px;
+  }
+}
+
