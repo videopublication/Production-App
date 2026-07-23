@@ -48,7 +48,9 @@ export default function ItemDetailsPage() {
     const [itemTransactions, setItemTransactions] = useState<Transaction[]>([]);
     const [currentShoot, setCurrentShoot] = useState<Shoot | null>(null);
     const [historyLoading, setHistoryLoading] = useState(true);
-    const [showAllHistory, setShowAllHistory] = useState(false);
+    const HISTORY_INITIAL = 8;
+    const HISTORY_BATCH = 20;
+    const [historyVisible, setHistoryVisible] = useState(HISTORY_INITIAL);
     const { department } = useDepartment();
     const labels = getDepartmentLabels(department);
     const effectiveDeptId = (user && user.role !== 'SUPER_ADMIN' && user.departmentId)
@@ -64,6 +66,9 @@ export default function ItemDetailsPage() {
     const [editCategory, setEditCategory] = useState('');
     const [editBarcode, setEditBarcode] = useState('');
     const [editSerialNumber, setEditSerialNumber] = useState('');
+    const [editBrand, setEditBrand] = useState('');
+    const [editModel, setEditModel] = useState('');
+    const [editSize, setEditSize] = useState('');
     const [editHasActiveIssue, setEditHasActiveIssue] = useState(false);
     const [editIssueNote, setEditIssueNote] = useState('');
     const [showIssueForm, setShowIssueForm] = useState(false);
@@ -89,6 +94,9 @@ export default function ItemDetailsPage() {
             setEditCategory(item.category);
             setEditBarcode(item.barcode);
             setEditSerialNumber(item.serialNumber || '');
+            setEditBrand(item.metadata?.brand || '');
+            setEditModel(item.metadata?.model || '');
+            setEditSize(item.metadata?.size || '');
             const activeIssue = getEquipmentIssue(item);
             setEditHasActiveIssue(!!activeIssue);
             setEditIssueNote(activeIssue?.note || '');
@@ -407,6 +415,12 @@ export default function ItemDetailsPage() {
                 updates.category = editCategory;
                 updates.barcode = editBarcode;
                 updates.serialNumber = editSerialNumber || undefined;
+                updates.metadata = {
+                    ...(updates.metadata || {}),
+                    brand: editBrand.trim() || undefined,
+                    model: editModel.trim() || undefined,
+                    size: editSize.trim() || undefined,
+                };
             }
 
             await updateEquipment({ id: item.id, updates });
@@ -444,6 +458,9 @@ export default function ItemDetailsPage() {
             setEditCategory(item.category);
             setEditBarcode(item.barcode);
             setEditSerialNumber(item.serialNumber || '');
+            setEditBrand(item.metadata?.brand || '');
+            setEditModel(item.metadata?.model || '');
+            setEditSize(item.metadata?.size || '');
             const activeIssue = getEquipmentIssue(item);
             setEditHasActiveIssue(!!activeIssue);
             setEditIssueNote(activeIssue?.note || '');
@@ -714,10 +731,23 @@ export default function ItemDetailsPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">
-                                        {item.name}
-                                    </h1>
-                                    <p className="text-sm text-muted-foreground mt-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">
+                                            {item.name}
+                                        </h1>
+                                        {item.metadata?.size && (
+                                            <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">
+                                                {item.metadata.size}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {(() => {
+                                        const detail = [item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ');
+                                        return detail ? (
+                                            <p className="text-sm font-medium text-foreground/75 mt-1">{detail}</p>
+                                        ) : null;
+                                    })()}
+                                    <p className="text-sm text-muted-foreground mt-0.5">
                                         {item.category} • {item.barcode}
                                     </p>
                                 </>
@@ -1060,6 +1090,75 @@ export default function ItemDetailsPage() {
                                 </div>
                             )}
 
+                            {/* Brand - Editable for ADMIN */}
+                            {(item.metadata?.brand || (isEditing && canEditEverything)) && (
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                        </svg>
+                                        Brand
+                                    </dt>
+                                    {isEditing && canEditEverything ? (
+                                        <input
+                                            type="text"
+                                            value={editBrand}
+                                            onChange={(e) => setEditBrand(e.target.value)}
+                                            placeholder="Empty"
+                                            className="text-sm px-2 py-1 rounded border border-border bg-background focus:ring-2 focus:ring-primary focus:border-transparent w-full max-w-[150px] text-right"
+                                        />
+                                    ) : (
+                                        <dd className="text-sm font-medium">{item.metadata?.brand}</dd>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Model - Editable for ADMIN */}
+                            {(item.metadata?.model || (isEditing && canEditEverything)) && (
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                        </svg>
+                                        Model
+                                    </dt>
+                                    {isEditing && canEditEverything ? (
+                                        <input
+                                            type="text"
+                                            value={editModel}
+                                            onChange={(e) => setEditModel(e.target.value)}
+                                            placeholder="Empty"
+                                            className="text-sm px-2 py-1 rounded border border-border bg-background focus:ring-2 focus:ring-primary focus:border-transparent w-full max-w-[150px] text-right"
+                                        />
+                                    ) : (
+                                        <dd className="text-sm font-medium">{item.metadata?.model}</dd>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Size - Editable for ADMIN */}
+                            {(item.metadata?.size || (isEditing && canEditEverything)) && (
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2m8-16h2a2 2 0 012 2v2m-4 12h2a2 2 0 002-2v-2M9 12h6" />
+                                        </svg>
+                                        Size
+                                    </dt>
+                                    {isEditing && canEditEverything ? (
+                                        <input
+                                            type="text"
+                                            value={editSize}
+                                            onChange={(e) => setEditSize(e.target.value)}
+                                            placeholder="Empty"
+                                            className="text-sm px-2 py-1 rounded border border-border bg-background focus:ring-2 focus:ring-primary focus:border-transparent w-full max-w-[150px] text-right"
+                                        />
+                                    ) : (
+                                        <dd className="text-sm font-medium">{item.metadata?.size}</dd>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Category - Editable for ADMIN */}
                             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
                                 <dt className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -1234,24 +1333,6 @@ export default function ItemDetailsPage() {
                                 )}
                             </div>
 
-                            {item.metadata?.brand && (
-                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
-                                    <dt className="text-sm font-medium text-muted-foreground">Brand</dt>
-                                    <dd className="text-sm font-medium">{item.metadata.brand}</dd>
-                                </div>
-                            )}
-                            {item.metadata?.model && (
-                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
-                                    <dt className="text-sm font-medium text-muted-foreground">Model</dt>
-                                    <dd className="text-sm font-medium">{item.metadata.model}</dd>
-                                </div>
-                            )}
-                            {item.metadata?.size && (
-                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
-                                    <dt className="text-sm font-medium text-muted-foreground">Size</dt>
-                                    <dd className="text-sm font-medium">{item.metadata.size}</dd>
-                                </div>
-                            )}
                         </dl>
                     </Card>
 
@@ -1434,6 +1515,14 @@ export default function ItemDetailsPage() {
                                         ) : '\u2014'}
                                     </dd>
                                 </div>
+                                <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                    <dt className="text-sm text-muted-foreground">Added</dt>
+                                    <dd className="text-sm font-medium">
+                                        {item.createdAt
+                                            ? new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                                            : '\u2014'}
+                                    </dd>
+                                </div>
                             </dl>
                         );
                     })()}
@@ -1472,10 +1561,11 @@ export default function ItemDetailsPage() {
                         </div>
                     ) : (
                         <div className="space-y-0">
-                            {(showAllHistory ? itemLogs : itemLogs.slice(0, 8)).map((log, index) => {
+                          <div className="max-h-[32rem] overflow-y-auto pr-1 -mr-1">
+                            {itemLogs.slice(0, historyVisible).map((log, index) => {
                                 const logUser = users.find(u => u.id === log.userId);
                                 const relatedTxn = itemTransactions.find(t => t.id === log.entityId);
-                                const isLast = index === (showAllHistory ? itemLogs.length : Math.min(8, itemLogs.length)) - 1;
+                                const isLast = index === Math.min(historyVisible, itemLogs.length) - 1;
 
                                 const getActionIcon = (action: string) => {
                                     switch (action) {
@@ -1532,14 +1622,27 @@ export default function ItemDetailsPage() {
                                     </div>
                                 );
                             })}
+                          </div>
 
-                            {itemLogs.length > 8 && (
-                                <button
-                                    onClick={() => setShowAllHistory(!showAllHistory)}
-                                    className="w-full mt-3 py-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors text-center"
-                                >
-                                    {showAllHistory ? 'Show Less' : `Show All (${itemLogs.length} events)`}
-                                </button>
+                            {itemLogs.length > HISTORY_INITIAL && (
+                                <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+                                    {historyVisible < itemLogs.length && (
+                                        <button
+                                            onClick={() => setHistoryVisible(v => Math.min(v + HISTORY_BATCH, itemLogs.length))}
+                                            className="py-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                                        >
+                                            Show more ({itemLogs.length - historyVisible} remaining)
+                                        </button>
+                                    )}
+                                    {historyVisible > HISTORY_INITIAL && (
+                                        <button
+                                            onClick={() => setHistoryVisible(HISTORY_INITIAL)}
+                                            className="py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                        >
+                                            Show less
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}

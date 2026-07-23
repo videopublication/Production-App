@@ -530,12 +530,12 @@ function InventoryPageContent() {
                     bValue = getUserName(b.assignedTo) || '';
                 }
 
-                const valA = (aValue ?? '').toString().toLowerCase();
-                const valB = (bValue ?? '').toString().toLowerCase();
+                const valA = (aValue ?? '').toString();
+                const valB = (bValue ?? '').toString();
 
-                if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-                return 0;
+                // Natural/numeric compare so "…-2" sorts before "…-10" (not lexicographic).
+                const cmp = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+                return sortConfig.direction === 'asc' ? cmp : -cmp;
             });
         }
 
@@ -1450,9 +1450,22 @@ function InventoryPageContent() {
                                 <div className={`group bg-white dark:bg-[#1c1c1e] rounded-xl p-4 border transition-all duration-700 cursor-pointer h-full flex flex-col ${item.barcode === flashBarcode ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-inset ring-primary/30' : 'border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-md'}`}>
                                     <div className="flex items-start justify-between gap-2 mb-2">
                                         <div className="flex-1 min-w-0 pr-6">
-                                            <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-primary transition-colors">
-                                                {item.name}
-                                            </h3>
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-primary transition-colors">
+                                                    {item.name}
+                                                </h3>
+                                                {item.metadata?.size && (
+                                                    <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap max-w-[6rem] truncate">
+                                                        {item.metadata.size}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {(() => {
+                                                const detail = [item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ');
+                                                return detail ? (
+                                                    <p className="text-[12px] font-medium text-foreground/75 truncate mt-0.5">{detail}</p>
+                                                ) : null;
+                                            })()}
                                         </div>
                                         <Badge
                                             variant={getDisplayStatusVariant(item)}
@@ -1472,7 +1485,7 @@ function InventoryPageContent() {
                                         )}
 
                                         <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-auto">
-                                            <span>{item.category}</span>
+                                            <span>{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? '' : item.category}</span>
                                             <span className="font-mono text-muted-foreground/60">{item.barcode}</span>
                                         </div>
 
