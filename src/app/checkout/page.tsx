@@ -434,7 +434,10 @@ export default function CheckoutPage() {
                     item.category.toLowerCase().includes(basicQuery) ||
                     normalize(item.barcode).includes(normalizedQuery) ||
                     (item.serialNumber && normalize(item.serialNumber).includes(normalizedQuery)) ||
-                    normalize(item.name).includes(normalizedQuery)
+                    normalize(item.name).includes(normalizedQuery) ||
+                    (item.metadata?.brand && normalize(item.metadata.brand).includes(normalizedQuery)) ||
+                    (item.metadata?.model && normalize(item.metadata.model).includes(normalizedQuery)) ||
+                    (item.metadata?.size && normalize(item.metadata.size).includes(normalizedQuery))
                 )
             ).sort(compareByName).slice(0, 50);
             setSuggestions(filtered);
@@ -844,25 +847,40 @@ export default function CheckoutPage() {
                                     </div>
 
                                     {showSuggestions && suggestions.length > 0 && (
-                                        <div className="absolute z-50 w-full mt-2 bg-popover border border-border rounded-2xl shadow-2xl max-h-60 overflow-auto overflow-x-hidden">
+                                        <div className="absolute z-50 w-full mt-2 bg-popover border border-border rounded-2xl shadow-2xl overflow-hidden">
+                                          <div className="max-h-[70vh] sm:max-h-[28rem] overflow-y-auto overflow-x-hidden">
                                             {suggestions.map((item) => (
                                                 <button
                                                     key={item.id}
                                                     type="button"
                                                     onClick={() => processBarcode(item.barcode, true)}
-                                                    className="w-full px-4 py-3 text-left hover:bg-muted transition-colors border-b border-border last:border-0 flex items-center justify-between group"
+                                                    className="w-full px-4 py-3 text-left hover:bg-muted transition-colors border-b border-border last:border-0 flex items-center gap-3 group"
                                                 >
-                                                    <div className="flex-1 min-w-0 pr-4">
+                                                    <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center shrink-0">
+                                                        <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" strokeWidth={2} />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0 pr-2">
                                                         {item.serialNumber && (
                                                             <p className="text-[10px] text-primary font-medium">S/N: {item.serialNumber}</p>
                                                         )}
-                                                        <p className="font-medium text-sm truncate text-foreground">{item.name}</p>
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <p className="font-medium text-sm truncate text-foreground">{item.name}</p>
+                                                            {item.metadata?.size && (
+                                                                <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
+                                                            )}
+                                                        </div>
+                                                        {(item.metadata?.brand || item.metadata?.model) && (
+                                                            <p className="text-[11px] font-medium text-foreground/70 truncate">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                                        )}
                                                         <IssueWarning item={item} compact />
-                                                        <p className="text-xs text-muted-foreground truncate">{item.category} • {item.barcode}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>
                                                     </div>
                                                     <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded shrink-0">{item.location}</span>
                                                 </button>
                                             ))}
+                                          </div>
                                         </div>
                                     )}
                                 </div>
@@ -899,9 +917,17 @@ export default function CheckoutPage() {
                                                     {item.serialNumber && (
                                                         <p className="text-[10px] text-primary font-medium mb-0.5 leading-none">S/N: {item.serialNumber}</p>
                                                     )}
-                                                    <h3 className="font-semibold truncate text-foreground text-[14px] leading-tight">{item.name}</h3>
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <h3 className="font-semibold truncate text-foreground text-[14px] leading-tight">{item.name}</h3>
+                                                        {item.metadata?.size && (
+                                                            <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
+                                                        )}
+                                                    </div>
+                                                    {(item.metadata?.brand || item.metadata?.model) && (
+                                                        <p className="text-[11px] font-medium text-foreground/70 truncate leading-tight mt-0.5">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                                    )}
                                                     <IssueWarning item={item} compact />
-                                                    <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category} • {item.barcode}</p>
+                                                    <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>
                                                 </div>
                                                 <button
                                                     onClick={() => removeFromCart(item.id)}
@@ -1239,9 +1265,17 @@ export default function CheckoutPage() {
                                             {item.serialNumber && (
                                                 <p className="text-[10px] text-primary font-medium">S/N: {item.serialNumber}</p>
                                             )}
-                                            <p className="font-bold truncate text-[16px] text-foreground">{item.name}</p>
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <p className="font-bold truncate text-[16px] text-foreground">{item.name}</p>
+                                                {item.metadata?.size && (
+                                                    <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
+                                                )}
+                                            </div>
+                                            {(item.metadata?.brand || item.metadata?.model) && (
+                                                <p className="text-xs font-medium text-foreground/70 truncate">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                            )}
                                             <IssueWarning item={item} compact />
-                                            <p className="text-sm text-muted-foreground truncate">{item.category} • {item.barcode}</p>
+                                            <p className="text-sm text-muted-foreground truncate">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>
                                         </div>
                                         <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
                                             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -1277,9 +1311,17 @@ export default function CheckoutPage() {
                                             {item.serialNumber && (
                                                 <p className="text-[9px] text-primary font-medium mb-0 leading-none">S/N: {item.serialNumber}</p>
                                             )}
-                                            <p className="font-bold truncate text-foreground text-[14px] leading-tight">{item.name}</p>
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <p className="font-bold truncate text-foreground text-[14px] leading-tight">{item.name}</p>
+                                                {item.metadata?.size && (
+                                                    <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
+                                                )}
+                                            </div>
+                                            {(item.metadata?.brand || item.metadata?.model) && (
+                                                <p className="text-[11px] font-medium text-foreground/70 truncate leading-tight mt-0.5">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                            )}
                                             <IssueWarning item={item} compact />
-                                            <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category} • {item.barcode}</p>
+                                            <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>
                                         </div>
                                         <button
                                             onClick={() => removeFromCart(item.id)}

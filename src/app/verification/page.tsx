@@ -20,6 +20,7 @@ import {
     withActiveIssue,
 } from '@/lib/equipment-issues';
 import { areManualItemsComplete, decodeTransactionNotes } from '@/lib/transaction-manual-items';
+import { itemDetailLine } from '@/components/ItemIdentity';
 
 type SortField = 'item' | 'project' | 'user' | 'date';
 type SortDirection = 'asc' | 'desc';
@@ -704,9 +705,17 @@ export default function VerificationPage() {
             >
                 <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex-1 min-w-0">
-                        <h3 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug truncate group-hover:text-primary transition-colors">
-                            {item.name}
-                        </h3>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <h3 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug truncate group-hover:text-primary transition-colors">
+                                {item.name}
+                            </h3>
+                            {item.metadata?.size && (
+                                <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
+                            )}
+                        </div>
+                        {itemDetailLine(item) && (
+                            <p className="text-[11px] font-medium text-foreground/70 truncate mt-0.5">{itemDetailLine(item)}</p>
+                        )}
                         <div className="flex items-center gap-2 mt-1">
                             <span className="max-w-full truncate text-[11px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-full border border-gray-100 dark:border-gray-700">
                                 {txn?.project || 'General'}
@@ -1207,8 +1216,16 @@ export default function VerificationPage() {
                                                     <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 text-gray-400 dark:text-gray-500">
                                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-semibold text-gray-900 dark:text-white">{item.name}</p>
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <p className="font-semibold text-gray-900 dark:text-white truncate">{item.name}</p>
+                                                            {item.metadata?.size && (
+                                                                <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
+                                                            )}
+                                                        </div>
+                                                        {itemDetailLine(item) && (
+                                                            <p className="text-[11px] font-medium text-foreground/70 truncate mt-0.5">{itemDetailLine(item)}</p>
+                                                        )}
                                                         <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">{item.barcode}</p>
                                                         {activeIssue && (
                                                             <p className="mt-1 max-w-xs truncate rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
@@ -1343,7 +1360,7 @@ export default function VerificationPage() {
                                                 </span>
                                             )}
                                         </div>
-                                        {group.notes.length > 0 && (
+                                        {!isExpanded && group.notes.length > 0 && (
                                             <div className="mt-2 ml-6 max-w-3xl rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-200">
                                                 <span className="font-bold">Checkout notes: </span>
                                                 <span className="font-medium line-clamp-2">
@@ -1353,8 +1370,8 @@ export default function VerificationPage() {
                                             </div>
                                         )}
                                     </div>
-                                    <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
-                                        {isExpanded ? 'Hide' : 'Open'}
+                                    <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                                        {isExpanded ? 'Hide items' : 'Show items'}
                                     </span>
                                 </button>
 
@@ -1381,12 +1398,15 @@ export default function VerificationPage() {
                                             </div>
                                         )}
                                         {group.items.length > 0 && (
-                                            <div className="mb-3 flex justify-end">
+                                            <div className="mb-3 flex items-center justify-between gap-2">
+                                                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                    Tap items to verify, or
+                                                </span>
                                                 <button
                                                     onClick={() => toggleGroupSelection(group.items)}
                                                     className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 dark:border-gray-800"
                                                 >
-                                                    {groupSelected ? 'Clear inventory' : 'Select inventory'}
+                                                    {groupSelected ? 'Deselect all' : `Select all (${group.items.length})`}
                                                 </button>
                                             </div>
                                         )}
