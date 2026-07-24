@@ -10,6 +10,8 @@ import { Input } from '@/components/Input';
 import { useAuth } from '@/lib/auth';
 import { Badge } from '@/components/Badge';
 import { QRScanner, MobileScanner } from '@/components/QRScanner';
+import { ItemIdentity } from '@/components/ItemIdentity';
+import { Select } from '@/components/Select';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
 import { useDepartment } from '@/lib/department-context';
@@ -810,7 +812,10 @@ export default function TransactionDetailPage() {
             item.category.toLowerCase().includes(basicQuery) ||
             normalize(item.barcode).includes(normalizedQuery) ||
             (item.serialNumber && normalize(item.serialNumber).includes(normalizedQuery)) ||
-            normalize(item.name).includes(normalizedQuery)
+            normalize(item.name).includes(normalizedQuery) ||
+            (item.metadata?.brand && normalize(item.metadata.brand).includes(normalizedQuery)) ||
+            (item.metadata?.model && normalize(item.metadata.model).includes(normalizedQuery)) ||
+            (item.metadata?.size && normalize(item.metadata.size).includes(normalizedQuery))
         );
     }).sort(compareByName);
     const selectedAddItems = Array.from(itemsToAdd)
@@ -1177,60 +1182,67 @@ export default function TransactionDetailPage() {
     return (
         <div className="space-y-6 animate-fade-in pb-12 max-w-5xl mx-auto">
             {/* Header */}
-            <div className="flex items-start sm:items-center justify-between gap-3">
-                <div className="flex items-start sm:items-center gap-3">
-                    <div className="min-w-0">
+            <Card className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight break-words">
                             {transaction.project || 'Unspecified Project'}
                         </h1>
-                        <div className="flex items-center gap-3 mt-1 flex-wrap">
-                            <p className="text-xs sm:text-sm font-medium text-primary">
-                                {transaction.id}
-                            </p>
-                            {linkedShoot ? (
-                                <Link href={`/shoots/${linkedShoot.id}`} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 font-medium">
-                                    <span className="flex items-center gap-1">
-                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                        Linked {labels.workSingular}: {linkedShoot.title} {linkedShoot.shootNumber ? `(#${linkedShoot.shootNumber})` : ''}
-                                    </span>
-                                </Link>
-                            ) : (
-                                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-md font-medium">
-                                    No linked {labels.workLower}
-                                </span>
-                            )}
-                            {canEditTransactionDetails && (
-                                <button
-                                    type="button"
-                                    onClick={openDetailsEditor}
-                                    className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 font-semibold"
-                                >
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                                    </svg>
-                                    Edit Details
-                                </button>
-                            )}
-                        </div>
+                        <p className="mt-1 font-mono text-xs sm:text-sm font-medium text-primary">
+                            {transaction.id}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {canManualClose && (
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={handleManualClose}
+                                isLoading={saving}
+                                className="text-xs bg-green-100 text-green-700 hover:bg-green-200 border-green-200"
+                            >
+                                Mark Closed
+                            </Button>
+                        )}
+                        <Badge variant={transaction.status === 'OPEN' ? 'success' : 'default'} className="text-xs sm:text-sm px-2 sm:px-3 py-0.5 sm:py-1">
+                            {transaction.status}
+                        </Badge>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 mt-1 sm:mt-0">
-                    {canManualClose && (
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={handleManualClose}
-                            isLoading={saving}
-                            className="text-xs bg-green-100 text-green-700 hover:bg-green-200 border-green-200"
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {linkedShoot ? (
+                        <Link
+                            href={`/shoots/${linkedShoot.id}`}
+                            className="group inline-flex max-w-full items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
                         >
-                            Mark Closed
-                        </Button>
+                            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                            <span className="truncate">
+                                {linkedShoot.title.trim() === (transaction.project || '').trim() && linkedShoot.shootNumber
+                                    ? `Linked ${labels.workSingular} #${linkedShoot.shootNumber}`
+                                    : `Linked ${labels.workSingular}: ${linkedShoot.title}${linkedShoot.shootNumber ? ` (#${linkedShoot.shootNumber})` : ''}`}
+                            </span>
+                            <svg className="w-3.5 h-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                        </Link>
+                    ) : (
+                        <span className="inline-flex items-center rounded-lg bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                            No linked {labels.workLower}
+                        </span>
                     )}
-                    <Badge variant={transaction.status === 'OPEN' ? 'success' : 'default'} className="text-xs sm:text-sm px-2 sm:px-3 py-0.5 sm:py-1">
-                        {transaction.status}
-                    </Badge>
+                    {canEditTransactionDetails && (
+                        <button
+                            type="button"
+                            onClick={openDetailsEditor}
+                            className="inline-flex items-center gap-1 rounded-lg bg-secondary px-2.5 py-1 text-xs font-semibold text-foreground/80 transition-colors hover:bg-secondary/70"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                            </svg>
+                            Edit Details
+                        </button>
+                    )}
                 </div>
-            </div>
+            </Card>
 
             {isEditingDetails && canEditTransactionDetails && (
                 <Card className="p-4 border-primary/30 bg-primary/5">
@@ -1268,22 +1280,17 @@ export default function TransactionDetailPage() {
                         />
 
                         <div className="w-full">
-                            <label className="block text-sm font-medium text-foreground mb-2">
-                                Linked {labels.workSingular}
-                            </label>
-                            <select
+                            <Select
+                                label={`Linked ${labels.workSingular}`}
                                 value={editShootId}
-                                onChange={(event) => setEditShootId(event.target.value)}
-                                disabled={saving}
-                                className="flex h-12 w-full rounded-2xl border border-input bg-background px-4 py-2 text-[15px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <option value="">No linked {labels.workLower}</option>
-                                {shootOptions.map((shoot) => (
-                                    <option key={shoot.id} value={shoot.id}>
-                                        {formatShootOption(shoot)}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={setEditShootId}
+                                dense
+                                placeholder={`No linked ${labels.workLower}`}
+                                options={[
+                                    { value: '', label: `No linked ${labels.workLower}` },
+                                    ...shootOptions.map((shoot) => ({ value: shoot.id, label: formatShootOption(shoot) })),
+                                ]}
+                            />
                         </div>
                     </div>
 
@@ -1449,6 +1456,7 @@ export default function TransactionDetailPage() {
                             {transaction.status === 'OPEN' && (
                                 <Button
                                     size="sm"
+                                    variant={showAddItem ? 'outline' : 'primary'}
                                     onClick={() => {
                                         const shouldShow = !showAddItem;
                                         setShowAddItem(shouldShow);
@@ -1459,10 +1467,10 @@ export default function TransactionDetailPage() {
                                     }}
                                     disabled={saving}
                                 >
-                                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className={`w-4 h-4 mr-1 transition-transform ${showAddItem ? 'rotate-45' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                     </svg>
-                                    Add
+                                    {showAddItem ? 'Close' : 'Add'}
                                 </Button>
                             )}
                         </div>
@@ -1609,13 +1617,7 @@ export default function TransactionDetailPage() {
                                                             </svg>
                                                         )}
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <h4 className="font-bold text-[15px] truncate group-hover:text-primary transition-colors">{item.name}</h4>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{item.barcode}</span>
-                                                            <span className="text-xs text-muted-foreground truncate">• {item.category}</span>
-                                                        </div>
-                                                    </div>
+                                                    <ItemIdentity item={item} variant="md" />
                                                 </div>
                                                 <Button
                                                     size="sm"
@@ -1625,7 +1627,7 @@ export default function TransactionDetailPage() {
                                                         toggleItemToAdd(item.id);
                                                     }}
                                                     isLoading={saving}
-                                                    className="rounded-xl px-5 h-9 transition-colors font-medium"
+                                                    className="shrink-0 rounded-xl px-5 h-9 transition-colors font-medium"
                                                 >
                                                     {isQueued ? 'Selected' : 'Select'}
                                                 </Button>
@@ -1663,9 +1665,9 @@ export default function TransactionDetailPage() {
                             return (
                                 <div
                                     key={itemId}
-                                    className={`p-3 bg-card rounded-xl border-2 transition-all cursor-pointer ${isSelected
-                                        ? 'border-primary bg-primary/5 shadow-sm'
-                                        : 'border-transparent hover:border-border hover:shadow-sm'
+                                    className={`p-4 bg-card rounded-2xl border transition-all cursor-pointer ${isSelected
+                                        ? 'border-primary bg-primary/5 shadow-md ring-1 ring-primary/20'
+                                        : 'border-border/70 shadow-sm hover:border-primary/40 hover:shadow-md'
                                         }`}
                                     onTouchStart={() => canSelect && handleLongPressStart(itemId)}
                                     onTouchEnd={handleLongPressEnd}
@@ -1706,18 +1708,13 @@ export default function TransactionDetailPage() {
                                         )}
 
                                         {/* Item Info - Full width */}
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="font-semibold text-sm text-foreground leading-tight">{item.name}</h3>
-                                            <p className="text-xs text-muted-foreground mt-0.5">
-                                                {item.category} • {item.barcode}
-                                            </p>
-                                        </div>
+                                        <ItemIdentity item={item} variant="md" className="flex-1" />
                                     </div>
 
-                                    {/* Bottom Row - Status + Actions (hide in selection mode) */}
+                                    {/* Bottom Row - Status (left) + Actions (right) */}
                                     {!selectionMode && (
-                                        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border/50">
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isCheckedOut
+                                        <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-border/50">
+                                            <span className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isCheckedOut
                                                 ? 'bg-orange-500 text-white'
                                                 : 'bg-green-500 text-white'
                                                 }`}>
@@ -1735,13 +1732,18 @@ export default function TransactionDetailPage() {
                                                         }}
                                                         disabled={saving}
                                                         title="Force return this item"
-                                                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white transition-colors flex items-center gap-1.5"
+                                                        className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white transition-colors flex items-center gap-1.5"
                                                     >
                                                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
                                                         </svg>
                                                         Return
                                                     </button>
+                                                )}
+
+                                                {/* Divider so the destructive Remove sits clearly apart from Return */}
+                                                {transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems && (
+                                                    <span className="w-px h-6 bg-border mx-1.5" aria-hidden="true" />
                                                 )}
 
                                                 {/* Remove button - only for open transactions */}
@@ -1753,7 +1755,8 @@ export default function TransactionDetailPage() {
                                                         }}
                                                         disabled={saving}
                                                         title="Remove from transaction"
-                                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                        aria-label="Remove from transaction"
+                                                        className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                                                     >
                                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
