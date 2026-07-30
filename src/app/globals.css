@@ -386,23 +386,36 @@ body {
   background: rgba(0, 0, 0, 0.25);
 }
 
-/* Form Elements */
-input,
-select,
-textarea {
-  border: none;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  background: transparent;
-  transition: border-color 0.3s ease;
+/* Hide scrollbars but keep scrolling (horizontal tab/pill strips). */
+.scrollbar-hide {
+  -ms-overflow-style: none;   /* IE/Edge */
+  scrollbar-width: none;      /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;              /* Chrome/Safari/WebKit */
 }
 
-input:focus,
-select:focus,
-textarea:focus {
-  outline: none;
-  border-bottom-color: var(--primary);
-  box-shadow: none;
+/* Form Elements — default look for BARE inputs only. Wrapped in @layer base so any
+   Tailwind border/rounded/bg utility (border-0, rounded-2xl, etc.) overrides it;
+   unlayered, this rule was winning over utilities and drawing stray underlines. */
+@layer base {
+    input,
+    select,
+    textarea {
+        border: none;
+        border-bottom: 1px solid var(--border);
+        border-radius: 0;
+        background: transparent;
+        transition: border-color 0.3s ease;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+        outline: none;
+        border-bottom-color: var(--primary);
+        box-shadow: none;
+    }
 }
 
 /* Mobile touch improvements */
@@ -805,7 +818,33 @@ textarea:focus {
 }
 @media (min-width: 768px) {
   .designer-grid {
-    grid-template-columns: 1fr 260px;
+    grid-template-columns: 1fr 340px;
   }
+}
+/* Inventory filters: 2-up grid on phones (compact, fewer stacked rows), flex row on ≥sm. */
+.filter-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  align-items: center;
+}
+@media (min-width: 640px) {
+  .filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+/* On phones the filters live behind a "Filters" toggle so they don't eat vertical space.
+   On ≥sm they're always shown and the toggle is hidden. */
+.filter-toggle { display: inline-flex; }
+.filter-collapse { overflow: hidden; transition: max-height .25s ease, opacity .2s ease; }
+@media (max-width: 639px) {
+  .filter-collapse[data-open="false"] { max-height: 0; opacity: 0; margin: 0; }
+  .filter-collapse[data-open="true"]  { max-height: 40rem; opacity: 1; }
+}
+@media (min-width: 640px) {
+  .filter-toggle { display: none; }
+  .filter-collapse { max-height: none !important; opacity: 1 !important; }
 }
 

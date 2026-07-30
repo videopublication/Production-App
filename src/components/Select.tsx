@@ -220,7 +220,7 @@ export const Select: React.FC<SelectProps> = ({
                         type="text"
                         readOnly={isMobilePicker}
                         inputMode={isMobilePicker ? 'none' : 'text'}
-                        className={`flex-1 w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none ${isMobilePicker ? 'cursor-pointer' : ''}`}
+                        className={`flex-1 w-full border-0 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none ${isMobilePicker ? 'cursor-pointer' : ''}`}
                         placeholder={selectedOption ? selectedOption.label : placeholder}
                         value={isMobilePicker ? '' : search}
                         onChange={(e) => {
@@ -297,7 +297,7 @@ export const Select: React.FC<SelectProps> = ({
                                     onChange={(e) => setSearch(e.target.value)}
                                     placeholder="Search options..."
                                     autoFocus
-                                    className="min-w-0 flex-1 bg-transparent text-[16px] text-foreground outline-none placeholder:text-muted-foreground"
+                                    className="min-w-0 flex-1 border-0 bg-transparent text-[16px] text-foreground outline-none placeholder:text-muted-foreground"
                                 />
                                 {search && (
                                     <button

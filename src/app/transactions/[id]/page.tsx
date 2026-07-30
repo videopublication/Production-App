@@ -1182,35 +1182,44 @@ export default function TransactionDetailPage() {
     return (
         <div className="space-y-6 animate-fade-in pb-12 max-w-5xl mx-auto">
             {/* Header */}
-            <Card className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight break-words">
-                            {transaction.project || 'Unspecified Project'}
-                        </h1>
-                        <p className="mt-1 font-mono text-xs sm:text-sm font-medium text-primary">
-                            {transaction.id}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        {canManualClose && (
-                            <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={handleManualClose}
-                                isLoading={saving}
-                                className="text-xs bg-green-100 text-green-700 hover:bg-green-200 border-green-200"
-                            >
-                                Mark Closed
-                            </Button>
-                        )}
-                        <Badge variant={transaction.status === 'OPEN' ? 'success' : 'default'} className="text-xs sm:text-sm px-2 sm:px-3 py-0.5 sm:py-1">
-                            {transaction.status}
-                        </Badge>
-                    </div>
+            <Card className="p-4 sm:p-5">
+                <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold leading-tight tracking-tight break-words">
+                    {transaction.project || 'Unspecified Project'}
+                </h1>
+
+                {/* Compact meta row: status + copyable ID (+ Mark Closed action) */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <Badge variant={transaction.status === 'OPEN' ? 'success' : 'default'} className="text-[11px] sm:text-xs px-2 py-0.5">
+                        {transaction.status}
+                    </Badge>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            navigator.clipboard?.writeText(transaction.id);
+                            showToast('Transaction ID copied', 'success');
+                        }}
+                        title="Copy transaction ID"
+                        className="group inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 font-mono text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                    >
+                        {transaction.id}
+                        <svg className="h-3.5 w-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                    {canManualClose && (
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleManualClose}
+                            isLoading={saving}
+                            className="ml-auto text-xs bg-green-100 text-green-700 hover:bg-green-200 border-green-200"
+                        >
+                            Mark Closed
+                        </Button>
+                    )}
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
                     {linkedShoot ? (
                         <Link
                             href={`/shoots/${linkedShoot.id}`}
@@ -1241,6 +1250,36 @@ export default function TransactionDetailPage() {
                             Edit Details
                         </button>
                     )}
+                </div>
+
+                {/* Mobile: checked-out-by / items / time folded into this same card
+                    (desktop keeps its own 3-card grid below). */}
+                <div className="sm:hidden mt-3 border-t border-border/60 pt-3">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                            <p className="mb-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Checked Out By</p>
+                            <p className="truncate text-sm font-semibold">{primaryUserName}</p>
+                            {additionalUserNames.length > 0 && (
+                                <p className="truncate text-xs text-muted-foreground">
+                                    +{additionalUserNames.length} more: {additionalUserNames.join(', ')}
+                                </p>
+                            )}
+                        </div>
+                        <div className="shrink-0 text-right">
+                            <p className="mb-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Items</p>
+                            <p className="text-xl font-bold leading-none text-primary">{totalItemCount}</p>
+                        </div>
+                    </div>
+                    <div className="mt-2.5 flex items-center gap-2">
+                        <svg className="h-4 w-4 shrink-0 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">{new Date(transaction.timestampOut).toLocaleDateString()}</span>
+                            <span className="mx-1.5">•</span>
+                            <span>{new Date(transaction.timestampOut).toLocaleTimeString()}</span>
+                        </p>
+                    </div>
                 </div>
             </Card>
 
@@ -1372,37 +1411,9 @@ export default function TransactionDetailPage() {
                 </Card>
             </div>
 
-            {/* Mobile View - Compact Single Card */}
-            <div className="sm:hidden bg-white dark:bg-card rounded-2xl border border-border p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-4 mb-3">
-                    <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Checked Out By</p>
-                        <p className="font-semibold text-sm truncate">{primaryUserName}</p>
-                        {additionalUserNames.length > 0 && (
-                            <p className="text-xs text-muted-foreground truncate">
-                                +{additionalUserNames.length} more: {additionalUserNames.join(', ')}
-                            </p>
-                        )}
-                    </div>
-                    <div className="text-right shrink-0">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Items</p>
-                        <p className="font-bold text-2xl text-primary leading-none">{totalItemCount}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 pt-3 border-t border-border">
-                    <svg className="w-4 h-4 text-muted-foreground shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">{new Date(transaction.timestampOut).toLocaleDateString()}</span>
-                        <span className="mx-1.5">•</span>
-                        <span>{new Date(transaction.timestampOut).toLocaleTimeString()}</span>
-                    </p>
-                </div>
-            </div>
-
-            {/* Items List */}
-            <Card>
+            {/* Items list + add panel + manual items — plain container (no outer Card box)
+                so item rows use full width instead of nesting card-in-card. */}
+            <div>
                 {/* Selection Mode Toolbar */}
                 {selectionMode ? (
                     <div className="flex items-center justify-between gap-2 mb-4 px-4 py-2.5 bg-gray-100 dark:bg-gray-800/80 backdrop-blur rounded-2xl border border-border">
@@ -1442,7 +1453,7 @@ export default function TransactionDetailPage() {
                     <div className="flex items-center justify-between gap-3 mb-4">
                         <h2 className="text-lg font-semibold">Checked Out Items</h2>
                         <div className="flex items-center gap-2">
-                            {transaction.status === 'OPEN' && getCheckedOutItems().length > 1 && canForceReturnItems && (
+                            {transaction.status === 'OPEN' && !showAddItem && getCheckedOutItems().length > 1 && canForceReturnItems && (
                                 <button
                                     onClick={() => {
                                         setSelectionMode(true);
@@ -1481,12 +1492,9 @@ export default function TransactionDetailPage() {
                 {showAddItem && transaction.status === 'OPEN' && (
                     <div className="mb-8 animate-in slide-in-from-top-4 fade-in duration-300">
                         <div className="bg-card rounded-3xl border border-border shadow-xl overflow-hidden">
-                            {/* Header */}
-                            <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/30">
-                                <div>
-                                    <h3 className="font-bold text-[17px]">Add Equipment</h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Search or scan, select multiple items, then add them together</p>
-                                </div>
+                            {/* Header — compact single line */}
+                            <div className="flex items-center justify-between gap-2 px-4 py-3 sm:px-5 border-b border-border bg-muted/30">
+                                <h3 className="text-[15px] font-bold">Add Equipment</h3>
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -1503,9 +1511,9 @@ export default function TransactionDetailPage() {
                                 </Button>
                             </div>
 
-                            <div className="p-5 space-y-5">
+                            <div className="p-3 space-y-4 sm:p-5 sm:space-y-5">
                                 {/* Search & Scan Controls */}
-                                <div className="flex gap-3">
+                                <div className="flex gap-2.5 sm:gap-3">
                                     <div className="relative flex-1 group">
                                         <svg className="w-5 h-5 text-gray-400 absolute left-3.5 top-3.5 transition-colors group-focus-within:text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1521,7 +1529,7 @@ export default function TransactionDetailPage() {
                                     </div>
                                     <Button
                                         onClick={() => setShowQRScanner(!showQRScanner)}
-                                        className={`h-12 px-5 rounded-2xl border-0 shadow-lg shadow-primary/ active:scale-95 transition-all ${showQRScanner ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-[var(--primary)] hover:brightness-110 text-white'}`}
+                                        className={`h-12 px-4 sm:px-5 rounded-2xl border-0 shadow-lg shadow-primary/ active:scale-95 transition-all ${showQRScanner ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-[var(--primary)] hover:brightness-110 text-white'}`}
                                     >
                                         <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             {showQRScanner ? (
@@ -1534,38 +1542,41 @@ export default function TransactionDetailPage() {
                                     </Button>
                                 </div>
 
-                                <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-foreground">
-                                            {selectedAddItems.length} item{selectedAddItems.length !== 1 ? 's' : ''} selected
-                                        </p>
-                                        <p className="truncate text-xs text-muted-foreground">
-                                            {selectedAddItems.length > 0
-                                                ? selectedAddItems.slice(0, 4).map(item => item.name).join(', ') + (selectedAddItems.length > 4 ? ` and ${selectedAddItems.length - 4} more` : '')
-                                                : 'Select available items from the list below'}
-                                        </p>
+                                {/* Selection summary + actions — only once something is picked,
+                                    so the list shows sooner when nothing is selected. */}
+                                {selectedAddItems.length > 0 && (
+                                    <div className="flex flex-col gap-3 rounded-xl bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-foreground">
+                                                {selectedAddItems.length} item{selectedAddItems.length !== 1 ? 's' : ''} selected
+                                            </p>
+                                            <p className="truncate text-xs text-muted-foreground">
+                                                {selectedAddItems.slice(0, 4).map(item => item.name).join(', ') + (selectedAddItems.length > 4 ? ` and ${selectedAddItems.length - 4} more` : '')}
+                                            </p>
+                                        </div>
+                                        <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setItemsToAdd(new Set())}
+                                                disabled={saving}
+                                            >
+                                                Clear
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                onClick={() => handleAddItems(Array.from(itemsToAdd))}
+                                                disabled={saving}
+                                                isLoading={saving}
+                                                className="flex-1 sm:flex-none"
+                                            >
+                                                Add {selectedAddItems.length} Item{selectedAddItems.length !== 1 ? 's' : ''}
+                                            </Button>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setItemsToAdd(new Set())}
-                                            disabled={selectedAddItems.length === 0 || saving}
-                                        >
-                                            Clear
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            onClick={() => handleAddItems(Array.from(itemsToAdd))}
-                                            disabled={selectedAddItems.length === 0 || saving}
-                                            isLoading={saving}
-                                        >
-                                            Add Selected
-                                        </Button>
-                                    </div>
-                                </div>
+                                )}
 
                                 {showQRScanner && (
                                     <div className="h-[min(72vh,560px)] min-h-[420px] md:h-[360px] md:min-h-0 rounded-2xl overflow-hidden border border-border shadow-inner bg-black">
@@ -1577,8 +1588,8 @@ export default function TransactionDetailPage() {
                                     </div>
                                 )}
 
-                                {/* Results List */}
-                                <div className="max-h-[320px] overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
+                                {/* Results List — flat divided rows (no per-item card) */}
+                                <div className="max-h-[360px] overflow-y-auto divide-y divide-border custom-scrollbar">
                                     {filteredAvailableItems.length === 0 ? (
                                         <div className="text-center py-10 text-muted-foreground">
                                             <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
@@ -1597,13 +1608,13 @@ export default function TransactionDetailPage() {
                                             <div
                                                 key={item.id}
                                                 onClick={() => toggleItemToAdd(item.id)}
-                                                className={`group flex cursor-pointer items-center justify-between p-3 pl-3 pr-4 rounded-2xl border transition-all duration-200 ${isQueued
-                                                    ? 'bg-primary/5 border-primary shadow-md'
-                                                    : 'bg-card border-border hover:border-primary hover:shadow-md'
+                                                className={`group flex cursor-pointer items-center justify-between gap-2 px-2 py-2.5 sm:px-3 sm:py-3 transition-colors duration-200 ${isQueued
+                                                    ? 'bg-primary/5'
+                                                    : 'hover:bg-muted/50'
                                                     }`}
                                             >
-                                                <div className="flex items-center gap-4 min-w-0">
-                                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${isQueued
+                                                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                                    <div className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center transition-colors ${isQueued
                                                         ? 'bg-primary text-primary-foreground'
                                                         : 'bg-muted text-muted-foreground group-hover:text-primary'
                                                         }`}>
@@ -1617,7 +1628,7 @@ export default function TransactionDetailPage() {
                                                             </svg>
                                                         )}
                                                     </div>
-                                                    <ItemIdentity item={item} variant="md" />
+                                                    <ItemIdentity item={item} variant="md" wrapName className="min-w-0 flex-1" />
                                                 </div>
                                                 <Button
                                                     size="sm"
@@ -1627,7 +1638,7 @@ export default function TransactionDetailPage() {
                                                         toggleItemToAdd(item.id);
                                                     }}
                                                     isLoading={saving}
-                                                    className="shrink-0 rounded-xl px-5 h-9 transition-colors font-medium"
+                                                    className="shrink-0 rounded-xl px-3.5 sm:px-5 h-9 transition-colors font-medium"
                                                 >
                                                     {isQueued ? 'Selected' : 'Select'}
                                                 </Button>
@@ -1665,7 +1676,7 @@ export default function TransactionDetailPage() {
                             return (
                                 <div
                                     key={itemId}
-                                    className={`p-4 bg-card rounded-2xl border transition-all cursor-pointer ${isSelected
+                                    className={`p-3 sm:p-4 bg-card rounded-2xl border transition-all cursor-pointer ${isSelected
                                         ? 'border-primary bg-primary/5 shadow-md ring-1 ring-primary/20'
                                         : 'border-border/70 shadow-sm hover:border-primary/40 hover:shadow-md'
                                         }`}
@@ -1681,8 +1692,8 @@ export default function TransactionDetailPage() {
                                         }
                                     }}
                                 >
-                                    {/* Top Row - Checkbox/Number + Item Info */}
-                                    <div className="flex items-start gap-3">
+                                    {/* Single row: number/checkbox + identity + inline status/actions */}
+                                    <div className="flex items-center gap-2.5">
                                         {/* Checkbox (selection mode) or Number Badge */}
                                         {selectionMode && canSelect ? (
                                             <button
@@ -1707,22 +1718,22 @@ export default function TransactionDetailPage() {
                                             </div>
                                         )}
 
-                                        {/* Item Info - Full width */}
-                                        <ItemIdentity item={item} variant="md" className="flex-1" />
-                                    </div>
+                                        {/* Item Info */}
+                                        <ItemIdentity item={item} variant="md" wrapName className="min-w-0 flex-1" />
 
-                                    {/* Bottom Row - Status (left) + Actions (right) */}
-                                    {!selectionMode && (
-                                        <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-border/50">
-                                            <span className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isCheckedOut
-                                                ? 'bg-orange-500 text-white'
-                                                : 'bg-green-500 text-white'
-                                                }`}>
-                                                {isCheckedOut ? 'Checked Out' : 'Returned'}
-                                            </span>
+                                        {/* Status + actions, inline (right) */}
+                                        {!selectionMode && (
+                                            <div className="flex shrink-0 items-center gap-1.5">
+                                                {/* Status pill shown only when there's no Return action to imply it */}
+                                                {!(transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems) && (
+                                                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isCheckedOut
+                                                        ? 'bg-orange-500 text-white'
+                                                        : 'bg-green-500 text-white'
+                                                        }`}>
+                                                        {isCheckedOut ? 'Out' : 'Returned'}
+                                                    </span>
+                                                )}
 
-                                            {/* Actions */}
-                                            <div className="flex items-center gap-2">
                                                 {/* Force Return button - only for checked out items */}
                                                 {transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems && (
                                                     <button
@@ -1732,18 +1743,13 @@ export default function TransactionDetailPage() {
                                                         }}
                                                         disabled={saving}
                                                         title="Force return this item"
-                                                        className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white transition-colors flex items-center gap-1.5"
+                                                        className="flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
                                                     >
                                                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
                                                         </svg>
                                                         Return
                                                     </button>
-                                                )}
-
-                                                {/* Divider so the destructive Remove sits clearly apart from Return */}
-                                                {transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems && (
-                                                    <span className="w-px h-6 bg-border mx-1.5" aria-hidden="true" />
                                                 )}
 
                                                 {/* Remove button - only for open transactions */}
@@ -1756,7 +1762,7 @@ export default function TransactionDetailPage() {
                                                         disabled={saving}
                                                         title="Remove from transaction"
                                                         aria-label="Remove from transaction"
-                                                        className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                                                     >
                                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1764,8 +1770,8 @@ export default function TransactionDetailPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })
@@ -1936,7 +1942,7 @@ export default function TransactionDetailPage() {
                         })}
                     </div>
                 )}
-            </Card>
+            </div>
 
 
 
@@ -2156,14 +2162,16 @@ export default function TransactionDetailPage() {
 
             {
                 transaction.status === 'CLOSED' && (
-                    <Card className="p-4 bg-gray-50 dark:bg-gray-900/50 border-gray-300 dark:border-gray-700">
+                    <Card className="p-4 border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-950/20">
                         <div className="flex items-start gap-3">
-                            <svg className="w-5 h-5 text-gray-600 dark:text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <div>
-                                <p className="font-medium text-gray-900 dark:text-gray-100">Transaction Closed</p>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div className="min-w-0">
+                                <p className="font-semibold text-green-900 dark:text-green-100">Transaction Closed</p>
+                                <p className="mt-0.5 text-sm leading-relaxed text-green-800/80 dark:text-green-200/70">
                                     This transaction has been closed and cannot be modified. All items have been returned.
                                 </p>
                             </div>

@@ -12,6 +12,8 @@ interface MultiSelectProps {
     onChange: (value: string[]) => void;
     options: Option[];
     placeholder?: string;
+    /** Placeholder for the in-panel search box (defaults to a generic prompt). */
+    searchPlaceholder?: string;
     className?: string;
     onOpenChange?: (isOpen: boolean) => void;
 }
@@ -22,6 +24,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
     onChange,
     options,
     placeholder = 'Select options',
+    searchPlaceholder = 'Search…',
     className = '',
     onOpenChange
 }) => {
@@ -263,7 +266,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                         type="text"
                         readOnly={isMobilePicker}
                         inputMode={isMobilePicker ? 'none' : 'text'}
-                        className={`flex-1 w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none truncate ${isMobilePicker ? 'cursor-pointer' : ''}`}
+                        className={`flex-1 w-full border-0 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none truncate ${isMobilePicker ? 'cursor-pointer' : ''}`}
                         placeholder={
                             selectedOptions.length === 0
                                 ? placeholder
@@ -352,9 +355,9 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                                     type="text"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search people..."
+                                    placeholder={searchPlaceholder}
                                     autoFocus
-                                    className="min-w-0 flex-1 bg-transparent text-[16px] text-foreground outline-none placeholder:text-muted-foreground"
+                                    className="min-w-0 flex-1 border-0 bg-transparent text-[16px] text-foreground outline-none placeholder:text-muted-foreground"
                                 />
                                 {search && (
                                     <button

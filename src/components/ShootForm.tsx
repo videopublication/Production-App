@@ -707,6 +707,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 value={selectedCrewIds}
                                 onChange={setSelectedCrewIds}
                                 placeholder={`Search & add ${labels.teamPluralLower}...`}
+                                searchPlaceholder={`Search ${labels.teamPluralLower}…`}
                             />
                         </div>
 

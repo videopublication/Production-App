@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Equipment, EquipmentStatus } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { MultiSelect } from '@/components/MultiSelect';
+import { FacetFilters } from '@/components/FacetFilters';
 import { storage } from '@/lib/storage';
 import { downloadFile } from '@/lib/download';
 import { Badge } from '@/components/Badge';
@@ -31,9 +31,17 @@ const normalizeCat = (c?: string) => (c || '').trim().replace(/\s+/g, ' ').toLow
 type LabelPos = 'top' | 'bottom' | 'left' | 'right';
 interface LabelConfig {
     size: 'standard' | 'small';
+    pageSize: 'a4' | 'a3';
+    cellSize: number;    // mm — square cut cell (label pitch, same H & V so it cuts clean)
+    fillSheet: boolean;  // enlarge the square to consume leftover space in the usable area
+    marginX: number;     // mm — left/right page margin
+    marginY: number;     // mm — top/bottom page margin
+    cutGuides: boolean;  // draw a thin grid around each square cell to cut along
     qrMargin: number;    // QR quiet-zone in modules — lower = bigger QR / less white space
     gap: number;         // mm between QR and adjacent text
-    fontSize: number;    // pt, shared by name + serial
+    fontSize: number;    // pt, the standard size for every label
+    boldName: boolean;   // print the name/barcode bold (serial always normal)
+    autoFit: boolean;    // shrink ONLY labels whose text is too long for the cell
     showQr: boolean;
     showName: boolean;
     namePos: LabelPos;
@@ -43,9 +51,17 @@ interface LabelConfig {
 }
 const DEFAULT_LABEL_CONFIG: LabelConfig = {
     size: 'standard',
+    pageSize: 'a4',
+    cellSize: 24,
+    fillSheet: true,
+    marginX: 10,
+    marginY: 10,
+    cutGuides: true,
     qrMargin: 2,
     gap: 1.5,
     fontSize: 8,
+    boldName: true,
+    autoFit: true,
     showQr: true,
     showName: true,
     namePos: 'bottom',
@@ -70,6 +86,74 @@ const maskSerialText = (s: string, mask: boolean) => {
     if (!mask) return `S/N ${t}`;
     if (t.length <= 4) return `S/N ${t}`;
     return `S/N ****${t.slice(-4)}`;
+};
+
+// Single source of truth for the label sheet geometry, shared by the PDF generator and
+// the live preview so what you see is exactly what prints. All units are mm.
+interface QrLayout {
+    pageW: number; pageH: number;
+    marginX: number; marginY: number;
+    cell: number; cols: number; rows: number;
+    originX: number; originY: number;
+    qrSize: number;
+    topH: number; bottomH: number; leftW: number; rightW: number;
+    contentW: number; contentH: number;
+    lineH: number; gapLines: number; minFs: number;
+}
+const computeQrLayout = (cfg: LabelConfig): QrLayout => {
+    const isA3 = cfg.pageSize === 'a3';
+    const pageW = isA3 ? 297 : 210;
+    const pageH = isA3 ? 420 : 297;
+    const marginX = Math.max(0, cfg.marginX);
+    const marginY = Math.max(0, cfg.marginY);
+    const usableW = Math.max(10, pageW - marginX * 2);
+    const usableH = Math.max(10, pageH - marginY * 2);
+    const target = Math.max(10, cfg.cellSize);
+    const cols = Math.max(1, Math.floor(usableW / target));
+    const rows = Math.max(1, Math.floor(usableH / target));
+    // Fill: grow the square to the largest that still fits cols×rows in the usable area,
+    // so leftover white space is consumed and labels are as big as possible.
+    const cell = cfg.fillSheet ? Math.min(usableW / cols, usableH / rows) : target;
+    // Top-left align → any leftover collects at bottom/right, predictable to cut from a corner.
+    const originX = marginX;
+    const originY = marginY;
+    const gap = cfg.gap;
+    const lineH = cfg.fontSize * 0.3528 * 1.15;
+    const gapLines = Math.max(0.3, cfg.gap * 0.4);
+    const countAt = (p: LabelPos) => (cfg.showName && cfg.namePos === p ? 1 : 0) + (cfg.showSerial && cfg.serialPos === p ? 1 : 0);
+    const stackH = (n: number) => (n > 0 ? n * lineH + (n - 1) * gapLines : 0);
+    const topH = stackH(countAt('top'));
+    const bottomH = stackH(countAt('bottom'));
+    const leftW = stackH(countAt('left'));
+    const rightW = stackH(countAt('right'));
+    const pad = 1.2;
+    const reservedV = topH + (topH ? gap : 0) + (bottomH ? gap : 0) + bottomH;
+    const reservedH = leftW + (leftW ? gap : 0) + (rightW ? gap : 0) + rightW;
+    const qrSize = cfg.showQr ? Math.max(6, Math.min(cell - pad * 2 - reservedV, cell - pad * 2 - reservedH)) : 0;
+    const contentW = leftW + (leftW ? gap : 0) + qrSize + (rightW ? gap : 0) + rightW;
+    const contentH = topH + (topH ? gap : 0) + qrSize + (bottomH ? gap : 0) + bottomH;
+    const minFs = cfg.size === 'small' ? 3.5 : 4.5;
+    return { pageW, pageH, marginX, marginY, cell, cols, rows, originX, originY, qrSize, topH, bottomH, leftW, rightW, contentW, contentH, lineH, gapLines, minFs };
+};
+const availForPos = (p: LabelPos, cell: number, qrH: number) =>
+    (p === 'top' || p === 'bottom') ? (cell - 2) : (qrH || (cell - 4));
+// Font size for ONE label line: the standard cfg.fontSize, shrunk only when the text is
+// too long for its slot AND auto-fit is on. Each label is judged on its own — so short
+// names stay at the standard size and only oversized ones get smaller.
+const fitFontFor = (
+    text: string,
+    pos: LabelPos,
+    bold: boolean,
+    cfg: LabelConfig,
+    L: QrLayout,
+    measure: (text: string, bold: boolean, fontSize: number) => number,
+) => {
+    if (!text) return cfg.fontSize;
+    if (!cfg.autoFit) return cfg.fontSize;
+    const w = measure(text, bold, cfg.fontSize);
+    const avail = availForPos(pos, L.cell, L.qrSize);
+    if (w > avail) return Math.max(L.minFs, Math.floor(cfg.fontSize * (avail / w) * 10) / 10);
+    return cfg.fontSize;
 };
 
 const InlineInput = ({ value, onChange, placeholder }: { value: string, onChange: (v: string) => void, placeholder?: string }) => {
@@ -254,6 +338,7 @@ function InventoryPageContent() {
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [labelConfig, setLabelConfig] = useState<LabelConfig>(DEFAULT_LABEL_CONFIG);
     const [previewQr, setPreviewQr] = useState('');
+    const [previewFit, setPreviewFit] = useState<{ name: number; serial: number }>({ name: DEFAULT_LABEL_CONFIG.fontSize, serial: DEFAULT_LABEL_CONFIG.fontSize });
     const setCfg = <K extends keyof LabelConfig>(key: K, val: LabelConfig[K]) => setLabelConfig(c => ({ ...c, [key]: val }));
 
     // Hydrate saved config on mount (client only, avoids SSR mismatch).
@@ -339,6 +424,30 @@ function InventoryPageContent() {
         })();
         return () => { cancelled = true; };
     }, [qrModalOpen, labelConfig.qrMargin, sampleLabelItem.barcode]);
+
+    // Measure (with jsPDF's own metrics) the exact size the sample label's name + serial
+    // will print at, so the live preview text matches the PDF — including per-line auto-fit.
+    useEffect(() => {
+        if (!qrModalOpen) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const pdfModule = await import('jspdf');
+                const jsPDF = pdfModule.jsPDF || pdfModule.default;
+                const pdf = new jsPDF({ orientation: 'portrait', format: labelConfig.pageSize, unit: 'mm' });
+                const L = computeQrLayout(labelConfig);
+                const measure = (text: string, bold: boolean, fs: number) => {
+                    pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+                    pdf.setFontSize(fs);
+                    return pdf.getTextWidth(text);
+                };
+                const nameFs = fitFontFor(sampleLabelItem.barcode, labelConfig.namePos, labelConfig.boldName, labelConfig, L, measure);
+                const serialFs = fitFontFor(maskSerialText(sampleLabelItem.serialNumber, labelConfig.maskSerial), labelConfig.serialPos, false, labelConfig, L, measure);
+                if (!cancelled) setPreviewFit({ name: nameFs, serial: serialFs });
+            } catch { /* ignore */ }
+        })();
+        return () => { cancelled = true; };
+    }, [qrModalOpen, labelConfig, sampleLabelItem]);
 
     // Open an item detail while remembering where we were: save the list scroll
     // position so returning (via the sticky Back) lands on the same spot with the
@@ -906,31 +1015,32 @@ function InventoryPageContent() {
 
             // compress: true keeps the file small (raw QR pixels would balloon it to
             // hundreds of MB and OOM the tab). See earlier fix.
-            const pdf = new jsPDF({ orientation: 'portrait', format: 'a4', unit: 'mm', compress: true });
-            const pageWidth = 210;
-            const pageHeight = 297;
+            const pdf = new jsPDF({ orientation: 'portrait', format: cfg.pageSize, unit: 'mm', compress: true });
 
-            const isSmall = cfg.size === 'small';
-            const cols = isSmall ? 7 : 4;
-            const rows = isSmall ? 9 : 5;
-            const qrSize = isSmall ? 20 : 36;
-            const fontSize = cfg.fontSize;
-            const gap = cfg.gap;
-
-            const cellWidth = pageWidth / cols;
-            const cellHeight = (pageHeight - 20) / rows;
-            const marginTop = 10;
-            const ptToMm = 0.3528;
-            const lineH = fontSize * ptToMm * 1.15;
-            const gapLines = Math.max(0.3, gap * 0.4);
-
-            const allSelected = items.filter(item => selectedItems.has(item.id));
+            // Print in the SAME order the list is currently showing (category sort, etc.), so
+            // the sheet follows the on-screen order. Selected items outside the current
+            // filter (rare) are appended at the end rather than dropped.
+            const inView = filteredItems.filter(item => selectedItems.has(item.id));
+            const inViewIds = new Set(inView.map(item => item.id));
+            const leftovers = items.filter(item => selectedItems.has(item.id) && !inViewIds.has(item.id));
+            const allSelected = [...inView, ...leftovers];
             const selectedItemsArray = allSelected.filter(item => item.barcode && item.barcode.trim());
             const skippedCount = allSelected.length - selectedItemsArray.length;
             if (selectedItemsArray.length === 0) {
                 showToast('None of the selected items have a barcode to generate QR codes', 'error');
                 return;
             }
+
+            // Shared geometry + one uniform font (same maths the live preview uses).
+            const L = computeQrLayout(cfg);
+            const { cell, cols, rows, originX, originY, qrSize, topH, bottomH, leftW, rightW, contentW, contentH, lineH, gapLines } = L;
+            const gap = cfg.gap;
+            const cellWidth = cell, cellHeight = cell, qrW = qrSize, qrH = qrSize;
+            const measure = (text: string, bold: boolean, fs: number) => {
+                pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+                pdf.setFontSize(fs);
+                return pdf.getTextWidth(text);
+            };
 
             const itemsPerPage = cols * rows;
             const qrCache = new Map<string, string>();
@@ -942,33 +1052,27 @@ function InventoryPageContent() {
                 const col = positionOnPage % cols;
                 if (positionOnPage === 0 && i > 0) pdf.addPage();
 
-                const cellX = col * cellWidth;
-                const cellY = marginTop + row * cellHeight;
+                const cellX = originX + col * cell;
+                const cellY = originY + row * cell;
 
-                // Collect texts with their chosen sides.
-                const texts: { text: string; pos: LabelPos; muted: boolean }[] = [];
-                if (cfg.showName) texts.push({ text: item.barcode, pos: cfg.namePos, muted: false });
-                if (cfg.showSerial && item.serialNumber) texts.push({ text: maskSerialText(item.serialNumber, cfg.maskSerial), pos: cfg.serialPos, muted: true });
+                if (cfg.cutGuides) {
+                    pdf.setDrawColor(205);
+                    pdf.setLineWidth(0.1);
+                    pdf.rect(cellX, cellY, cell, cell);
+                }
 
-                const top = texts.filter(t => t.pos === 'top');
-                const bottom = texts.filter(t => t.pos === 'bottom');
-                const left = texts.filter(t => t.pos === 'left');
-                const right = texts.filter(t => t.pos === 'right');
-                const stackH = (n: number) => (n > 0 ? n * lineH + (n - 1) * gapLines : 0);
-                const colW = (n: number) => (n > 0 ? n * lineH + (n - 1) * gapLines : 0);
+                // Per-item text only; every layout constant is precomputed above so the
+                // grid, QR size and font size are identical across all labels.
+                const slots: { text: string; pos: LabelPos; bold: boolean }[] = [];
+                if (cfg.showName) slots.push({ text: item.barcode, pos: cfg.namePos, bold: cfg.boldName });
+                if (cfg.showSerial) slots.push({ text: item.serialNumber ? maskSerialText(item.serialNumber, cfg.maskSerial) : '', pos: cfg.serialPos, bold: false });
+                const top = slots.filter(t => t.pos === 'top');
+                const bottom = slots.filter(t => t.pos === 'bottom');
+                const left = slots.filter(t => t.pos === 'left');
+                const right = slots.filter(t => t.pos === 'right');
 
-                const qrW = cfg.showQr ? qrSize : 0;
-                const qrH = cfg.showQr ? qrSize : 0;
-                const topH = stackH(top.length);
-                const bottomH = stackH(bottom.length);
-                const leftW = colW(left.length);
-                const rightW = colW(right.length);
-
-                const contentW = leftW + (leftW ? gap : 0) + Math.max(qrW, 0) + (rightW ? gap : 0) + rightW;
-                const contentH = topH + (topH ? gap : 0) + Math.max(qrH, 0) + (bottomH ? gap : 0) + bottomH;
                 const blockX = cellX + (cellWidth - contentW) / 2;
                 const blockY = cellY + (cellHeight - contentH) / 2;
-
                 const qrX = blockX + leftW + (leftW ? gap : 0);
                 const qrY = blockY + topH + (topH ? gap : 0);
                 const qrCenterX = qrX + qrW / 2;
@@ -983,36 +1087,41 @@ function InventoryPageContent() {
                     pdf.addImage(qrUrl, 'PNG', qrX, qrY, qrSize, qrSize);
                 }
 
-                pdf.setFont('helvetica', 'normal');
-                const fitFont = (text: string, avail: number, min: number) => {
-                    let fs = fontSize;
+                pdf.setTextColor(20); // solid black
+                // Each line uses the standard font size, shrunk only if it overflows its slot
+                // (auto-fit). Text sits `gap` from the QR edge on every side for equal spacing.
+                const prep = (t: { text: string; pos: LabelPos; bold: boolean }) => {
+                    pdf.setFont('helvetica', t.bold ? 'bold' : 'normal');
+                    const fs = fitFontFor(t.text, t.pos, t.bold, cfg, L, measure);
+                    pdf.setFont('helvetica', t.bold ? 'bold' : 'normal');
                     pdf.setFontSize(fs);
-                    const w = pdf.getTextWidth(text);
-                    if (w > avail) { fs = Math.max(min, Math.floor(fs * (avail / w) * 10) / 10); pdf.setFontSize(fs); }
-                    return fs;
+                    return fs * 0.3528 * 0.72; // cap height in mm at this size
                 };
-                const minFs = isSmall ? 3.5 : 4.5;
-
-                // Horizontal stacks (top above QR, bottom below), centered on the QR.
-                let ty = blockY + lineH * 0.78;
-                top.forEach(t => { fitFont(t.text, cellWidth - 2, minFs); pdf.setTextColor(t.muted ? 110 : 20); pdf.text(t.text, qrCenterX, ty, { align: 'center' }); ty += lineH + gapLines; });
-                let by = qrY + qrH + (bottomH ? gap : 0) + lineH * 0.78;
-                bottom.forEach(t => { fitFont(t.text, cellWidth - 2, minFs); pdf.setTextColor(t.muted ? 110 : 20); pdf.text(t.text, qrCenterX, by, { align: 'center' }); by += lineH + gapLines; });
-
-                // Rotated side columns (vertical), centered on the QR height.
-                left.forEach((t, k) => {
-                    fitFont(t.text, qrH || (cellHeight - 4), minFs);
-                    const tw = pdf.getTextWidth(t.text);
-                    const baseX = blockX + lineH * 0.78 + k * (lineH + gapLines);
-                    pdf.setTextColor(t.muted ? 110 : 20);
-                    pdf.text(t.text, baseX, qrMidY + tw / 2, { angle: 90 });
+                // TOP: glyph bottom ≈ gap above the QR.
+                top.forEach((t, k) => {
+                    if (!t.text) return;
+                    prep(t);
+                    pdf.text(t.text, qrCenterX, qrY - gap - k * lineH, { align: 'center' });
                 });
-                right.forEach((t, k) => {
-                    fitFont(t.text, qrH || (cellHeight - 4), minFs);
+                // BOTTOM: glyph top ≈ gap below the QR.
+                bottom.forEach((t, k) => {
+                    if (!t.text) return;
+                    const capH = prep(t);
+                    pdf.text(t.text, qrCenterX, qrY + qrH + gap + capH + k * lineH, { align: 'center' });
+                });
+                // LEFT (rotated): glyph right edge ≈ gap left of the QR.
+                left.forEach((t, k) => {
+                    if (!t.text) return;
+                    prep(t);
                     const tw = pdf.getTextWidth(t.text);
-                    const baseX = qrX + qrW + (rightW ? gap : 0) + lineH * 0.78 + k * (lineH + gapLines);
-                    pdf.setTextColor(t.muted ? 110 : 20);
-                    pdf.text(t.text, baseX, qrMidY + tw / 2, { angle: 90 });
+                    pdf.text(t.text, qrX - gap - k * lineH, qrMidY + tw / 2, { angle: 90 });
+                });
+                // RIGHT (rotated): glyph left edge ≈ gap right of the QR.
+                right.forEach((t, k) => {
+                    if (!t.text) return;
+                    const capH = prep(t);
+                    const tw = pdf.getTextWidth(t.text);
+                    pdf.text(t.text, qrX + qrW + gap + capH + k * lineH, qrMidY + tw / 2, { angle: 90 });
                 });
                 pdf.setTextColor(0);
             }
@@ -1125,11 +1234,11 @@ function InventoryPageContent() {
             </div>
 
             <div className="flex flex-col gap-3">
-                <div className="flex h-14 w-full items-center gap-2 rounded-2xl border border-border bg-secondary/50 px-3 transition-all duration-200 focus-within:border-transparent focus-within:ring-2 focus-within:ring-primary">
+                <div className="flex h-14 w-full items-center gap-2 rounded-2xl border border-border bg-secondary/50 pl-4 pr-3 transition-all duration-200 focus-within:border-transparent focus-within:ring-2 focus-within:ring-primary">
                     <Search className="h-5 w-5 shrink-0 text-muted-foreground sm:h-6 sm:w-6" />
                     <input
                         type="search"
-                        placeholder="Search name, barcode, serial, model..."
+                        placeholder="Search name, barcode, serial…"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         onKeyDown={(e) => {
@@ -1210,40 +1319,22 @@ function InventoryPageContent() {
                         </div>
                     </div>
 
-                    {/* Inline-styled widths (not Tailwind sm:w-*) so the compact sizing
-                        survives this repo's Vercel Tailwind content-scan divergence. */}
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div style={{ flex: '1 1 13rem', maxWidth: '16rem' }} className="min-w-0">
-                            <MultiSelect value={categoryFilter} onChange={setCategoryFilter} options={categoryOptions} placeholder="All categories" className="w-full" />
-                        </div>
-                        {brandOptions.length > 0 && (
-                            <div style={{ flex: '1 1 11rem', maxWidth: '14rem' }} className="min-w-0">
-                                <MultiSelect value={brandFilter} onChange={setBrandFilter} options={brandOptions} placeholder="All brands" className="w-full" />
-                            </div>
-                        )}
-                        {sizeOptions.length > 0 && (
-                            <div style={{ flex: '1 1 10rem', maxWidth: '13rem' }} className="min-w-0">
-                                <MultiSelect value={sizeFilter} onChange={setSizeFilter} options={sizeOptions} placeholder="All sizes" className="w-full" />
-                            </div>
-                        )}
-                        {endOptions.length > 0 && (
-                            <div style={{ flex: '1 1 12rem', maxWidth: '15rem' }} className="min-w-0">
-                                <MultiSelect value={endFilter} onChange={setEndFilter} options={endOptions} placeholder="Any connector end" className="w-full" />
-                            </div>
-                        )}
-                        {(categoryFilter.length > 0 || brandFilter.length > 0 || sizeFilter.length > 0 || endFilter.length > 0 || statusFilter !== 'ALL' || search) && (
-                            <div className="flex items-center gap-3 whitespace-nowrap text-[13px]">
-                                <span className="text-muted-foreground">
-                                    {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
-                                </span>
-                                <button
-                                    onClick={() => { setCategoryFilter([]); setBrandFilter([]); setSizeFilter([]); setEndFilter([]); setStatusFilter('ALL'); setSearch(''); }}
-                                    className="font-medium text-primary hover:underline"
-                                >
-                                    Clear filters
-                                </button>
-                            </div>
-                        )}
+                    {/* One Filters control (popover on desktop, bottom sheet on phones) holding
+                        all facets, with applied values shown as removable chips. Status has its
+                        own tabs above; free-text has the search bar. */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                        <FacetFilters
+                            resultCount={filteredItems.length}
+                            groups={[
+                                { key: 'category', label: 'Category', options: categoryOptions, selected: categoryFilter, onChange: setCategoryFilter },
+                                { key: 'brand', label: 'Brand', options: brandOptions, selected: brandFilter, onChange: setBrandFilter },
+                                { key: 'size', label: 'Size', options: sizeOptions, selected: sizeFilter, onChange: setSizeFilter },
+                                { key: 'end', label: 'Connector end', options: endOptions, selected: endFilter, onChange: setEndFilter },
+                            ]}
+                        />
+                        <span className="ml-auto whitespace-nowrap text-[13px] font-medium text-muted-foreground">
+                            {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -1919,22 +2010,57 @@ function InventoryPageContent() {
             )}
 
             {qrModalOpen && (() => {
+                // ---- Accurate mini-sheet preview — uses the SAME layout + uniform font the
+                // PDF uses, so margins, grid, QR size and text size all match the print. ----
+                const L = computeQrLayout(labelConfig);
+                const pwMM = L.pageW, phMM = L.pageH;
+                const mX = L.marginX, mY = L.marginY;
+                const cellMM = L.cell;
+                const usableWmm = pwMM - mX * 2, usableHmm = phMM - mY * 2;
+                const colsP = L.cols, rowsP = L.rows;
+                const gOX = L.originX, gOY = L.originY;
+                const qrMM = L.qrSize;
+                const sheetScale = Math.min(260 / pwMM, 340 / phMM); // whole-sheet thumbnail
+                const zoomScale = 210 / cellMM;                      // one big, readable label
+
                 const previewName = sampleLabelItem.barcode;
                 const previewSerial = maskSerialText(sampleLabelItem.serialNumber, labelConfig.maskSerial);
-                type Tk = { text: string; muted: boolean };
-                const texts: (Tk & { pos: LabelPos })[] = [];
-                if (labelConfig.showName) texts.push({ text: previewName, muted: false, pos: labelConfig.namePos });
-                if (labelConfig.showSerial && previewSerial) texts.push({ text: previewSerial, muted: true, pos: labelConfig.serialPos });
-                const at = (p: LabelPos) => texts.filter(t => t.pos === p);
-                const fontPx = labelConfig.fontSize * 1.7;
-                const gapPx = Math.max(2, labelConfig.gap * 5);
+                type Tk = { text: string; bold: boolean; pt: number };
+                const slots: (Tk & { pos: LabelPos })[] = [];
+                if (labelConfig.showName) slots.push({ text: previewName, bold: labelConfig.boldName, pt: previewFit.name, pos: labelConfig.namePos });
+                if (labelConfig.showSerial) slots.push({ text: previewSerial || 'S/N —', bold: false, pt: previewFit.serial, pos: labelConfig.serialPos });
+                const at = (p: LabelPos) => slots.filter(s => s.pos === p);
+
                 const rotStyle: React.CSSProperties = { writingMode: 'vertical-rl', transform: 'rotate(180deg)' };
-                const line = (t: Tk, i: number, rotate = false) => (
-                    <span key={i} style={{ fontSize: fontPx, ...(rotate ? rotStyle : {}) }}
-                        className={`whitespace-nowrap font-medium leading-tight ${t.muted ? 'text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                        {t.text}
-                    </span>
-                );
+                // One cell renderer, parameterised by scale (px per mm). Each line uses the
+                // exact size the PDF will print it at (per-line auto-fit), so preview == print.
+                const renderCell = (s: number, key?: React.Key, forceBorder = false) => {
+                    const cPx = cellMM * s, qPx = qrMM * s;
+                    const gPx = labelConfig.gap * s;
+                    const el = (t: Tk, i: number, rotate = false) => (
+                        <span key={i} style={{ fontSize: Math.max(2, t.pt * 0.3528 * s), lineHeight: 1.05, ...(rotate ? rotStyle : {}) }}
+                            className={`whitespace-nowrap text-gray-900 ${t.bold ? 'font-bold' : 'font-normal'}`}>
+                            {t.text}
+                        </span>
+                    );
+                    return (
+                        <div key={key} style={{ width: cPx, height: cPx }} className="relative flex items-center justify-center">
+                            {(labelConfig.cutGuides || forceBorder) && <div className="pointer-events-none absolute inset-0 border border-gray-300" />}
+                            <div className="flex flex-col items-center justify-center" style={{ gap: gPx }}>
+                                {at('top').map((t, i) => el(t, i))}
+                                <div className="flex items-center justify-center" style={{ gap: gPx }}>
+                                    {at('left').map((t, i) => el(t, i, true))}
+                                    {labelConfig.showQr && previewQr && <img src={previewQr} alt="" style={{ width: qPx, height: qPx, imageRendering: 'pixelated' }} />}
+                                    {at('right').map((t, i) => el(t, i, true))}
+                                </div>
+                                {at('bottom').map((t, i) => el(t, i))}
+                            </div>
+                        </div>
+                    );
+                };
+                // Cap rendered thumbnail cells for performance (still shows margins + overflow).
+                const showCols = colsP;
+                const showRows = colsP * rowsP > 160 ? Math.max(1, Math.floor(160 / colsP)) : rowsP;
                 const PosPicker = ({ value, onPick }: { value: LabelPos; onPick: (p: LabelPos) => void }) => (
                     <div className="grid grid-cols-4 gap-1">
                         {(['top', 'bottom', 'left', 'right'] as const).map(p => (
@@ -1958,7 +2084,7 @@ function InventoryPageContent() {
                 return (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
                         <div
-                            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]"
+                            className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]"
                         >
                             <div className="flex items-center justify-between border-b border-border px-5 py-3">
                                 <div>
@@ -1972,16 +2098,44 @@ function InventoryPageContent() {
                                 {/* Controls */}
                                 <div className="space-y-4 p-5">
                                     <div>
-                                        <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Label size</p>
+                                        <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Label preset</p>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {(['standard', 'small'] as const).map(sz => (
-                                                <button key={sz} onClick={() => setCfg('size', sz)}
+                                            {([['standard', 24], ['small', 17]] as const).map(([sz, mm]) => (
+                                                <button key={sz} onClick={() => { setCfg('size', sz); setCfg('cellSize', mm); }}
                                                     className={`h-9 rounded-lg border text-sm font-semibold transition-colors ${labelConfig.size === sz ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground hover:bg-muted'}`}>
-                                                    {sz === 'standard' ? 'Standard · 4/row' : 'Small · 7/row'}
+                                                    {sz === 'standard' ? 'Standard · 24mm' : 'Small · 17mm'}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
+
+                                    <div>
+                                        <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Page size</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {(['a4', 'a3'] as const).map(ps => (
+                                                <button key={ps} onClick={() => setCfg('pageSize', ps)}
+                                                    className={`h-9 rounded-lg border text-sm font-semibold uppercase transition-colors ${labelConfig.pageSize === ps ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground hover:bg-muted'}`}>
+                                                    {ps === 'a4' ? 'A4' : 'A3 · more per sheet'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <Slider label={`Cell square (min cut size)`} val={labelConfig.cellSize} min={12} max={40} step={1} unit="mm" onChange={v => setCfg('cellSize', v)} />
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Slider label="Margin L/R" val={labelConfig.marginX} min={0} max={40} step={1} unit="mm" onChange={v => setCfg('marginX', v)} />
+                                        <Slider label="Margin T/B" val={labelConfig.marginY} min={0} max={40} step={1} unit="mm" onChange={v => setCfg('marginY', v)} />
+                                    </div>
+
+                                    <label className="flex cursor-pointer items-center gap-3">
+                                        <input type="checkbox" checked={labelConfig.fillSheet} onChange={e => setCfg('fillSheet', e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                        <span className="text-sm font-semibold text-foreground">Fill sheet <span className="font-normal text-muted-foreground">(enlarge labels to use the space)</span></span>
+                                    </label>
+                                    <label className="flex cursor-pointer items-center gap-3">
+                                        <input type="checkbox" checked={labelConfig.cutGuides} onChange={e => setCfg('cutGuides', e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                        <span className="text-sm font-semibold text-foreground">Cut guide grid</span>
+                                    </label>
 
                                     {/* QR */}
                                     <label className="flex cursor-pointer items-center gap-3">
@@ -2021,26 +2175,51 @@ function InventoryPageContent() {
                                         )}
                                     </div>
 
-                                    <Slider label="Text size" val={labelConfig.fontSize} min={5} max={12} step={0.5} unit="pt" onChange={v => setCfg('fontSize', v)} />
+                                    <Slider label="Text size" val={labelConfig.fontSize} min={5} max={14} step={0.5} unit="pt" onChange={v => setCfg('fontSize', v)} />
+                                    <label className="flex cursor-pointer items-center gap-3">
+                                        <input type="checkbox" checked={labelConfig.boldName} onChange={e => setCfg('boldName', e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+                                        <span className="text-sm font-semibold text-foreground">Bold name / barcode</span>
+                                    </label>
+                                    <label className="flex cursor-pointer items-start gap-3">
+                                        <input type="checkbox" checked={labelConfig.autoFit} onChange={e => setCfg('autoFit', e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-border accent-primary" />
+                                        <span className="text-sm font-semibold text-foreground">Auto-fit long text
+                                            <span className="block text-[11px] font-normal text-muted-foreground">Keep the text size fixed; shrink only labels whose text is too long for the cell.</span>
+                                        </span>
+                                    </label>
                                     <Slider label="Gap (QR ↔ text)" val={labelConfig.gap} min={0} max={6} step={0.5} unit="mm" onChange={v => setCfg('gap', v)} />
                                 </div>
 
-                                {/* Live preview */}
-                                <div className="flex flex-col items-center justify-center gap-3 border-t border-border bg-gray-50 p-5 dark:bg-[#151517] md:border-l md:border-t-0">
-                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Live preview</p>
-                                    <div className="flex items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white p-4 shadow-sm dark:border-gray-700" style={{ minWidth: 190, minHeight: 190 }}>
-                                        <div className="flex flex-col items-center" style={{ gap: gapPx }}>
-                                            {at('top').map((t, i) => line(t, i))}
-                                            <div className="flex items-center" style={{ gap: gapPx }}>
-                                                {at('left').map((t, i) => line(t, i, true))}
-                                                {labelConfig.showQr && previewQr && (
-                                                    <img src={previewQr} alt="preview" style={{ width: labelConfig.size === 'small' ? 96 : 128, height: labelConfig.size === 'small' ? 96 : 128, imageRendering: 'pixelated' }} />
-                                                )}
-                                                {at('right').map((t, i) => line(t, i, true))}
-                                            </div>
-                                            {at('bottom').map((t, i) => line(t, i))}
+                                {/* Live preview — big zoomed label + full-sheet thumbnail */}
+                                <div className="flex flex-col items-center gap-4 border-t border-border bg-gray-50 p-5 dark:bg-[#151517] md:border-l md:border-t-0">
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Live preview · {labelConfig.pageSize.toUpperCase()}</p>
+
+                                    {/* Zoom: one label at readable size — QR is legible, text overflow past the cut square is visible */}
+                                    <div className="flex flex-col items-center gap-1.5">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">One label · {labelConfig.cellSize}mm square</span>
+                                        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 shadow-sm">
+                                            {renderCell(zoomScale, 'zoom', true)}
                                         </div>
                                     </div>
+
+                                    {/* Sheet thumbnail: layout, margins, cut grid, count */}
+                                    <div className="flex flex-col items-center gap-1.5">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Full sheet</span>
+                                        <div className="relative bg-white shadow-sm ring-1 ring-gray-300" style={{ width: pwMM * sheetScale, height: phMM * sheetScale }}>
+                                            <div className="pointer-events-none absolute border border-dashed border-primary/50" style={{ left: mX * sheetScale, top: mY * sheetScale, width: usableWmm * sheetScale, height: usableHmm * sheetScale }} />
+                                            <div className="absolute" style={{ left: gOX * sheetScale, top: gOY * sheetScale }}>
+                                                {Array.from({ length: showRows }).map((_, r) => (
+                                                    <div key={r} className="flex">
+                                                        {Array.from({ length: showCols }).map((_, c) => renderCell(sheetScale, `${r}-${c}`))}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-center text-[11px] text-muted-foreground">
+                                        {colsP} × {rowsP} = <span className="font-semibold text-foreground">{colsP * rowsP}</span> labels/sheet
+                                        {showRows < rowsP ? ` · thumbnail shows top ${showRows} rows` : ''}
+                                    </p>
                                     <button onClick={() => setLabelConfig(DEFAULT_LABEL_CONFIG)} className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline">Reset to default</button>
                                 </div>
                             </div>

@@ -71,6 +71,10 @@ export default function CheckoutPage() {
     const [manualItemQuantity, setManualItemQuantity] = useState(1);
     const [manualItemReturnRequired, setManualItemReturnRequired] = useState(true);
     const [manualItemNotes, setManualItemNotes] = useState('');
+    // Progressive disclosure: keep the form short by default — the manual-item inputs
+    // and the checkout note stay collapsed until the user chooses to add one.
+    const [manualEditorOpen, setManualEditorOpen] = useState(false);
+    const [notesOpen, setNotesOpen] = useState(false);
     const [scanInput, setScanInput] = useState('');
     const [project, setProject] = useState('');
     const [notes, setNotes] = useState('');
@@ -627,84 +631,24 @@ export default function CheckoutPage() {
     };
 
 
+    const manualItemCount = manualItems.reduce((sum, item) => sum + item.quantity, 0);
     const renderManualItemsEditor = () => (
-        <div className="rounded-2xl border border-border bg-muted/30 p-3">
+        <div className="border-t border-border/60 pt-4">
             <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                     <p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Manual Items</p>
-                    <p className="text-xs text-muted-foreground">Use for cables, wires, and items without QR.</p>
+                    <p className="text-xs text-muted-foreground">Cables, wires, and anything without a QR.</p>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
-                    {manualItems.reduce((sum, item) => sum + item.quantity, 0)}
-                </span>
+                {manualItemCount > 0 && (
+                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                        {manualItemCount}
+                    </span>
+                )}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-[1fr_90px]">
-                <input
-                    type="text"
-                    value={manualItemName}
-                    onChange={(e) => setManualItemName(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            addManualItem();
-                        }
-                    }}
-                    placeholder="e.g. XLR cable, HDMI wire"
-                    className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
-                />
-                <input
-                    type="number"
-                    min={1}
-                    value={manualItemQuantity}
-                    onChange={(e) => setManualItemQuantity(Number(e.target.value))}
-                    className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
-                    aria-label="Quantity"
-                />
-            </div>
-
-            <div className="mt-2 grid gap-2">
-                <input
-                    type="text"
-                    value={manualItemNotes}
-                    onChange={(e) => setManualItemNotes(e.target.value)}
-                    placeholder="Manual item note (optional)"
-                    className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
-                />
-                <div className="grid grid-cols-2 gap-1 rounded-xl bg-background p-1 border border-border w-full" aria-label="Manual item type">
-                    <button
-                        type="button"
-                        onClick={() => setManualItemReturnRequired(true)}
-                        className={`h-9 rounded-lg px-2 text-xs font-bold transition-colors ${manualItemReturnRequired
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                    >
-                        Returnable
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setManualItemReturnRequired(false)}
-                        className={`h-9 rounded-lg px-2 text-xs font-bold transition-colors ${!manualItemReturnRequired
-                            ? 'bg-orange-500 text-white shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                    >
-                        Consumable
-                    </button>
-                </div>
-            </div>
-
-            <button
-                type="button"
-                onClick={addManualItem}
-                className="mt-2 h-11 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-transform active:scale-[0.98]"
-            >
-                Add Manual Item
-            </button>
-
+            {/* Already-added items */}
             {manualItems.length > 0 && (
-                <div className="mt-3 space-y-2">
+                <div className="mb-3 space-y-2">
                     {manualItems.map(item => (
                         <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2">
                             <div className="min-w-0">
@@ -726,6 +670,96 @@ export default function CheckoutPage() {
                             </button>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Collapsed by default → one button. Inputs appear only when adding. */}
+            {!manualEditorOpen ? (
+                <button
+                    type="button"
+                    onClick={() => setManualEditorOpen(true)}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border text-sm font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add {manualItems.length > 0 ? 'another' : 'a manual item'}
+                </button>
+            ) : (
+                <div className="space-y-2 rounded-xl bg-muted/30 p-3">
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={manualItemName}
+                            onChange={(e) => setManualItemName(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addManualItem();
+                                }
+                            }}
+                            placeholder="e.g. XLR cable, HDMI wire"
+                            autoFocus
+                            className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                        />
+                        <input
+                            type="number"
+                            min={1}
+                            value={manualItemQuantity}
+                            onChange={(e) => setManualItemQuantity(Number(e.target.value))}
+                            className="h-10 w-14 shrink-0 rounded-xl border border-border bg-background px-2 text-center text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                            aria-label="Quantity"
+                        />
+                    </div>
+
+                    <input
+                        type="text"
+                        value={manualItemNotes}
+                        onChange={(e) => setManualItemNotes(e.target.value)}
+                        placeholder="Note (optional)"
+                        className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                    />
+
+                    <div className="flex items-center gap-2">
+                        <div className="grid flex-1 grid-cols-2 gap-1 rounded-lg bg-background p-1 border border-border" aria-label="Manual item type">
+                            <button
+                                type="button"
+                                onClick={() => setManualItemReturnRequired(true)}
+                                className={`h-8 rounded-md px-2 text-[11px] font-bold transition-colors ${manualItemReturnRequired
+                                    ? 'bg-primary text-primary-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                Returnable
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setManualItemReturnRequired(false)}
+                                className={`h-8 rounded-md px-2 text-[11px] font-bold transition-colors ${!manualItemReturnRequired
+                                    ? 'bg-orange-500 text-white shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                Consumable
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setManualEditorOpen(false)}
+                            className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted"
+                        >
+                            Done
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={addManualItem}
+                        disabled={!manualItemName.trim()}
+                        className="h-10 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
+                    >
+                        Add Item
+                    </button>
                 </div>
             )}
         </div>
@@ -1038,6 +1072,7 @@ export default function CheckoutPage() {
                                             label="Checkout For"
                                             value={selectedUserIds}
                                             onChange={setSelectedUserIds}
+                                            searchPlaceholder="Search people…"
                                             options={users
                                                 .filter(u => u.status !== 'SUSPENDED')
                                                 .map(u => ({
@@ -1100,67 +1135,67 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Mobile Layout */}
-                <div className="md:hidden flex flex-col min-h-[calc(100vh-140px)] pt-[60px]">
+                <div className="md:hidden flex flex-col min-h-[calc(100vh-140px)] pt-[68px]">
                     {/* Project Brief */}
                     {/* Project Details Section - Premium Mobile Card */}
                     {/* Project Brief */}
                     {/* Project Details Section - Premium Mobile Card */}
-                    <div className={`px-0.5 relative z-40 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${(showScanner || isSearchFocused)
+                    <div className={`px-0.5 relative transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${(showScanner || isSearchFocused)
                         ? 'max-h-0 opacity-0 mb-0 pt-0 overflow-hidden'
                         : 'max-h-[1200px] opacity-100 pt-4 mb-6 overflow-visible'
                         }`}>
                         <div className="bg-card rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-border">
                             <div className="p-4">
-                                {/* Work Selector for Mobile - Premium Card */}
-                                <div className="relative bg-muted/40 rounded-2xl p-4 border border-border mb-4">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                {/* Work Selector — flat section (no inner card box) */}
+                                <div className="mb-4">
+                                    <div className="flex items-center gap-2.5 mb-2">
+                                        <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                                             <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
                                             </svg>
                                         </div>
-                                        <div>
-                                            <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
-                                        </div>
+                                        <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
                                     </div>
 
-                                    <Select
-                                        value={selectedShootId}
-                                        onChange={(val: string) => {
-                                            setSelectedShootId(val);
-                                            if (val) {
-                                                const shoot = shoots.find(s => s.id === val);
-                                                if (shoot) {
-                                                    setProject(shoot.title);
+                                    <div className="relative">
+                                        <Select
+                                            value={selectedShootId}
+                                            onChange={(val: string) => {
+                                                setSelectedShootId(val);
+                                                if (val) {
+                                                    const shoot = shoots.find(s => s.id === val);
+                                                    if (shoot) {
+                                                        setProject(shoot.title);
+                                                    }
+                                                } else {
+                                                    setProject('');
+                                                    if (user) setSelectedUserIds([user.id]);
+                                                    else setSelectedUserIds([]);
                                                 }
-                                            } else {
-                                                setProject('');
-                                                if (user) setSelectedUserIds([user.id]);
-                                                else setSelectedUserIds([]);
-                                            }
-                                        }}
-                                        options={activeShootOptions}
-                                        placeholder={`Select a ${labels.workLower}...`}
-                                        className="w-full"
-                                        onOpenChange={setIsDropdownOpen}
-                                    />
-
-                                    {selectedShootId && (
-                                        <button
-                                            onClick={() => {
-                                                setSelectedShootId('');
-                                                setProject('');
-                                                if (user) setSelectedUserIds([user.id]);
-                                                else setSelectedUserIds([]);
                                             }}
-                                            className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
-                                            title="Clear selection"
-                                        >
-                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                <path d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    )}
+                                            options={activeShootOptions}
+                                            placeholder={`Select a ${labels.workLower}...`}
+                                            className="w-full"
+                                            onOpenChange={setIsDropdownOpen}
+                                        />
+
+                                        {selectedShootId && (
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedShootId('');
+                                                    setProject('');
+                                                    if (user) setSelectedUserIds([user.id]);
+                                                    else setSelectedUserIds([]);
+                                                }}
+                                                className="absolute top-1/2 right-10 -translate-y-1/2 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
+                                                title="Clear selection"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                    <path d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
@@ -1170,6 +1205,7 @@ export default function CheckoutPage() {
                                                 label="Checkout For"
                                                 value={selectedUserIds}
                                                 onChange={setSelectedUserIds}
+                                                searchPlaceholder="Search people…"
                                                 options={users
                                                     .filter(u => u.status !== 'SUSPENDED')
                                                     .map(u => ({
@@ -1191,40 +1227,51 @@ export default function CheckoutPage() {
                                     placeholder={`e.g. Documentary ${labels.workSingular} A`}
                                     value={project}
                                     onChange={(e) => setProject(e.target.value)}
-                                    className="w-full h-12 px-4 bg-muted text-foreground border-0 rounded-2xl text-[16px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all shadow-inner mb-4"
+                                    className="w-full h-12 px-4 bg-muted text-foreground border-0 rounded-2xl text-[16px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all mb-4"
                                 />
 
 
                                 {renderManualItemsEditor()}
 
-                                {/* Notes Section - Always Open */}
-                                <div className="mt-2">
-                                    <div className="mb-2 pl-1">
-                                        <label className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">
-                                            Checkout Notes (Optional)
-                                        </label>
-                                    </div>
-                                    <div className={`rounded-2xl border bg-muted shadow-inner transition-all ${isNotesFocused
-                                        ? 'border-primary bg-background ring-2 ring-primary'
-                                        : 'border-border/60'
-                                        }`}>
-                                        <textarea
-                                            placeholder="Notes for this whole checkout..."
-                                            value={notes}
-                                            onChange={(e) => setNotes(e.target.value)}
-                                            onFocus={() => setIsNotesFocused(true)}
-                                            onBlur={() => setIsNotesFocused(false)}
-                                            rows={5}
-                                            className="block min-h-[132px] w-full resize-y appearance-none rounded-2xl border-0 bg-transparent px-4 py-3 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
-                                        />
-                                    </div>
-                                    <p className="mt-1.5 px-1 text-[12px] font-medium leading-snug text-muted-foreground">
-                                        Use Manual Items for anything that must be returned. Notes are only for general instructions.
-                                    </p>
-                                    {notesMayContainReturnableItems && (
-                                        <div className="mt-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                            Looks like this note mentions returnable items. Add cables, chargers, adapters, or similar items as Manual Items so they appear in Returns and Verification.
-                                        </div>
+                                {/* Notes — collapsed until the user wants to add one */}
+                                <div className="mt-4 border-t border-border/60 pt-4">
+                                    {!(notesOpen || notes.trim()) ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setNotesOpen(true)}
+                                            className="flex items-center gap-1.5 pl-1 text-[13px] font-semibold text-primary transition-colors hover:text-primary/80"
+                                        >
+                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            Add checkout note
+                                        </button>
+                                    ) : (
+                                        <>
+                                            <label className="mb-2 block pl-1 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                Checkout Notes (Optional)
+                                            </label>
+                                            <div className={`rounded-2xl border bg-muted shadow-inner transition-all ${isNotesFocused
+                                                ? 'border-primary bg-background ring-2 ring-primary'
+                                                : 'border-border/60'
+                                                }`}>
+                                                <textarea
+                                                    placeholder="Notes for this whole checkout..."
+                                                    value={notes}
+                                                    onChange={(e) => setNotes(e.target.value)}
+                                                    onFocus={() => setIsNotesFocused(true)}
+                                                    onBlur={() => setIsNotesFocused(false)}
+                                                    rows={4}
+                                                    autoFocus
+                                                    className="block min-h-[104px] w-full resize-y appearance-none rounded-2xl border-0 bg-transparent px-4 py-3 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+                                                />
+                                            </div>
+                                            {notesMayContainReturnableItems && (
+                                                <div className="mt-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                    Looks like this note mentions returnable items. Add cables, chargers, adapters, or similar items as Manual Items so they appear in Returns and Verification.
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </div>

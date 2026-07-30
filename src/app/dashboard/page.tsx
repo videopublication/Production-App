@@ -138,6 +138,27 @@ const ALL_QUICK_ACTIONS = [
     },
 ];
 
+// Calm grid: every tile shares ONE neutral surface (added in the render); only the
+// icon carries the action's colour. The eye reads a single quiet block with small
+// colour cues in the glyphs, instead of a wall of coloured backgrounds.
+const ACTION_ICON: Record<string, string> = {
+    checkout: 'text-primary',
+    returns: 'text-emerald-600 dark:text-emerald-400',
+    verify: 'text-purple-600 dark:text-purple-400',
+    inventory: 'text-orange-600 dark:text-orange-400',
+    history: 'text-pink-600 dark:text-pink-400',
+    calendar: 'text-red-600 dark:text-red-400',
+    'add-item': 'text-cyan-600 dark:text-cyan-400',
+    shoots: 'text-indigo-600 dark:text-indigo-400',
+    users: 'text-amber-600 dark:text-amber-400',
+    notify: 'text-teal-600 dark:text-teal-400',
+    activity: 'text-slate-600 dark:text-slate-400',
+    departments: 'text-rose-600 dark:text-rose-400',
+    settings: 'text-gray-600 dark:text-gray-400',
+    leaves: 'text-violet-600 dark:text-violet-400',
+};
+const iconColor = (id: string) => ACTION_ICON[id] || 'text-foreground';
+
 // Default actions per role
 const getDefaultActionsForRole = (role: UserRole): string[] => {
     switch (role) {
@@ -500,10 +521,10 @@ export default function DashboardPage() {
                                 <button
                                     key={action.id}
                                     onClick={() => router.push(action.route)}
-                                    className="group flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-[#f5f5f7] dark:hover:bg-gray-800 transition-colors"
+                                    className="group flex flex-col items-center gap-2 p-2"
                                 >
-                                    <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[20px] bg-gradient-to-br ${action.gradient} shadow-lg ${action.shadow} flex items-center justify-center group-hover:scale-105 group-active:scale-95 transition-transform`}>
-                                        <svg className="w-7 h-7 sm:w-8 sm:h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[20px] bg-[#f2f2f4] dark:bg-gray-800/70 group-hover:bg-[#e8e8ed] dark:group-hover:bg-gray-700 flex items-center justify-center group-hover:scale-105 group-active:scale-95 transition-all`}>
+                                        <svg className={`w-7 h-7 sm:w-8 sm:h-8 ${iconColor(action.id)}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d={action.icon} />
                                         </svg>
                                     </div>
@@ -555,8 +576,8 @@ export default function DashboardPage() {
                                                         }`}
                                                 >
                                                     {/* Icon */}
-                                                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${action.gradient} shadow-lg ${action.shadow} flex items-center justify-center shrink-0`}>
-                                                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                    <div className={`w-12 h-12 rounded-xl bg-secondary dark:bg-gray-800/60 flex items-center justify-center shrink-0`}>
+                                                        <svg className={`w-6 h-6 ${iconColor(action.id)}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                                             <path strokeLinecap="round" strokeLinejoin="round" d={action.icon} />
                                                         </svg>
                                                     </div>

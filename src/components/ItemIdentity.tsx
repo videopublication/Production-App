@@ -57,18 +57,25 @@ export function ItemIdentity({
     item,
     variant = 'md',
     hideMeta = false,
+    wrapName = false,
     className = '',
 }: {
     item: ItemLike;
     variant?: Variant;
     hideMeta?: boolean;
+    /** Let a long name wrap to 2 lines instead of truncating (for tight rows
+     *  where the barcode alone isn't enough to identify the item). */
+    wrapName?: boolean;
     className?: string;
 }) {
     const detail = itemDetailLine(item);
+    const nameCls = wrapName
+        ? NAME_CLASS[variant].replace('truncate', 'line-clamp-2 break-words min-w-0')
+        : NAME_CLASS[variant];
     return (
         <div className={`min-w-0 ${className}`}>
-            <div className="flex items-center gap-1.5 min-w-0">
-                <span className={NAME_CLASS[variant]}>{item.name}</span>
+            <div className={`flex gap-1.5 min-w-0 ${wrapName ? 'items-start' : 'items-center'}`}>
+                <span className={nameCls}>{item.name}</span>
                 {item.metadata?.size && (
                     <span className={`shrink-0 font-semibold rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap ${CHIP_CLASS[variant]}`}>
                         {item.metadata.size}
