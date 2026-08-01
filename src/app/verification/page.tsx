@@ -1159,9 +1159,11 @@ export default function VerificationPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">All Verified</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Nothing To Verify</h3>
                     <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
-                        There are no items pending verification. Great job!
+                        Nothing is waiting on you. Anything returned with a reported issue shows up
+                        here, and depending on your department&apos;s settings clean returns may be
+                        cleared automatically or by the next person checking the item out.
                     </p>
                 </div>
             ) : normalizedSearchQuery && filteredPendingItems.length === 0 && filteredPendingManualItems.length === 0 ? (

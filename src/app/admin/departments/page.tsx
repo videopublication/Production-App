@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
-import { Department } from '@/types';
+import { Department, DepartmentSettings, ReturnVerificationMode } from '@/types';
 import { storage } from '@/lib/storage';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
@@ -17,6 +17,25 @@ const AVAILABLE_FEATURES = [
     { id: 'calendar', label: 'Calendar', description: 'Visual calendar view of shoots and schedules' },
     { id: 'crew_management', label: 'User & Crew Management', description: 'Manage users, roles and permissions' },
     { id: 'leaves', label: 'Leaves Management', description: 'Apply for leaves and manage approvals' },
+];
+
+// How much sign-off a returned item needs before it can go out again.
+const RETURN_VERIFICATION_OPTIONS: { id: ReturnVerificationMode; label: string; description: string }[] = [
+    {
+        id: 'none',
+        label: 'No verification needed',
+        description: 'A return reporting no issue goes straight back into circulation.',
+    },
+    {
+        id: 'checkout',
+        label: 'Next person verifies at checkout',
+        description: 'Returns wait until whoever picks the item up next confirms its condition. Two people check it, no manager needed.',
+    },
+    {
+        id: 'manager',
+        label: 'Manager must verify',
+        description: 'Returns wait for a manager. Nobody else can clear them, including at checkout.',
+    },
 ];
 
 export default function DepartmentManagementPage() {
@@ -33,7 +52,10 @@ export default function DepartmentManagementPage() {
     const [formData, setFormData] = useState({
         name: '',
         slug: '',
-        enabledFeatures: [] as string[]
+        enabledFeatures: [] as string[],
+        // Whole settings blob is carried through the form: the API replaces the column
+        // outright, so dropping unknown keys here would wipe things like uiLabels.
+        settings: {} as DepartmentSettings
     });
 
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,7 +98,7 @@ export default function DepartmentManagementPage() {
                 name: formData.name,
                 slug: formData.slug.toLowerCase().replace(/\s+/g, '-'),
                 enabledFeatures: formData.enabledFeatures,
-                settings: {}
+                settings: formData.settings
             };
 
             const res = await fetch('/api/admin/departments', {
@@ -89,7 +111,7 @@ export default function DepartmentManagementPage() {
                 showToast('Department created successfully', 'success');
                 setShowAddModal(false);
                 fetchDepartments();
-                setFormData({ name: '', slug: '', enabledFeatures: [] });
+                setFormData({ name: '', slug: '', enabledFeatures: [], settings: {} });
             } else {
                 const error = await res.json();
                 showToast(error.error || 'Failed to create department', 'error');
@@ -115,7 +137,8 @@ export default function DepartmentManagementPage() {
                     id: selectedDept.id,
                     name: formData.name,
                     slug: formData.slug,
-                    enabledFeatures: formData.enabledFeatures
+                    enabledFeatures: formData.enabledFeatures,
+                    settings: formData.settings
                 })
             });
 
@@ -141,7 +164,8 @@ export default function DepartmentManagementPage() {
         setFormData({
             name: dept.name,
             slug: dept.slug,
-            enabledFeatures: (dept.enabledFeatures || []).filter(f => AVAILABLE_FEATURES.some(af => af.id === f))
+            enabledFeatures: (dept.enabledFeatures || []).filter(f => AVAILABLE_FEATURES.some(af => af.id === f)),
+            settings: dept.settings || {}
         });
         setShowEditModal(true);
     };
@@ -165,7 +189,7 @@ export default function DepartmentManagementPage() {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage organization units and feature access</p>
                 </div>
                 <Button onClick={() => {
-                    setFormData({ name: '', slug: '', enabledFeatures: ['inventory', 'shoots'] }); // Default features
+                    setFormData({ name: '', slug: '', enabledFeatures: ['inventory', 'shoots'], settings: {} }); // Default features
                     setShowAddModal(true);
                 }}>
                     Add Department
@@ -211,7 +235,7 @@ export default function DepartmentManagementPage() {
 
             {/* Add/Edit Modal */}
             {(showAddModal || showEditModal) && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay-in p-4">
                     <Card className="w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">
                             {showAddModal ? 'Create Department' : 'Edit Department'}
@@ -251,6 +275,33 @@ export default function DepartmentManagementPage() {
                                             </div>
                                         </label>
                                     ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Returns verification</label>
+                                <div className="space-y-2 border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
+                                    {RETURN_VERIFICATION_OPTIONS.map(option => (
+                                        <label key={option.id} className="flex items-start gap-3 cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded transition-colors">
+                                            <input
+                                                type="radio"
+                                                name="returnVerification"
+                                                className="w-4 h-4 mt-0.5 border-gray-300 text-primary focus:ring-primary"
+                                                checked={(formData.settings.returnVerification ?? 'none') === option.id}
+                                                onChange={() => setFormData(prev => ({
+                                                    ...prev,
+                                                    settings: { ...prev.settings, returnVerification: option.id }
+                                                }))}
+                                            />
+                                            <div>
+                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 block">{option.label}</span>
+                                                <span className="text-xs text-gray-500 dark:text-gray-400">{option.description}</span>
+                                            </div>
+                                        </label>
+                                    ))}
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 px-2 pt-1 border-t border-gray-200 dark:border-gray-700">
+                                        Whichever option is chosen, an item returned with a reported issue always waits for a manager.
+                                    </p>
                                 </div>
                             </div>
 

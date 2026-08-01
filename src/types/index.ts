@@ -29,12 +29,33 @@ export type EquipmentIssueSeverity =
     | 'USABLE_WITH_WARNING'
     | 'NOT_USABLE';
 
+/**
+ * Who has to sign off on a returned item before it can go out again.
+ * - `none`     : a return reporting no issue goes straight back to AVAILABLE.
+ * - `checkout` : returns wait, and the next person to check the item out confirms its
+ *                condition — two different people, but no manager needed.
+ * - `manager`  : returns wait for a manager; nobody else can clear them.
+ * Items returned WITH a reported issue always wait for a manager, whatever the mode.
+ */
+export type ReturnVerificationMode = 'none' | 'checkout' | 'manager';
+
+// Per-department configuration blob (jsonb `departments.settings`). Known keys are
+// declared for type-safety; the index signature keeps it a free-form store so existing
+// readers (department-labels.ts) and future keys keep working without a type change.
+export interface DepartmentSettings {
+    /** Defaults to 'none' when absent. */
+    returnVerification?: ReturnVerificationMode;
+    uiLabels?: Record<string, string>;
+    labels?: Record<string, string>;
+    [key: string]: unknown;
+}
+
 export interface Department {
     id: string;
     name: string;
     slug: string;
     enabledFeatures: string[]; // List of enabled feature slugs
-    settings: Record<string, any>;
+    settings: DepartmentSettings;
 }
 
 export interface User {
@@ -133,6 +154,8 @@ export interface ManualTransactionItem {
     returnedBy?: string;
     verifiedAt?: string;
     verifiedBy?: string;
+    /** Cleared by the returner rather than a manager (no issue reported). */
+    selfVerified?: boolean;
 }
 
 export interface ReturnRecord {

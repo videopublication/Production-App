@@ -23,9 +23,14 @@ import {
     conditionToIssueType,
     getIssueSummary,
     isIssueCondition,
-    issueToCondition,
-    withActiveIssue
+    issueToCondition
 } from '@/lib/equipment-issues';
+import {
+    getReturnVerificationMode,
+    resolveEquipmentReturn,
+    resolveManualItemReturn
+} from '@/lib/return-verification';
+import { areManualItemsComplete } from '@/lib/transaction-manual-items';
 import { Equipment, ManualTransactionItem, Shoot, Transaction } from '@/types';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
@@ -466,6 +471,36 @@ export default function ReturnsPage() {
         }
 
         try {
+            // How much sign-off this department wants: 'none' releases clean returns
+            // immediately, 'checkout' holds them for the next person picking them up, and
+            // 'manager' holds everything. A reported issue always waits for a manager.
+            const mode = getReturnVerificationMode(department);
+            const now = new Date().toISOString();
+            const actor = { id: user?.id, name: user?.name };
+
+            // Manual items live JSON-encoded inside transactions.notes, and every write does a
+            // read-modify-write of that column — so each transaction gets exactly ONE update,
+            // with its condition records, manual items and closure merged together.
+            type TxnPatch = {
+                transaction: Transaction;
+                conditions: Record<string, Condition>;
+                manualItems?: ManualTransactionItem[];
+                manualLogDetails?: string;
+                manualLogCount?: number;
+            };
+            const txnPatches = new Map<string, TxnPatch>();
+            const patchFor = (txn: Transaction): TxnPatch => {
+                const existing = txnPatches.get(txn.id);
+                if (existing) return existing;
+                const created: TxnPatch = { transaction: txn, conditions: {} };
+                txnPatches.set(txn.id, created);
+                return created;
+            };
+
+            let releasedCount = 0;
+            let pendingCount = 0;
+
+            // ---- Inventory items ----------------------------------------------------
             await Promise.all(selectedItems.map(async (id) => {
                 const item = allItems.find(i => i.id === id);
                 const condition = conditions[id] || 'OK';
@@ -481,25 +516,25 @@ export default function ReturnsPage() {
                     issueNote,
                 });
 
-                await updateEquipment({
-                    id,
-                    updates: {
-                        status: 'PENDING_VERIFICATION',
-                        condition: issueCondition,
-                        ...(item && isIssueCondition(condition) && issueNote ? {
-                            metadata: withActiveIssue(item.metadata, {
-                                condition: issueCondition,
-                                issueType,
-                                severity: issueSeverity,
-                                note: issueNote,
-                                source: 'return',
-                                reportedAt: new Date().toISOString(),
-                                reportedBy: user?.id,
-                                reporterName: user?.name,
-                            })
-                        } : {})
-                    }
+                const disposition = resolveEquipmentReturn({
+                    item,
+                    report: { condition, issueType, issueSeverity, issueNote },
+                    mode,
+                    actor,
+                    now,
                 });
+
+                await updateEquipment({ id, updates: disposition.updates });
+
+                if (disposition.selfReleased) releasedCount++;
+                else pendingCount++;
+
+                // Recording the condition is what lets the transaction close — it is the key
+                // every closing path checks. Managers record it themselves on verification.
+                if (disposition.conditionToRecord) {
+                    const txn = relevantTransactions.find(t => t.items.includes(id));
+                    if (txn) patchFor(txn).conditions[id] = disposition.conditionToRecord;
+                }
 
                 if (user) {
                     await storage.addLog({
@@ -507,13 +542,17 @@ export default function ReturnsPage() {
                         action: 'RETURN',
                         entityId: id,
                         userId: user.id,
-                        timestamp: new Date().toISOString(),
-                        details: `Submitted ${formatEquipmentReturnLabel(item, id)} for return (${conditionDetail})`,
+                        timestamp: now,
+                        details: disposition.selfReleased
+                            ? `Returned ${formatEquipmentReturnLabel(item, id)} (${conditionDetail}) - released without manager verification, no issue reported`
+                            : `Submitted ${formatEquipmentReturnLabel(item, id)} for return (${conditionDetail})`,
+                        newValue: { selfVerified: disposition.selfReleased },
                         departmentId: activeDepartmentId || undefined
                     });
                 }
             }));
 
+            // ---- Manual items -------------------------------------------------------
             const selectedManualByTxn = new Map<string, typeof manualReturnItems>();
             selectedManualItems.forEach(key => {
                 const row = manualReturnItems.find(manual => manual.key === key);
@@ -522,9 +561,12 @@ export default function ReturnsPage() {
                 selectedManualByTxn.set(row.transaction.id, [...existing, row]);
             });
 
-            await Promise.all(Array.from(selectedManualByTxn.entries()).map(async ([transactionId, rows]) => {
+            selectedManualByTxn.forEach((rows) => {
                 const txn = rows[0].transaction;
-                const updatedManualItems = (txn.manualItems || []).map(manualItem => {
+                const patch = patchFor(txn);
+                const logParts: string[] = [];
+
+                patch.manualItems = (txn.manualItems || []).map(manualItem => {
                     const row = rows.find(candidate => candidate.item.id === manualItem.id);
                     if (!row) return manualItem;
 
@@ -533,89 +575,129 @@ export default function ReturnsPage() {
                     const issueType = issueTypes[key] || conditionToIssueType(condition);
                     const issueSeverity = issueSeverities[key] || conditionToIssueSeverity(condition);
                     const issueNote = issueNotes[key]?.trim();
+                    const issueCondition = isIssueCondition(condition) ? issueToCondition(issueType, issueSeverity) : 'OK';
 
-                    return {
-                        ...manualItem,
-                        status: 'PENDING_VERIFICATION' as const,
-                        returnedQuantity: manualItem.quantity,
-                        returnCondition: isIssueCondition(condition) ? issueToCondition(issueType, issueSeverity) : 'OK',
-                        issueType: isIssueCondition(condition) ? issueType : undefined,
-                        issueSeverity: isIssueCondition(condition) ? issueSeverity : undefined,
-                        returnNote: issueNote || undefined,
-                        returnedAt: new Date().toISOString(),
-                        returnedBy: user?.id,
-                    };
+                    const resolved = resolveManualItemReturn({
+                        manualItem,
+                        report: { condition, issueType, issueSeverity, issueNote },
+                        mode,
+                        actor,
+                        now,
+                    });
+
+                    if (resolved.selfVerified) releasedCount++;
+                    else pendingCount++;
+
+                    logParts.push(`${formatManualReturnLabel(row)} (${formatReturnConditionForLog({
+                        condition,
+                        issueCondition,
+                        issueType,
+                        issueSeverity,
+                        issueNote,
+                    })})`);
+
+                    return resolved;
                 });
 
-                await storage.updateTransaction(transactionId, { manualItems: updatedManualItems });
+                patch.manualLogDetails = logParts.join('; ');
+                patch.manualLogCount = rows.length;
+            });
 
-                if (user) {
-                    const itemDetails = rows.map(row => {
-                        const key = row.key;
-                        const condition = conditions[key] || 'OK';
-                        const issueType = issueTypes[key] || conditionToIssueType(condition);
-                        const issueSeverity = issueSeverities[key] || conditionToIssueSeverity(condition);
-                        const issueNote = issueNotes[key]?.trim();
-                        const issueCondition = isIssueCondition(condition) ? issueToCondition(issueType, issueSeverity) : 'OK';
-                        const conditionDetail = formatReturnConditionForLog({
-                            condition,
-                            issueCondition,
-                            issueType,
-                            issueSeverity,
-                            issueNote,
-                        });
+            // ---- One write per transaction ------------------------------------------
+            for (const [transactionId, patch] of txnPatches) {
+                const txn = patch.transaction;
+                const nextConditions = { ...(txn.postReturnConditions || {}), ...patch.conditions };
+                const nextManualItems = patch.manualItems ?? txn.manualItems;
 
-                        return `${formatManualReturnLabel(row)} (${conditionDetail})`;
-                    }).join('; ');
+                const complete =
+                    txn.items.every(itemId => nextConditions[itemId] !== undefined) &&
+                    areManualItemsComplete(nextManualItems);
 
+                const updates: Partial<Transaction> = {};
+                if (Object.keys(patch.conditions).length > 0) updates.postReturnConditions = nextConditions;
+                if (patch.manualItems) updates.manualItems = patch.manualItems;
+                if (complete) {
+                    updates.status = 'CLOSED';
+                    updates.timestampIn = now;
+                }
+
+                if (Object.keys(updates).length > 0) {
+                    await storage.updateTransaction(transactionId, updates);
+                }
+
+                if (user && patch.manualLogDetails) {
+                    const count = patch.manualLogCount || 0;
                     await storage.addLog({
                         id: crypto.randomUUID(),
                         action: 'RETURN',
                         entityId: transactionId,
                         userId: user.id,
-                        timestamp: new Date().toISOString(),
-                        details: `Submitted ${rows.length} manual item${rows.length === 1 ? '' : 's'} for return verification: ${itemDetails}`,
+                        timestamp: now,
+                        details: `Returned ${count} manual item${count === 1 ? '' : 's'}: ${patch.manualLogDetails}`,
                         departmentId: activeDepartmentId || undefined
                     });
                 }
-            }));
 
-            // Send Push Notification to Managers
-            try {
-                const allUsers = await storage.getUsers(activeDepartmentId);
-                const managers = allUsers.filter(u =>
-                    u.status === 'ACTIVE' &&
-                    ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role)
-                );
-
-                if (managers.length > 0) {
-                    const title = 'Items Returned';
-                    const message = `${user?.name || 'A user'} has returned ${selectedCount} items. Verification required.`;
-
-                    const pushPromise = sendPushNotification({
-                        userIds: managers.map(manager => manager.id),
-                        title,
-                        message,
-                        link: '/verification'
-                    }).catch(e => console.error('Failed to send return push notifications', e));
-
-                    const dbPromises = managers.map(manager =>
-                        storage.addNotification({
-                            userId: manager.id,
-                            title,
-                            message,
-                            link: '/verification',
-                            departmentId: activeDepartmentId
-                        })
-                    );
-
-                    await Promise.all([pushPromise, ...dbPromises]);
+                if (user && complete) {
+                    await storage.addLog({
+                        id: crypto.randomUUID(),
+                        action: 'EDIT',
+                        entityId: transactionId,
+                        userId: user.id,
+                        timestamp: now,
+                        details: 'Transaction automatically closed - all items returned and verified',
+                        departmentId: activeDepartmentId || undefined
+                    });
                 }
-            } catch (e) {
-                console.error("Failed to send notifications", e);
             }
 
-            showToast('Items submitted for verification', 'success');
+            // ---- Notify managers only when something actually needs verification ----
+            if (pendingCount > 0) {
+                try {
+                    const allUsers = await storage.getUsers(activeDepartmentId);
+                    const managers = allUsers.filter(u =>
+                        u.status === 'ACTIVE' &&
+                        ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(u.role)
+                    );
+
+                    if (managers.length > 0) {
+                        const title = 'Items Need Verification';
+                        const message = `${user?.name || 'A user'} returned ${selectedCount} item${selectedCount === 1 ? '' : 's'} - ${pendingCount} need${pendingCount === 1 ? 's' : ''} verification.`;
+
+                        const pushPromise = sendPushNotification({
+                            userIds: managers.map(manager => manager.id),
+                            title,
+                            message,
+                            link: '/verification'
+                        }).catch(e => console.error('Failed to send return push notifications', e));
+
+                        const dbPromises = managers.map(manager =>
+                            storage.addNotification({
+                                userId: manager.id,
+                                title,
+                                message,
+                                link: '/verification',
+                                departmentId: activeDepartmentId
+                            })
+                        );
+
+                        await Promise.all([pushPromise, ...dbPromises]);
+                    }
+                } catch (e) {
+                    console.error("Failed to send notifications", e);
+                }
+            }
+
+            const releasedText = releasedCount > 0
+                ? `${releasedCount} item${releasedCount === 1 ? '' : 's'} returned`
+                : '';
+            const pendingText = pendingCount > 0
+                ? `${pendingCount} sent for verification`
+                : '';
+            showToast(
+                [releasedText, pendingText].filter(Boolean).join(', ') || 'Items returned',
+                'success'
+            );
             setSelectedItems([]);
             setSelectedManualItems([]);
             setConditions({});
