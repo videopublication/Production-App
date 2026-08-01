@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Equipment, ManualTransactionItem, Transaction, User, Shoot } from '@/types';
+import { Equipment, EquipmentIssueSeverity, EquipmentIssueType, ManualTransactionItem, Transaction, User, Shoot } from '@/types';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card } from '@/components/Card';
@@ -20,7 +20,15 @@ import { useShoots } from '@/hooks/useShoots';
 import { useCheckOut } from '@/hooks/useTransactions';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
-import { getEquipmentIssue, getIssueSummary, isEquipmentIssueBlocking } from '@/lib/equipment-issues';
+import {
+    EQUIPMENT_ISSUE_SEVERITY_OPTIONS,
+    EQUIPMENT_ISSUE_TYPE_OPTIONS,
+    getEquipmentIssue,
+    getIssueSummary,
+    isEquipmentIssueBlocking,
+} from '@/lib/equipment-issues';
+import { useVerifyReturnedItem } from '@/hooks/useVerifyReturn';
+import { canVerifyAtCheckout, describeReportedIssue } from '@/lib/return-verification';
 import { getRoleLabel } from '@/lib/roles';
 import { getDepartmentLabels } from '@/lib/department-labels';
 
@@ -61,6 +69,10 @@ export default function CheckoutPage() {
     const { user, isLoading: authLoading } = useAuth();
     const { department } = useDepartment();
     const labels = getDepartmentLabels(department);
+    const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
+    // False when the department requires a manager to verify returns — otherwise anyone
+    // checking out could clear the queue themselves and the requirement would be hollow.
+    const allowCheckoutVerification = canVerifyAtCheckout(department);
     const { showToast } = useToast();
     const confirm = useConfirm();
 
@@ -87,6 +99,76 @@ export default function CheckoutPage() {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<Equipment[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+
+    // "Verify before checkout": an item awaiting verification that the person checking out
+    // has picked. They confirm its condition here instead of waiting for a manager.
+    const [verifyTarget, setVerifyTarget] = useState<Equipment | null>(null);
+    const [verifyReportingIssue, setVerifyReportingIssue] = useState(false);
+    const [verifyIssueType, setVerifyIssueType] = useState<EquipmentIssueType>('PHYSICAL_DAMAGE');
+    const [verifyIssueSeverity, setVerifyIssueSeverity] = useState<EquipmentIssueSeverity>('USABLE_WITH_WARNING');
+    const [verifyIssueNote, setVerifyIssueNote] = useState('');
+    const { mutateAsync: verifyReturnedItem, isPending: isVerifying } = useVerifyReturnedItem();
+
+    const closeVerifyDialog = () => {
+        setVerifyTarget(null);
+        setVerifyReportingIssue(false);
+        setVerifyIssueNote('');
+        setVerifyIssueType('PHYSICAL_DAMAGE');
+        setVerifyIssueSeverity('USABLE_WITH_WARNING');
+    };
+
+    // Confirmed usable → verify it, settle the transaction it came back from, add to cart.
+    const handleVerifyAndAdd = async () => {
+        const item = verifyTarget;
+        if (!item || isVerifying) return;
+        try {
+            await verifyReturnedItem({
+                item,
+                outcome: 'OK',
+                actor: { id: user?.id, name: user?.name },
+                departmentId: activeDepartmentId,
+            });
+
+            const newCart = [...cartRef.current, { ...item, status: 'AVAILABLE' as const }];
+            cartRef.current = newCart;
+            setCart(newCart);
+
+            showToast(`Verified and added "${item.name}"`, 'success');
+            playSuccessSound();
+            closeVerifyDialog();
+        } catch (error) {
+            console.error('Verify at checkout failed:', error);
+            showToast('Could not verify this item. Please try again.', 'error');
+        }
+    };
+
+    // Found a problem → record it and leave the item for a manager. Not handed over.
+    const handleVerifyReportIssue = async () => {
+        const item = verifyTarget;
+        if (!item || isVerifying) return;
+        if (!verifyIssueNote.trim()) {
+            showToast('Describe the issue so a manager can act on it', 'warning');
+            return;
+        }
+        try {
+            await verifyReturnedItem({
+                item,
+                outcome: 'ISSUE',
+                actor: { id: user?.id, name: user?.name },
+                departmentId: activeDepartmentId,
+                issue: {
+                    issueType: verifyIssueType,
+                    issueSeverity: verifyIssueSeverity,
+                    note: verifyIssueNote.trim(),
+                },
+            });
+            showToast(`Issue reported. "${item.name}" is held for a manager.`, 'success');
+            closeVerifyDialog();
+        } catch (error) {
+            console.error('Reporting issue at checkout failed:', error);
+            showToast('Could not report the issue. Please try again.', 'error');
+        }
+    };
 
     // Handle back button closing scanner
     useEffect(() => {
@@ -386,17 +468,6 @@ export default function CheckoutPage() {
             return;
         }
 
-        if (item.status !== 'AVAILABLE') {
-            const statusMessage = item.status === 'CHECKED_OUT'
-                ? 'checked out'
-                : item.status === 'MAINTENANCE'
-                    ? 'under maintenance'
-                    : item.status.toLowerCase().replace('_', ' ');
-            showToast(`Item "${item.name}" is currently ${statusMessage}`, 'error');
-            playErrorSound();
-            return;
-        }
-
         const issue = getEquipmentIssue(item);
         if (isEquipmentIssueBlocking(item)) {
             showToast(`Cannot checkout "${item.name}": ${getIssueSummary(issue!)}.`, 'error');
@@ -407,6 +478,26 @@ export default function CheckoutPage() {
         if (cartRef.current.find(i => i.id === item.id)) {
             const serialInfo = item.serialNumber ? ` (S/N: ${item.serialNumber})` : '';
             showToast(`Item "${item.name}"${serialInfo} is already in cart`, 'info');
+            playErrorSound();
+            return;
+        }
+
+        // Awaiting verification: rather than dead-ending the person checking out, let them
+        // inspect it themselves — confirming the condition here IS the verification. Unless
+        // the department requires a manager, in which case only a manager can clear it.
+        if (item.status === 'PENDING_VERIFICATION' && allowCheckoutVerification) {
+            setVerifyTarget(item);
+            playSuccessSound();
+            return;
+        }
+
+        if (item.status !== 'AVAILABLE') {
+            const statusMessage = item.status === 'CHECKED_OUT'
+                ? 'checked out'
+                : item.status === 'MAINTENANCE'
+                    ? 'under maintenance'
+                    : item.status.toLowerCase().replace('_', ' ');
+            showToast(`Item "${item.name}" is currently ${statusMessage}`, 'error');
             playErrorSound();
             return;
         }
@@ -431,7 +522,11 @@ export default function CheckoutPage() {
             const normalizedQuery = normalize(query);
             const basicQuery = query.toLowerCase().trim();
             const filtered = equipmentList.filter(item =>
-                item.status === 'AVAILABLE' &&
+                // Items awaiting verification are offered too — picking one prompts the
+                // person checking out to confirm its condition, which verifies it. Not
+                // offered at all when the department requires a manager to do it.
+                (item.status === 'AVAILABLE' || (allowCheckoutVerification && item.status === 'PENDING_VERIFICATION')) &&
+                !isEquipmentIssueBlocking(item) &&
                 !currentCart.find(c => c.id === item.id) &&
                 (
                     item.name.toLowerCase().includes(basicQuery) ||
@@ -904,6 +999,9 @@ export default function CheckoutPage() {
                                                             {item.metadata?.size && (
                                                                 <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
                                                             )}
+                                                            {item.status === 'PENDING_VERIFICATION' && (
+                                                                <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 whitespace-nowrap">CHECK</span>
+                                                            )}
                                                         </div>
                                                         {(item.metadata?.brand || item.metadata?.model) && (
                                                             <p className="text-[11px] font-medium text-foreground/70 truncate">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
@@ -1317,6 +1415,9 @@ export default function CheckoutPage() {
                                                 {item.metadata?.size && (
                                                     <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
                                                 )}
+                                                {item.status === 'PENDING_VERIFICATION' && (
+                                                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 whitespace-nowrap">CHECK</span>
+                                                )}
                                             </div>
                                             {(item.metadata?.brand || item.metadata?.model) && (
                                                 <p className="text-xs font-medium text-foreground/70 truncate">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
@@ -1427,6 +1528,144 @@ export default function CheckoutPage() {
                                 <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                             ) : 'Confirm Checkout'}
                         </button>
+                    </div>
+                </div>
+            )}
+            {/* Verify before checkout — the person picking the item up confirms its
+                condition, which is what clears it. No manager needed for the normal case. */}
+            {verifyTarget && (
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+                    <div className="w-full sm:max-w-md bg-card rounded-t-3xl sm:rounded-3xl border border-border shadow-2xl max-h-[92vh] overflow-y-auto">
+                        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3">
+                            <div className="min-w-0">
+                                <h3 className="text-[17px] font-bold text-foreground">Check before you take it</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    This item is waiting to be checked. Confirm its condition and it&apos;s yours.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeVerifyDialog}
+                                disabled={isVerifying}
+                                className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40"
+                                aria-label="Cancel"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="px-5 pb-5 space-y-4">
+                            <div className="rounded-xl bg-muted/40 p-3">
+                                <p className="font-semibold text-[15px] text-foreground">{verifyTarget.name}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {[verifyTarget.metadata?.brand, verifyTarget.metadata?.model].filter(Boolean).join(' · ') || verifyTarget.category}
+                                    {' • '}{verifyTarget.barcode}
+                                </p>
+                                {(() => {
+                                    const returner = allUsers.find(u => u.id === verifyTarget.assignedTo);
+                                    return returner ? (
+                                        <p className="text-xs text-muted-foreground mt-1.5">
+                                            Last held by <span className="font-medium text-foreground">{returner.name}</span>
+                                        </p>
+                                    ) : null;
+                                })()}
+                            </div>
+
+                            {(() => {
+                                const reported = describeReportedIssue(verifyTarget);
+                                return reported ? (
+                                    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 dark:border-amber-800 dark:bg-amber-950/30">
+                                        <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">Reported on return</p>
+                                        <p className="text-[13px] font-medium text-amber-900 dark:text-amber-100 mt-0.5">{reported}</p>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl bg-muted/40 px-3 py-2.5">
+                                        <p className="text-[13px] text-muted-foreground">
+                                            No issue was reported when this was returned.
+                                        </p>
+                                    </div>
+                                );
+                            })()}
+
+                            {!verifyReportingIssue ? (
+                                <div className="space-y-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleVerifyAndAdd}
+                                        disabled={isVerifying}
+                                        className="h-12 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
+                                    >
+                                        {isVerifying
+                                            ? 'Verifying…'
+                                            : describeReportedIssue(verifyTarget)
+                                                ? 'Still usable — verify & add'
+                                                : 'Looks OK — verify & add'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVerifyReportingIssue(true)}
+                                        disabled={isVerifying}
+                                        className="h-11 w-full rounded-xl border border-border text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                                    >
+                                        Report a problem instead
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                                        What&apos;s wrong with it?
+                                    </p>
+                                    <select
+                                        value={verifyIssueType}
+                                        onChange={e => setVerifyIssueType(e.target.value as EquipmentIssueType)}
+                                        className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                                    >
+                                        {EQUIPMENT_ISSUE_TYPE_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={verifyIssueSeverity}
+                                        onChange={e => setVerifyIssueSeverity(e.target.value as EquipmentIssueSeverity)}
+                                        className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                                    >
+                                        {EQUIPMENT_ISSUE_SEVERITY_OPTIONS.map(option => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                    <textarea
+                                        value={verifyIssueNote}
+                                        onChange={e => setVerifyIssueNote(e.target.value)}
+                                        placeholder="Describe the problem so a manager can act on it"
+                                        rows={3}
+                                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                    <p className="text-[12px] text-muted-foreground">
+                                        This item stays held for a manager and won&apos;t be added to your checkout.
+                                    </p>
+                                    <div className="flex items-center gap-2 pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setVerifyReportingIssue(false)}
+                                            disabled={isVerifying}
+                                            className="h-11 rounded-xl px-4 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                                        >
+                                            Back
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleVerifyReportIssue}
+                                            disabled={isVerifying || !verifyIssueNote.trim()}
+                                            className="h-11 flex-1 rounded-xl bg-orange-500 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            {isVerifying ? 'Reporting…' : 'Report problem'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
