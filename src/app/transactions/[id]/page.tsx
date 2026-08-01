@@ -664,7 +664,7 @@ export default function TransactionDetailPage() {
 
             const allItemsReturned = transaction?.items.every(id =>
                 updatedConditions[id] !== undefined
-            );
+            ) && areManualItemsComplete(transaction?.manualItems);
 
             const txnUpdates: Partial<Transaction> = {
                 postReturnConditions: updatedConditions

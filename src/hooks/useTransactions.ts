@@ -3,6 +3,7 @@ import { storage } from '@/lib/storage';
 import { Equipment, ManualTransactionItem, Transaction } from '@/types';
 import { generateTransactionId } from '@/lib/id';
 import { sendPushNotification } from '@/lib/push-notifications';
+import { areManualItemsComplete } from '@/lib/transaction-manual-items';
 
 export const TRANSACTION_KEYS = {
     all: ['transactions'] as const,
@@ -236,10 +237,12 @@ export function useCheckIn() {
                     const currentConditions = txn.postReturnConditions || {};
                     const updatedConditions = { ...currentConditions, [item.id]: condition || item.condition };
 
-                    // Check if all items in this transaction are now accounted for in postReturnConditions
+                    // Check if all items in this transaction are now accounted for in
+                    // postReturnConditions — and that no returnable manual item is still out,
+                    // otherwise the transaction would close with items unaccounted for.
                     const allReturned = txn.items.every(id =>
                         updatedConditions[id] !== undefined
-                    );
+                    ) && areManualItemsComplete(txn.manualItems);
 
                     const updates: Partial<Transaction> = {
                         postReturnConditions: updatedConditions

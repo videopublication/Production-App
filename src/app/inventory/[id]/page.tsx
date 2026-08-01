@@ -15,6 +15,7 @@ import { useEquipmentItem, useUpdateEquipment } from '@/hooks/useEquipment';
 import { useUsers } from '@/hooks/useUsers';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
+import { areManualItemsComplete } from '@/lib/transaction-manual-items';
 import {
     EQUIPMENT_ISSUE_SEVERITY_LABELS,
     EQUIPMENT_ISSUE_SEVERITY_OPTIONS,
@@ -500,7 +501,8 @@ export default function ItemDetailsPage() {
                     ...(activeTransaction.postReturnConditions || {}),
                     [item.id]: 'OK',
                 };
-                const allReturned = activeTransaction.items.every(id => updatedConditions[id] !== undefined);
+                const allReturned = activeTransaction.items.every(id => updatedConditions[id] !== undefined)
+                    && areManualItemsComplete(activeTransaction.manualItems);
                 const txnUpdates: Partial<Transaction> = { postReturnConditions: updatedConditions };
                 if (allReturned) {
                     txnUpdates.status = 'CLOSED';
@@ -593,7 +595,8 @@ export default function ItemDetailsPage() {
                     ...(activeTransaction.postReturnConditions || {}),
                     [item.id]: cleanVerify ? 'OK' : nextCondition,
                 };
-                const allReturned = activeTransaction.items.every(id => updatedConditions[id] !== undefined);
+                const allReturned = activeTransaction.items.every(id => updatedConditions[id] !== undefined)
+                    && areManualItemsComplete(activeTransaction.manualItems);
                 const txnUpdates: Partial<Transaction> = { postReturnConditions: updatedConditions };
                 if (allReturned) {
                     txnUpdates.status = 'CLOSED';
