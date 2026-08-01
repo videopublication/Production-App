@@ -907,7 +907,7 @@ export default function UserManagementPage() {
 
             {/* Add User Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay-in">
                     <Card className="w-full max-w-md p-6 m-4 dark:bg-[#1c1c1e]">
                         <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Add New User</h2>
                         <form onSubmit={handleAddUser} className="space-y-4">
@@ -969,7 +969,7 @@ export default function UserManagementPage() {
 
             {/* Merge Users Modal */}
             {showMergeModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay-in">
                     <Card className="w-full max-w-md p-6 m-4 dark:bg-[#1c1c1e]">
                         <div className="mb-4">
                             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Merge Duplicate Account</h2>
@@ -1013,7 +1013,7 @@ export default function UserManagementPage() {
 
             {/* Change Password Modal */}
             {showPasswordModal && selectedUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay-in">
                     <Card className="w-full max-w-md p-6 m-4 dark:bg-[#1c1c1e]">
                         <h2 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Change Password</h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -1032,7 +1032,7 @@ export default function UserManagementPage() {
 
             {/* Bulk Import Modal */}
             {showBulkImportModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay-in">
                     <Card className="w-full max-w-md p-6 m-4 dark:bg-[#1c1c1e]">
                         <div className="flex justify-between items-start mb-4">
                             <div>

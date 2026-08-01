@@ -386,6 +386,23 @@ body {
   background: rgba(0, 0, 0, 0.25);
 }
 
+/* Dialogs must feel instant. The page-entry fade (--animate-fade-in) runs for 0.6s,
+   which on something the user just clicked to open reads as "the modal is loading
+   slowly" rather than as a transition. */
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-overlay-in {
+  animation: modal-overlay-in 0.14s ease-out forwards;
+}
+
 /* Hide scrollbars but keep scrolling (horizontal tab/pill strips). */
 .scrollbar-hide {
   -ms-overflow-style: none;   /* IE/Edge */

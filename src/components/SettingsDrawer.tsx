@@ -10,6 +10,10 @@ interface SettingsDrawerProps {
     onClose: () => void;
 }
 
+// Short tween rather than a spring: the spring's settle time made the drawer read as
+// slow to open. Shared by the panel and its backdrop so they move as one.
+const DRAWER_TRANSITION = { type: 'tween', duration: 0.18, ease: [0.32, 0.72, 0, 1] } as const;
+
 export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose }) => {
     const {
         theme, setTheme,
@@ -36,8 +40,11 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        transition={DRAWER_TRANSITION}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9999]"
+                        // No backdrop-blur: a viewport-sized backdrop-filter is re-computed
+                        // every frame while the panel slides, which is what made this drag.
+                        className="fixed inset-0 bg-black/30 z-[9999]"
                     />
 
                     {/* Drawer */}
@@ -45,7 +52,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ isOpen, onClose 
                         initial={{ x: '100%' }}
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
-                        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                        transition={DRAWER_TRANSITION}
+                        // Own compositor layer so the slide is a pure GPU transform.
+                        style={{ willChange: 'transform' }}
                         className="fixed top-0 right-0 h-full w-[320px] bg-white dark:bg-[#1c1c1e] shadow-2xl z-[9999] flex flex-col border-l border-gray-200 dark:border-gray-800"
                         onClick={(e) => e.stopPropagation()}
                     >
