@@ -13,6 +13,7 @@ export const EQUIPMENT_CATEGORY_PREFIXES: Record<string, string> = {
     Storage: 'STR',
     Grip: 'GRIP',
     Drone: 'DRN',
+    Card: 'CARD',
 };
 
 export const guessEquipmentModelCode = (name: string): string => {
