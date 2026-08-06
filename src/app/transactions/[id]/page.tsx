@@ -195,7 +195,7 @@ export default function TransactionDetailPage() {
     const canForceReturnItems = ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
     useEffect(() => {
-        if (user && !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
+        if (user && !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'].includes(user.role)) {
             router.push('/');
             return;
         }
@@ -822,7 +822,7 @@ export default function TransactionDetailPage() {
         .map(getAddableItem)
         .filter((item): item is Equipment => Boolean(item));
 
-    if (!user || !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
+    if (!user || !['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'].includes(user.role)) {
         return null;
     }
 
@@ -979,6 +979,80 @@ export default function TransactionDetailPage() {
         } catch (error) {
             console.error('Error updating manual item:', error);
             showToast('Failed to update manual item', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    /**
+     * Settle a manual item straight from the transaction, the way force-return works for
+     * equipment.
+     *
+     * Without this a transaction whose only outstanding thing is a manual item can never
+     * close: force-return acts on equipment rows, and Mark Closed is gated on
+     * areManualItemsComplete, which an OUT item fails. The item's only other route to
+     * RETURNED is crew return then manager verification — so if the crew never files it, the
+     * transaction stays open forever and deleting the item was the only escape.
+     */
+    const handleForceReturnManualItem = async (item: ManualTransactionItem, outcome: 'RETURNED' | 'MISSING') => {
+        if (!transaction || !user || !canForceReturnItems || saving) return;
+
+        const isConfirmed = await confirm({
+            title: outcome === 'RETURNED' ? `Mark "${item.name}" returned?` : `Mark "${item.name}" missing?`,
+            message: outcome === 'RETURNED'
+                ? 'Records it as back without waiting for the crew to file a return.'
+                : 'Records it as not coming back. The transaction can then close.',
+            confirmLabel: outcome === 'RETURNED' ? 'Mark returned' : 'Mark missing',
+            variant: outcome === 'MISSING' ? 'danger' : 'primary',
+        });
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            const now = new Date().toISOString();
+            const updatedManualItems = (transaction.manualItems || []).map(candidate =>
+                candidate.id === item.id
+                    ? {
+                        ...candidate,
+                        status: outcome,
+                        returnedQuantity: candidate.quantity,
+                        returnedAt: candidate.returnedAt || now,
+                        returnedBy: candidate.returnedBy || user.id,
+                        verifiedAt: now,
+                        verifiedBy: user.id,
+                    }
+                    : candidate
+            );
+
+            // Same closing rule as everywhere else: every equipment item recorded, and no
+            // returnable manual item left outstanding.
+            const inventoryComplete = transaction.items.every(
+                itemId => transaction.postReturnConditions?.[itemId] !== undefined
+            );
+            const complete = inventoryComplete && areManualItemsComplete(updatedManualItems);
+
+            const updates: Partial<Transaction> = { manualItems: updatedManualItems };
+            if (complete) {
+                updates.status = 'CLOSED';
+                updates.timestampIn = now;
+            }
+            await storage.updateTransaction(transaction.id, updates);
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'VERIFY',
+                entityId: transaction.id,
+                userId: user.id,
+                timestamp: now,
+                details: `Manual item "${item.name}" marked ${outcome.toLowerCase()} from the transaction${complete ? ' - transaction closed' : ''}`,
+                departmentId: effectiveDeptId || transaction.departmentId,
+            });
+
+            await loadData(true);
+            showToast(complete ? 'Item settled. Transaction closed.' : `Item marked ${outcome.toLowerCase()}`, 'success');
+        } catch (error) {
+            console.error('Error settling manual item:', error);
+            showToast('Failed to update the item', 'error');
         } finally {
             setSaving(false);
         }
@@ -1887,7 +1961,7 @@ export default function TransactionDetailPage() {
                                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${statusClass}`}>
                                             {statusLabel}
                                         </span>
-                                        {canEditManualItems && (
+                                        {(canEditManualItems || canForceReturnItems) && (
                                             <div className="flex items-center gap-2">
                                                 {isEditingManualItem ? (
                                                     <>
@@ -1913,25 +1987,55 @@ export default function TransactionDetailPage() {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openManualItemEditor(item)}
-                                                            disabled={saving}
-                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveManualItem(item)}
-                                                            disabled={saving}
-                                                            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                                            title="Remove manual item"
-                                                        >
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                            </svg>
-                                                        </button>
+                                                        {/* Settle it here — otherwise a transaction whose only
+                                                            loose end is a manual item can never be closed. */}
+                                                        {canForceReturnItems && item.returnRequired
+                                                            && (item.status === 'OUT' || item.status === 'PENDING_VERIFICATION') && (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleForceReturnManualItem(item, 'RETURNED')}
+                                                                    disabled={saving}
+                                                                    className="flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                                                    </svg>
+                                                                    Return
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleForceReturnManualItem(item, 'MISSING')}
+                                                                    disabled={saving}
+                                                                    className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                                                                >
+                                                                    Missing
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {canEditManualItems && (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openManualItemEditor(item)}
+                                                                    disabled={saving}
+                                                                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleRemoveManualItem(item)}
+                                                                    disabled={saving}
+                                                                    className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                                    title="Remove manual item"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                    </svg>
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </>
                                                 )}
                                             </div>
