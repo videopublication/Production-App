@@ -7,6 +7,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
 import { Department, DepartmentSettings, ReturnVerificationMode } from '@/types';
+import { CONFIGURABLE_TOOL_ROLES, INVENTORY_TOOLS } from '@/lib/tool-permissions';
 import { storage } from '@/lib/storage';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
@@ -17,6 +18,7 @@ const AVAILABLE_FEATURES = [
     { id: 'calendar', label: 'Calendar', description: 'Visual calendar view of shoots and schedules' },
     { id: 'crew_management', label: 'User & Crew Management', description: 'Manage users, roles and permissions' },
     { id: 'leaves', label: 'Leaves Management', description: 'Apply for leaves and manage approvals' },
+    { id: 'data_assets', label: 'Data Team Assets', description: 'Cards, drives and other items custodied by a data team, plus their shoot report' },
 ];
 
 // How much sign-off a returned item needs before it can go out again.
@@ -303,6 +305,66 @@ export default function DepartmentManagementPage() {
                                         Whichever option is chosen, an item returned with a reported issue always waits for a manager.
                                     </p>
                                 </div>
+                            </div>
+
+                            {/* Which bulk inventory tools each role gets. These act on many items
+                                at once, so how much a manager is trusted with varies by team.
+                                Tools left untouched fall back to the built-in defaults. */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Inventory tools</label>
+                                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                                    <div className="flex items-center gap-2 bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                                        <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Tool</span>
+                                        {CONFIGURABLE_TOOL_ROLES.map(({ role, label }) => (
+                                            <span key={role} className="w-14 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                                {label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    {INVENTORY_TOOLS.map(tool => {
+                                        const configured = formData.settings.toolPermissions?.[tool.id];
+                                        const current = configured ?? tool.defaultRoles;
+                                        return (
+                                            <div key={tool.id} className="flex items-center gap-2 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                                                        {tool.label}
+                                                        {!configured && <span className="ml-1.5 text-[10px] font-normal text-gray-400">default</span>}
+                                                    </span>
+                                                    <span className="block text-xs text-gray-500 dark:text-gray-400">{tool.description}</span>
+                                                </span>
+                                                {CONFIGURABLE_TOOL_ROLES.map(({ role, label }) => (
+                                                    <span key={role} className="flex w-14 justify-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            aria-label={`${label} can use ${tool.label}`}
+                                                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                                            checked={current.includes(role)}
+                                                            onChange={e => {
+                                                                const next = e.target.checked
+                                                                    ? Array.from(new Set([...current, role]))
+                                                                    : current.filter(r => r !== role);
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    settings: {
+                                                                        ...prev.settings,
+                                                                        toolPermissions: {
+                                                                            ...(prev.settings.toolPermissions || {}),
+                                                                            [tool.id]: next,
+                                                                        },
+                                                                    },
+                                                                }));
+                                                            }}
+                                                        />
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                    Super Admins always keep every tool, so a mistake here can&apos;t lock you out.
+                                </p>
                             </div>
 
                             <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">

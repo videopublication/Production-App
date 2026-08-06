@@ -20,6 +20,7 @@ import {
     withActiveIssue,
 } from '@/lib/equipment-issues';
 import { areManualItemsComplete, decodeTransactionNotes } from '@/lib/transaction-manual-items';
+import { canManageItem, isCard } from '@/lib/data-assets';
 import { itemDetailLine } from '@/components/ItemIdentity';
 
 type SortField = 'item' | 'project' | 'user' | 'date';
@@ -90,6 +91,8 @@ export default function VerificationPage() {
     const [sortField, setSortField] = useState<SortField>('item');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
+    const viewerRole = user?.role;
+
     const loadItems = React.useCallback(async () => {
         // Removed setIsLoading(true) to allow seamless updates
         try {
@@ -98,7 +101,12 @@ export default function VerificationPage() {
             const usersList = await storage.getUsers(effectiveDeptId);
             const shootsList = await storage.getShoots(effectiveDeptId);
 
-            setPendingItems(items.filter(i => i.status === 'PENDING_VERIFICATION'));
+            // Custodian-scoped queue: the data team clear their own items (a returned card
+            // needs its footage copied off and the card wiped), equipment managers clear the
+            // gear, and admins see everything.
+            setPendingItems(items.filter(i =>
+                i.status === 'PENDING_VERIFICATION' && canManageItem({ role: viewerRole }, i)
+            ));
             setTransactions(txns);
             setUsers(usersList);
             setShoots(shootsList);
@@ -107,7 +115,7 @@ export default function VerificationPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [effectiveDeptId]);
+    }, [effectiveDeptId, viewerRole]);
 
     useEffect(() => {
         if (authLoading) return;
@@ -117,7 +125,7 @@ export default function VerificationPage() {
             return;
         }
 
-        if (!['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+        if (!['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'DATA_MANAGER'].includes(user.role)) {
             router.replace('/');
             return;
         }
@@ -251,6 +259,9 @@ export default function VerificationPage() {
     }, [pendingItems, sortField, sortDirection, getItemTransaction, getUserName, compareByName]);
 
     const pendingManualItems = useMemo<PendingManualItem[]>(() => {
+        // Manual items are part of the gear flow and carry no custodian, so the data team
+        // isn't asked to clear them.
+        if (viewerRole === 'DATA_MANAGER') return [];
         return transactions
             .filter(txn => txn.status === 'OPEN')
             .flatMap(txn => (txn.manualItems || [])
@@ -258,7 +269,7 @@ export default function VerificationPage() {
                 .map(item => ({ transaction: txn, item, key: `${txn.id}:${item.id}` }))
             )
             .sort((a, b) => a.item.name.localeCompare(b.item.name, undefined, { sensitivity: 'base', numeric: true }));
-    }, [transactions]);
+    }, [transactions, viewerRole]);
 
     const verificationGroups = useMemo<VerificationGroup[]>(() => {
         const groups: Record<string, VerificationGroup> = {};
@@ -740,9 +751,15 @@ export default function VerificationPage() {
                         </span>
                     </div>
 
-                    <div className="pt-2 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between">
+                    <div className="pt-2 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between gap-2">
                         <span className="font-mono text-[10px] text-gray-400 dark:text-gray-500">{item.barcode}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatDate(item.lastActivity)}</span>
+                        {isCard(item) ? (
+                            <span className="shrink-0 rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                                Awaiting data copy
+                            </span>
+                        ) : (
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatDate(item.lastActivity)}</span>
+                        )}
                     </div>
 
                     {activeIssue && (
@@ -873,7 +890,11 @@ export default function VerificationPage() {
                 <div className="flex items-end justify-between">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Verification</h1>
-                        <p className="text-[15px] text-gray-500 dark:text-gray-400 font-medium mt-1">Review recently returned equipment</p>
+                        <p className="text-[15px] text-gray-500 dark:text-gray-400 font-medium mt-1">
+                            {viewerRole === 'DATA_MANAGER'
+                                ? 'Copy the data off, wipe the item, then release it'
+                                : 'Review recently returned equipment'}
+                        </p>
                     </div>
 
                     {/* View Toggle */}

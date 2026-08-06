@@ -6,7 +6,7 @@ import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { motion, LayoutGroup } from 'framer-motion';
-type UserRole = 'CREW' | 'MANAGER' | 'ADMIN' | 'SUPER_ADMIN' | 'FINANCE_MANAGER';
+type UserRole = 'CREW' | 'MANAGER' | 'ADMIN' | 'SUPER_ADMIN' | 'FINANCE_MANAGER' | 'DATA_MANAGER';
 
 // Define all available quick actions with role-based access
 const ALL_QUICK_ACTIONS = [
@@ -171,6 +171,9 @@ const getDefaultActionsForRole = (role: UserRole): string[] => {
             return ['checkout', 'returns', 'verify', 'inventory', 'history', 'calendar', 'add-item', 'shoots', 'users', 'departments', 'notify', 'leaves'];
         case 'FINANCE_MANAGER':
             return ['inventory', 'shoots', 'history', 'calendar', 'leaves'];
+        case 'DATA_MANAGER':
+            // The data team lend and verify their own items; they never run shoots.
+            return ['checkout', 'returns', 'verify', 'inventory', 'add-item', 'history', 'leaves'];
         default:
             return ['checkout', 'returns', 'inventory', 'calendar', 'leaves'];
     }

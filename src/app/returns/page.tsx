@@ -31,7 +31,8 @@ import {
     resolveManualItemReturn
 } from '@/lib/return-verification';
 import { areManualItemsComplete } from '@/lib/transaction-manual-items';
-import { Equipment, ManualTransactionItem, Shoot, Transaction } from '@/types';
+import { isCard, isDataAsset } from '@/lib/data-assets';
+import { Equipment, ManualTransactionItem, Shoot, Transaction, TransactionDataReport } from '@/types';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -125,7 +126,7 @@ export default function ReturnsPage() {
     const { data: allTransactions = [] } = useTransactions();
     const { data: allAssignments = [] } = useAssignments();
     const { data: allShoots = [], isLoading: isShootsLoading } = useShoots();
-    const { department } = useDepartment();
+    const { department, hasFeature } = useDepartment();
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     const relevantTransactions = React.useMemo(() => {
@@ -253,6 +254,42 @@ export default function ReturnsPage() {
                 return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
             });
     }, [checkedOutItems, manualReturnItems, relevantTransactions, allShoots]);
+
+    // ---- Gear / Data split ----------------------------------------------------
+    // The data team's items come back on their own tab: they always wait for the data team
+    // (footage has to be copied off and the card wiped), and returning a card asks the one
+    // question the app can't derive — whether the Zoom recorder was actually used.
+    const showDataTab = hasFeature('data_assets') && checkedOutItems.some(isDataAsset);
+    const [returnTab, setReturnTab] = useState<'GEAR' | 'DATA'>('GEAR');
+    const activeTab = showDataTab ? returnTab : 'GEAR';
+
+    const visibleGroups = React.useMemo<ReturnGroup[]>(() => {
+        if (!showDataTab) return returnGroups;
+        return returnGroups
+            .map(group => ({
+                ...group,
+                items: group.items.filter(item => (activeTab === 'DATA' ? isDataAsset(item) : !isDataAsset(item))),
+                // Manual items are part of the gear flow and carry no custodian.
+                manualItems: activeTab === 'DATA' ? [] : group.manualItems,
+            }))
+            .filter(group => group.items.length > 0 || group.manualItems.length > 0);
+    }, [returnGroups, activeTab, showDataTab]);
+
+    // Which transactions have a card in this return, and therefore need the Zoom answer.
+    const [zoomAnswers, setZoomAnswers] = useState<Record<string, boolean>>({});
+    const cardTransactions = React.useMemo(() => {
+        const map = new Map<string, string>(); // transactionId -> label
+        selectedItems.forEach(id => {
+            const item = allItems.find(i => i.id === id);
+            if (!item || !isCard(item)) return;
+            const txn = relevantTransactions.find(t => t.items.includes(id));
+            if (!txn) return;
+            const shoot = txn.shootId ? allShoots.find((s: Shoot) => s.id === txn.shootId) : undefined;
+            map.set(txn.id, shoot?.title || txn.project || txn.id);
+        });
+        return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
+    }, [selectedItems, allItems, relevantTransactions, allShoots]);
+    const missingZoomAnswer = cardTransactions.some(t => zoomAnswers[t.id] === undefined);
 
     useEffect(() => {
         if (authLoading) return;
@@ -470,6 +507,13 @@ export default function ReturnsPage() {
             return;
         }
 
+        // The data team's report needs this and can't derive it, so it's mandatory —
+        // the whole point of replacing the form is that the answer is never blank.
+        if (missingZoomAnswer) {
+            showToast('Answer whether the Zoom recorder was used', 'warning');
+            return;
+        }
+
         try {
             // How much sign-off this department wants: 'none' releases clean returns
             // immediately, 'checkout' holds them for the next person picking them up, and
@@ -487,6 +531,7 @@ export default function ReturnsPage() {
                 manualItems?: ManualTransactionItem[];
                 manualLogDetails?: string;
                 manualLogCount?: number;
+                dataReport?: TransactionDataReport;
             };
             const txnPatches = new Map<string, TxnPatch>();
             const patchFor = (txn: Transaction): TxnPatch => {
@@ -603,6 +648,20 @@ export default function ReturnsPage() {
                 patch.manualLogCount = rows.length;
             });
 
+            // ---- Zoom recorder answer ------------------------------------------------
+            // Cards go to the data team's queue rather than being released, so their
+            // transaction may have no patch yet — create one so the answer is still saved.
+            cardTransactions.forEach(({ id }) => {
+                const txn = relevantTransactions.find(t => t.id === id);
+                if (!txn) return;
+                patchFor(txn).dataReport = {
+                    ...(txn.dataReport || {}),
+                    zoomRecorderUsed: zoomAnswers[id],
+                    answeredAt: now,
+                    answeredBy: user?.id,
+                };
+            });
+
             // ---- One write per transaction ------------------------------------------
             for (const [transactionId, patch] of txnPatches) {
                 const txn = patch.transaction;
@@ -616,6 +675,7 @@ export default function ReturnsPage() {
                 const updates: Partial<Transaction> = {};
                 if (Object.keys(patch.conditions).length > 0) updates.postReturnConditions = nextConditions;
                 if (patch.manualItems) updates.manualItems = patch.manualItems;
+                if (patch.dataReport) updates.dataReport = patch.dataReport;
                 if (complete) {
                     updates.status = 'CLOSED';
                     updates.timestampIn = now;
@@ -704,6 +764,7 @@ export default function ReturnsPage() {
             setIssueTypes({});
             setIssueSeverities({});
             setIssueNotes({});
+            setZoomAnswers({});
         } catch (error) {
             console.error('Submit return failed:', error);
             showToast('Failed to return items. Please check your connection and try again.', 'error');
@@ -920,11 +981,11 @@ export default function ReturnsPage() {
                     )}
                     <Button
                         onClick={handleSubmitReturn}
-                        disabled={selectedCount === 0 || !isOnline}
+                        disabled={selectedCount === 0 || !isOnline || missingZoomAnswer}
                         className="w-full sm:w-auto"
                         size="sm"
                     >
-                        {!isOnline ? 'Offline' : `Return Selected (${selectedCount})`}
+                        {!isOnline ? 'Offline' : missingZoomAnswer ? 'Answer Zoom question' : `Return Selected (${selectedCount})`}
                     </Button>
                 </div>
             </div>
@@ -940,13 +1001,81 @@ export default function ReturnsPage() {
                 </div>
             )}
 
+            {/* Gear vs the data team's items. Their returns behave differently (always held
+                for the data team) and ask an extra question, so they get their own tab. */}
+            {showDataTab && (
+                <div className="flex gap-1.5">
+                    {([
+                        { id: 'GEAR', label: 'Gear' },
+                        { id: 'DATA', label: 'Cards & Data' },
+                    ] as const).map(tab => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setReturnTab(tab.id)}
+                            className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${activeTab === tab.id
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-secondary/60 text-foreground hover:bg-secondary'
+                                }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* The one thing the app can't work out for itself. Required before submitting. */}
+            {cardTransactions.length > 0 && (
+                <div className="rounded-2xl border border-cyan-300 bg-cyan-50 p-4 dark:border-cyan-900/60 dark:bg-cyan-950/25">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-800 dark:text-cyan-300">
+                        Needed for the data team
+                    </p>
+                    <div className="mt-2 space-y-3">
+                        {cardTransactions.map(txn => (
+                            <div key={txn.id}>
+                                <p className="text-sm font-semibold text-foreground">
+                                    Was the Zoom recorder used on {txn.label}?
+                                </p>
+                                <div className="mt-1.5 flex gap-2">
+                                    {([
+                                        { value: true, label: 'Yes' },
+                                        { value: false, label: 'No' },
+                                    ] as const).map(option => (
+                                        <button
+                                            key={option.label}
+                                            type="button"
+                                            onClick={() => setZoomAnswers(prev => ({ ...prev, [txn.id]: option.value }))}
+                                            className={`h-9 min-w-[72px] rounded-xl px-4 text-sm font-bold transition-colors ${zoomAnswers[txn.id] === option.value
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'bg-background text-muted-foreground hover:text-foreground'
+                                                }`}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {missingZoomAnswer && (
+                        <p className="mt-2 text-[12px] font-medium text-cyan-800 dark:text-cyan-300">
+                            Answer this to submit the return.
+                        </p>
+                    )}
+                </div>
+            )}
+
             {checkedOutItems.length === 0 && manualReturnItems.length === 0 ? (
                 <div className="text-center py-10 sm:py-12 border-2 border-dashed border-border rounded-lg text-muted-foreground text-sm">
                     You have no items to return.
                 </div>
+            ) : visibleGroups.length === 0 ? (
+                <div className="text-center py-10 sm:py-12 border-2 border-dashed border-border rounded-lg text-muted-foreground text-sm">
+                    {activeTab === 'DATA' ? 'No cards or data items to return.' : 'No gear to return.'}
+                </div>
             ) : (
                 <div className="space-y-3">
-                    {returnGroups.map(group => {
+                    {visibleGroups.map(group => {
                         const isExpanded = !collapsedGroups.has(group.key);
                         const totalItems = group.items.length + group.manualItems.length;
                         const groupSelected = group.items.every(item => selectedItems.includes(item.id))

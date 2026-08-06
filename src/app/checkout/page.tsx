@@ -29,6 +29,7 @@ import {
 } from '@/lib/equipment-issues';
 import { useVerifyReturnedItem } from '@/hooks/useVerifyReturn';
 import { canVerifyAtCheckout, describeReportedIssue } from '@/lib/return-verification';
+import { itemDetailLineForRow } from '@/components/ItemIdentity';
 import { getRoleLabel } from '@/lib/roles';
 import { getDepartmentLabels } from '@/lib/department-labels';
 
@@ -70,9 +71,6 @@ export default function CheckoutPage() {
     const { department } = useDepartment();
     const labels = getDepartmentLabels(department);
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
-    // False when the department requires a manager to verify returns — otherwise anyone
-    // checking out could clear the queue themselves and the requirement would be hollow.
-    const allowCheckoutVerification = canVerifyAtCheckout(department);
     const { showToast } = useToast();
     const confirm = useConfirm();
 
@@ -266,7 +264,7 @@ export default function CheckoutPage() {
         }
 
         const normalizedRole = user.role?.toUpperCase().replace(' ', '_') || 'CREW';
-        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(normalizedRole)) {
+        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'].includes(normalizedRole)) {
             router.replace('/login');
         }
     }, [user, router, authLoading]);
@@ -483,9 +481,10 @@ export default function CheckoutPage() {
         }
 
         // Awaiting verification: rather than dead-ending the person checking out, let them
-        // inspect it themselves — confirming the condition here IS the verification. Unless
-        // the department requires a manager, in which case only a manager can clear it.
-        if (item.status === 'PENDING_VERIFICATION' && allowCheckoutVerification) {
+        // inspect it themselves — confirming the condition here IS the verification. Not
+        // when the department requires a manager, and never for a data asset (its footage
+        // may not have been copied off yet, so only the data team can release it).
+        if (item.status === 'PENDING_VERIFICATION' && canVerifyAtCheckout(department, item)) {
             setVerifyTarget(item);
             playSuccessSound();
             return;
@@ -524,8 +523,8 @@ export default function CheckoutPage() {
             const filtered = equipmentList.filter(item =>
                 // Items awaiting verification are offered too — picking one prompts the
                 // person checking out to confirm its condition, which verifies it. Not
-                // offered at all when the department requires a manager to do it.
-                (item.status === 'AVAILABLE' || (allowCheckoutVerification && item.status === 'PENDING_VERIFICATION')) &&
+                // offered when a manager is required, nor for data assets.
+                (item.status === 'AVAILABLE' || (item.status === 'PENDING_VERIFICATION' && canVerifyAtCheckout(department, item))) &&
                 !isEquipmentIssueBlocking(item) &&
                 !currentCart.find(c => c.id === item.id) &&
                 (
@@ -1003,8 +1002,8 @@ export default function CheckoutPage() {
                                                                 <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 whitespace-nowrap">CHECK</span>
                                                             )}
                                                         </div>
-                                                        {(item.metadata?.brand || item.metadata?.model) && (
-                                                            <p className="text-[11px] font-medium text-foreground/70 truncate">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                                        {itemDetailLineForRow(item) && (
+                                                            <p className="text-[11px] font-medium text-foreground/70 truncate">{itemDetailLineForRow(item)}</p>
                                                         )}
                                                         <IssueWarning item={item} compact />
                                                         <p className="text-xs text-muted-foreground truncate">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>
@@ -1055,8 +1054,8 @@ export default function CheckoutPage() {
                                                             <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
                                                         )}
                                                     </div>
-                                                    {(item.metadata?.brand || item.metadata?.model) && (
-                                                        <p className="text-[11px] font-medium text-foreground/70 truncate leading-tight mt-0.5">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                                    {itemDetailLineForRow(item) && (
+                                                        <p className="text-[11px] font-medium text-foreground/70 truncate leading-tight mt-0.5">{itemDetailLineForRow(item)}</p>
                                                     )}
                                                     <IssueWarning item={item} compact />
                                                     <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>
@@ -1419,8 +1418,8 @@ export default function CheckoutPage() {
                                                     <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 whitespace-nowrap">CHECK</span>
                                                 )}
                                             </div>
-                                            {(item.metadata?.brand || item.metadata?.model) && (
-                                                <p className="text-xs font-medium text-foreground/70 truncate">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                            {itemDetailLineForRow(item) && (
+                                                <p className="text-xs font-medium text-foreground/70 truncate">{itemDetailLineForRow(item)}</p>
                                             )}
                                             <IssueWarning item={item} compact />
                                             <p className="text-sm text-muted-foreground truncate">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>
@@ -1465,8 +1464,8 @@ export default function CheckoutPage() {
                                                     <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">{item.metadata.size}</span>
                                                 )}
                                             </div>
-                                            {(item.metadata?.brand || item.metadata?.model) && (
-                                                <p className="text-[11px] font-medium text-foreground/70 truncate leading-tight mt-0.5">{[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}</p>
+                                            {itemDetailLineForRow(item) && (
+                                                <p className="text-[11px] font-medium text-foreground/70 truncate leading-tight mt-0.5">{itemDetailLineForRow(item)}</p>
                                             )}
                                             <IssueWarning item={item} compact />
                                             <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? item.barcode : `${item.category} • ${item.barcode}`}</p>

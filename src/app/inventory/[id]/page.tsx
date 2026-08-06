@@ -16,6 +16,9 @@ import { useUsers } from '@/hooks/useUsers';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
 import { areManualItemsComplete } from '@/lib/transaction-manual-items';
+import { canManageItem } from '@/lib/data-assets';
+import { nameCovers } from '@/lib/equipment-naming';
+import { itemDetailLineForRow } from '@/components/ItemIdentity';
 import {
     EQUIPMENT_ISSUE_SEVERITY_LABELS,
     EQUIPMENT_ISSUE_SEVERITY_OPTIONS,
@@ -195,8 +198,9 @@ export default function ItemDetailsPage() {
         loadHistory();
     }, [item, effectiveDeptId]);
 
-    // Check if current user can manage equipment
-    const canManage = user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
+    // Custodian-aware: equipment managers manage the gear, the data team manage their own
+    // items (cards, drives, readers), and admins manage everything.
+    const canManage = canManageItem(user, item);
     // Admin can edit everything including critical fields
     const canEditEverything = user && ['ADMIN', 'SUPER_ADMIN'].includes(user.role);
     const activeIssue = getEquipmentIssue(item);
@@ -431,7 +435,7 @@ export default function ItemDetailsPage() {
                 id: crypto.randomUUID(),
                 action: 'EDIT',
                 entityId: item.id,
-                userId: user.id,
+                userId: user?.id,
                 timestamp: new Date().toISOString(),
                 details: `Updated item "${item.name}" (${item.barcode}). Status: ${editStatus}, Condition: ${nextCondition}${editedIssue ? `, Issue: ${getIssueSummary(editedIssue)} - ${editedIssue.note}` : ''}`,
                 departmentId: item.departmentId || effectiveDeptId || undefined
@@ -734,18 +738,21 @@ export default function ItemDetailsPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">
+                                    {/* The title is the one thing this page must show in full, so it
+                                        wraps rather than truncating. Parts the composed name already
+                                        contains aren't repeated underneath. */}
+                                    <div className="flex items-start gap-2 min-w-0">
+                                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground break-words min-w-0">
                                             {item.name}
                                         </h1>
-                                        {item.metadata?.size && (
-                                            <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">
+                                        {item.metadata?.size && !nameCovers(item, item.metadata.size) && (
+                                            <span className="mt-1 shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap">
                                                 {item.metadata.size}
                                             </span>
                                         )}
                                     </div>
                                     {(() => {
-                                        const detail = [item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ');
+                                        const detail = itemDetailLineForRow(item);
                                         return detail ? (
                                             <p className="text-sm font-medium text-foreground/75 mt-1">{detail}</p>
                                         ) : null;

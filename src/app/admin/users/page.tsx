@@ -517,6 +517,7 @@ export default function UserManagementPage() {
             SUPER_ADMIN: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
             ADMIN: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
             FINANCE_MANAGER: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+            DATA_MANAGER: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300',
             MANAGER: 'bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary',
             CREW: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
         };
@@ -551,6 +552,7 @@ export default function UserManagementPage() {
             SUPER_ADMIN: 'bg-gradient-to-br from-purple-500 to-purple-600 shadow-purple-500/30',
             ADMIN: 'bg-gradient-to-br from-purple-500 to-purple-600 shadow-purple-500/30',
             FINANCE_MANAGER: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30',
+            DATA_MANAGER: 'bg-gradient-to-br from-cyan-500 to-cyan-600 shadow-cyan-500/30',
             MANAGER: 'bg-gradient-to-br from-primary to-primary shadow-primary/',
             CREW: 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/30',
         };
@@ -741,6 +743,7 @@ export default function UserManagementPage() {
                                                         <option value="CREW">Crew</option>
                                                         <option value="MANAGER">Manager</option>
                                                         <option value="FINANCE_MANAGER">Finance Manager</option>
+                                                        <option value="DATA_MANAGER">Data Manager</option>
                                                         <option value="ADMIN">Admin</option>
                                                     </select>
 
@@ -840,6 +843,7 @@ export default function UserManagementPage() {
                                                         <option value="CREW">Crew</option>
                                                         <option value="MANAGER">Manager</option>
                                                         <option value="FINANCE_MANAGER">Finance Manager</option>
+                                                        <option value="DATA_MANAGER">Data Manager</option>
                                                         <option value="ADMIN">Admin</option>
                                                     </select>
 
@@ -927,6 +931,7 @@ export default function UserManagementPage() {
                                     <option value="CREW">Crew</option>
                                     <option value="MANAGER">Manager</option>
                                     <option value="FINANCE_MANAGER">Finance Manager</option>
+                                                        <option value="DATA_MANAGER">Data Manager</option>
                                     <option value="ADMIN">Admin</option>
                                 </select>
                             </div>

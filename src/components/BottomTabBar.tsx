@@ -44,7 +44,7 @@ export const BottomTabBar = () => {
                     <path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
             ),
-            roles: ['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'],
+            roles: ['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'],
             feature: 'inventory',
         },
         {
@@ -60,7 +60,7 @@ export const BottomTabBar = () => {
                     <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
             ),
-            roles: ['ADMIN', 'MANAGER', 'CREW', 'SUPER_ADMIN', 'FINANCE_MANAGER'],
+            roles: ['ADMIN', 'MANAGER', 'CREW', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'],
             feature: 'shoots',
         },
         {
@@ -76,7 +76,7 @@ export const BottomTabBar = () => {
                     <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
             ),
-            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'DATA_MANAGER'],
             feature: 'inventory',
         },
         {
@@ -92,7 +92,7 @@ export const BottomTabBar = () => {
                     <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
             ),
-            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'DATA_MANAGER'],
             feature: 'inventory',
         },
         {
@@ -108,7 +108,7 @@ export const BottomTabBar = () => {
                     <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
             ),
-            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'DATA_MANAGER'],
             feature: 'inventory',
         },
         {
@@ -124,8 +124,24 @@ export const BottomTabBar = () => {
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                 </svg>
             ),
-            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'DATA_MANAGER'],
             feature: 'inventory',
+        },
+        {
+            name: 'Data',
+            path: '/data-assets',
+            icon: (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2 1.5 3 4 3h8c2.5 0 4-1 4-3V7c0-2-1.5-3-4-3H8C5.5 4 4 5 4 7zM9 9h6M9 13h6M9 17h3" />
+                </svg>
+            ),
+            activeIcon: (
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 3h8c2.5 0 4 1 4 4v10c0 3-1.5 4-4 4H8c-2.5 0-4-1-4-4V7c0-3 1.5-4 4-4zm1 5a1 1 0 100 2h6a1 1 0 100-2H9zm0 4a1 1 0 100 2h6a1 1 0 100-2H9zm0 4a1 1 0 100 2h3a1 1 0 100-2H9z" />
+                </svg>
+            ),
+            roles: ['ADMIN', 'SUPER_ADMIN', 'DATA_MANAGER'],
+            feature: 'data_assets',
         },
         {
             name: 'Calendar',
@@ -140,7 +156,7 @@ export const BottomTabBar = () => {
                     <path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
                 </svg>
             ),
-            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'],
+            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'],
             feature: 'calendar',
         },
         {
@@ -156,7 +172,7 @@ export const BottomTabBar = () => {
                     <path fillRule="evenodd" d="M8 5a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-3v1a2 2 0 01-2 2H9a2 2 0 01-2-2V5H8zm3 0a1 1 0 011-1h2a1 1 0 011 1v1a1 1 0 01-1 1h-2a1 1 0 01-1-1V5z" clipRule="evenodd" />
                 </svg>
             ),
-            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'],
+            roles: ['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'],
             feature: 'leaves',
         },
     ];

@@ -23,6 +23,12 @@ import { useTransactions } from '@/hooks/useTransactions';
 import { getEquipmentIssue, getIssueSummary, hasEquipmentIssue } from '@/lib/equipment-issues';
 import { getEquipmentBarcodeBase, getMaxBarcodeNumber } from '@/lib/equipment-barcodes';
 import { isConnectorCategory, buildConnectorName, buildConnectorCode, parseConnectorName, EndGender, ParsedConnector } from '@/lib/connectors';
+import { canManageDataAssets, canManageItem, isDataAsset } from '@/lib/data-assets';
+import { isRenameExcluded, isSafeToRename, proposedEquipmentName, renameLosesDetail } from '@/lib/equipment-naming';
+import { canUseTool, type ToolId } from '@/lib/tool-permissions';
+import { nameCovers } from '@/lib/equipment-naming';
+import { itemDetailLineForRow } from '@/components/ItemIdentity';
+import { useDepartment } from '@/lib/department-context';
 
 // Normalize a category for grouping/matching: trim, collapse whitespace, lowercase.
 const normalizeCat = (c?: string) => (c || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -185,6 +191,13 @@ function InventoryPageContent() {
     const { user, isLoading: authLoading } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
+    const { department, hasFeature } = useDepartment();
+    // One gate for every bulk tool, so which of them a manager gets is a department setting
+    // rather than a role list buried at each button.
+    const can = React.useCallback(
+        (tool: ToolId) => canUseTool(user, tool, department),
+        [user, department]
+    );
 
     // TanStack Query Hooks
     const { data: items = [], isLoading: equipmentLoading, refetch: refresh } = useEquipment();
@@ -487,6 +500,33 @@ function InventoryPageContent() {
         // Run once on mount — after data (React Query cache) has rendered rows.
     }, []);
 
+    // Narrowing the list doesn't move the scroll position, so filtering 500 rows down to 2
+    // leaves you parked in the empty space where the rest of the list used to be. Reset to the
+    // top whenever the filter selection changes — skipping the first run, which would fight
+    // the scroll restore above.
+    const filterSignature = JSON.stringify([statusFilter, categoryFilter, brandFilter, sizeFilter, endFilter]);
+    const lastFilterSignature = React.useRef<string | null>(null);
+    useEffect(() => {
+        if (lastFilterSignature.current === null) {
+            lastFilterSignature.current = filterSignature;
+            return;
+        }
+        if (lastFilterSignature.current === filterSignature) return;
+        lastFilterSignature.current = filterSignature;
+
+        const scroller = document.querySelector('.app-main-scroll');
+        if (!scroller || scroller.scrollTop === 0) return;
+
+        // Instant, not smooth: a smooth scroll animates for ~300ms, and while it runs the
+        // filtered-out rows unmount. The browser's scroll anchoring then adjusts the offset to
+        // keep the remaining content steady, which drags the view back down mid-animation —
+        // the "goes up then comes back" jump. Setting it directly, then once more after the
+        // next paint, lands it regardless of which happens first.
+        scroller.scrollTop = 0;
+        const raf = requestAnimationFrame(() => { scroller.scrollTop = 0; });
+        return () => cancelAnimationFrame(raf);
+    }, [filterSignature]);
+
     // Auto-clear the flash after a moment (own effect keyed on flashBarcode, so the
     // timer survives StrictMode double-invoke of the trigger effects → fade-out works).
     useEffect(() => {
@@ -573,7 +613,10 @@ function InventoryPageContent() {
     };
 
     const filteredItems = useMemo(() => {
-        let result = items;
+        // This page is the GEAR catalogue. The data team's items (cards, drives, laptops,
+        // readers) live on /data-assets instead, so the two teams never wade through each
+        // other's kit. Both still go out through the same checkout.
+        let result = items.filter(item => !isDataAsset(item));
 
         // NOTE: Department filtering is already done at the Supabase query level in useEquipment().
         // No need to re-filter by department here — it would cause items to appear empty
@@ -785,9 +828,19 @@ function InventoryPageContent() {
     const handleBulkDelete = async () => {
         if (selectedItems.size === 0 || isActionLoading) return;
 
+        // Custodian boundary: the data team own their items, equipment managers own the
+        // gear. Anything the user can't manage is left alone rather than failing the batch.
+        const deletable = items.filter(i => selectedItems.has(i.id) && canManageItem(user, i));
+        const skipped = selectedItems.size - deletable.length;
+        if (deletable.length === 0) {
+            showToast("You can't delete the selected items", 'error');
+            return;
+        }
+
         const isConfirmed = await confirm({
-            title: `Delete Selected Item${selectedItems.size !== 1 ? 's' : ''}?`,
-            message: `Are you sure you want to delete ${selectedItems.size} item${selectedItems.size !== 1 ? 's' : ''}? This action cannot be undone.`,
+            title: `Delete Selected Item${deletable.length !== 1 ? 's' : ''}?`,
+            message: `Are you sure you want to delete ${deletable.length} item${deletable.length !== 1 ? 's' : ''}? This action cannot be undone.`
+                + (skipped > 0 ? `\n\n${skipped} item${skipped === 1 ? '' : 's'} will be skipped — they belong to another team.` : ''),
             confirmLabel: 'Delete Forever',
             variant: 'danger'
         });
@@ -796,8 +849,12 @@ function InventoryPageContent() {
 
         setIsActionLoading(true);
         try {
-            await deleteEquipment(Array.from(selectedItems));
-            showToast(`Successfully deleted ${selectedItems.size} items`, 'success');
+            await deleteEquipment(deletable.map(i => i.id));
+            showToast(
+                `Successfully deleted ${deletable.length} item${deletable.length === 1 ? '' : 's'}`
+                + (skipped > 0 ? ` (${skipped} skipped)` : ''),
+                'success'
+            );
             setSelectedItems(new Set());
         } catch (error) {
             console.error('Delete failed:', error);
@@ -807,11 +864,50 @@ function InventoryPageContent() {
         }
     };
 
+    // ---- Bulk custodian tagging ------------------------------------------------
+    // How the initial cards/drives/laptops get moved into the data team's pool, and how
+    // an item moves back. Only the data team and admins can reassign custody.
+    const [custodianApplying, setCustodianApplying] = useState(false);
+    const setSelectedCustodian = async (custodian: 'DATA' | null) => {
+        if (selectedItems.size === 0 || custodianApplying) return;
+        if (!canManageDataAssets(user)) {
+            showToast('Only the data team can change custody', 'error');
+            return;
+        }
+        const targets = items.filter(i => selectedItems.has(i.id));
+        setCustodianApplying(true);
+        let err = false;
+        for (const item of targets) {
+            try {
+                const metadata = { ...(item.metadata || {}) };
+                if (custodian) metadata.custodian = custodian; else delete metadata.custodian;
+                await updateEquipment({ id: item.id, updates: { metadata } });
+                await logEquipmentEdit(item, custodian
+                    ? `Moved "${item.name}" (${item.barcode}) into the data team's items`
+                    : `Moved "${item.name}" (${item.barcode}) back to the gear pool`);
+            } catch (e) {
+                console.error('Custodian update failed:', e);
+                err = true;
+            }
+        }
+        setCustodianApplying(false);
+        showToast(
+            err ? 'Some items could not be updated'
+                : `${targets.length} item${targets.length === 1 ? '' : 's'} ${custodian ? 'moved to the data team' : 'moved back to gear'}`,
+            err ? 'error' : 'success'
+        );
+        setSelectedItems(new Set());
+        refresh();
+    };
+
     // ---- Find & Replace across selected (or filtered) items -------------------
     // Operates on the selection if any, else the whole filtered list.
+    // Custodian boundary applies to every bulk write that runs off this list
+    // (find & replace, barcode regeneration, connector normalisation).
     const frTargets = useMemo(
-        () => (selectedItems.size > 0 ? items.filter(i => selectedItems.has(i.id)) : filteredItems),
-        [selectedItems, items, filteredItems]
+        () => (selectedItems.size > 0 ? items.filter(i => selectedItems.has(i.id)) : filteredItems)
+            .filter(i => canManageItem(user, i)),
+        [selectedItems, items, filteredItems, user]
     );
     const frFieldValue = (item: Equipment, f: 'name' | 'barcode' | 'category' | 'model' | 'size') =>
         (f === 'model' || f === 'size') ? (item.metadata?.[f] || '') : (((item as unknown as Record<string, unknown>)[f] as string) || '');
@@ -893,6 +989,73 @@ function InventoryPageContent() {
     // that base among items NOT being regenerated (collision-safe), then increments
     // per item within the batch.
     const openBarcodeGen = () => setBcOpen(true);
+
+    // ---- Bulk rename: compose names from brand + model + size + category ------
+    // Most items were entered with the name set to just the category ("Battery" in category
+    // "Battery"), which identifies nothing. Scope comes from frTargets — the selected rows, or
+    // the current filtered list — exactly like the other bulk tools, so the category filter
+    // and row checkboxes already on the page are the way to narrow it.
+    const [rnOpen, setRnOpen] = useState(false);
+    const [rnApplying, setRnApplying] = useState(false);
+    const [rnSkipped, setRnSkipped] = useState<Set<string>>(new Set());
+
+    const rnCandidates = useMemo(() => {
+        return frTargets
+            // Connectors build their own names from their ends — never overwrite those.
+            .filter(i => !isRenameExcluded(i))
+            .map(item => ({
+                item,
+                proposed: proposedEquipmentName(item),
+                safe: isSafeToRename(item),
+            }))
+            // Drop no-ops, and drop anything where the existing name already says more than
+            // the proposal would — those are never an improvement.
+            .filter(({ item, proposed }) => proposed
+                && proposed !== item.name.trim()
+                && !renameLosesDetail(item))
+            .sort((a, b) => Number(b.safe) - Number(a.safe)
+                || a.item.name.localeCompare(b.item.name, undefined, { numeric: true }));
+    }, [frTargets]);
+
+    // Safe rewrites start ticked; anything that looks hand-written starts unticked.
+    const rnSelected = useMemo(
+        () => rnCandidates.filter(c => (c.safe ? !rnSkipped.has(c.item.id) : rnSkipped.has(c.item.id))),
+        [rnCandidates, rnSkipped]
+    );
+
+    const openRename = () => {
+        setRnSkipped(new Set());
+        setRnOpen(true);
+    };
+
+    const toggleRenameItem = (id: string) => setRnSkipped(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+
+    const runRename = async () => {
+        if (rnSelected.length === 0) return;
+        setRnApplying(true);
+        let err = false, changed = 0;
+        for (const { item, proposed } of rnSelected) {
+            try {
+                await updateEquipment({ id: item.id, updates: { name: proposed } });
+                await logEquipmentEdit(item, `Renamed "${item.name}" → "${proposed}" (${item.barcode})`);
+                changed++;
+            } catch (e) {
+                console.error('Rename failed:', e);
+                err = true;
+            }
+        }
+        setRnApplying(false);
+        showToast(
+            err ? 'Some items could not be renamed' : `Renamed ${changed} item${changed !== 1 ? 's' : ''}`,
+            err ? 'error' : 'success'
+        );
+        setRnOpen(false);
+        refresh();
+    };
 
     const bcChanges = useMemo(() => {
         const changingIds = new Set(frTargets.map(i => i.id));
@@ -1177,7 +1340,7 @@ function InventoryPageContent() {
                         {(user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                             <div className="flex gap-1 sm:gap-2">
                                 {/* database cleanup button - shows only if needed */}
-                                {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && ['ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
+                                {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && can('fixData') && (
                                     <Button
                                         variant="danger"
                                         size="sm"
@@ -1197,6 +1360,7 @@ function InventoryPageContent() {
                                         <span className="hidden sm:inline ml-2">Bulk Import</span>
                                     </Button>
                                 </Link>
+                                {can('exportCsv') && (
                                 <Button
                                     variant="secondary"
                                     size="sm"
@@ -1221,6 +1385,7 @@ function InventoryPageContent() {
                                     </svg>
                                     <span className="hidden sm:inline ml-2">Export CSV</span>
                                 </Button>
+                                )}
                                 <Link href="/inventory/add">
                                     <Button className="whitespace-nowrap px-2 sm:px-4" size="sm">
                                         <span className="hidden sm:inline">Add Equipment</span>
@@ -1355,7 +1520,20 @@ function InventoryPageContent() {
                         </label>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                        {['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '') && (
+                        {/* Hand gear over to the data team. They move items back from their
+                            own page, since this list no longer shows their items. */}
+                        {hasFeature('data_assets') && canManageDataAssets(user) && can('moveToDataTeam') && selectedItems.size > 0 && !isBulkEditMode && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedCustodian('DATA')}
+                                isLoading={custodianApplying}
+                                className="gap-2"
+                            >
+                                Move to data team
+                            </Button>
+                        )}
+                        {['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'DATA_MANAGER'].includes(user?.role || '') && (
                             <>
                                 {isBulkEditMode ? (
                                     <>
@@ -1375,7 +1553,11 @@ function InventoryPageContent() {
                                             variant="primary"
                                             size="sm"
                                             onClick={async () => {
-                                                const draftIds = Object.keys(editDrafts);
+                                                // Custodian boundary — never write an item this
+                                                // user doesn't own, even if a draft exists for it.
+                                                const draftIds = Object.keys(editDrafts).filter(id =>
+                                                    canManageItem(user, items.find(i => i.id === id))
+                                                );
                                                 if (draftIds.length === 0) {
                                                     setIsBulkEditMode(false);
                                                     return;
@@ -1431,7 +1613,7 @@ function InventoryPageContent() {
                                     </>
                                 ) : (
                                     <>
-                                        {ncConnectorCount > 0 && (
+                                        {ncConnectorCount > 0 && can('normalizeConnectors') && (
                                             <Button
                                                 variant="secondary"
                                                 size="sm"
@@ -1444,45 +1626,65 @@ function InventoryPageContent() {
                                                 Normalize Connectors
                                             </Button>
                                         )}
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={openBarcodeGen}
-                                            className="gap-2"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h1m3 0h1m3 0h1m3 0h1M4 18h1m3 0h1m3 0h1m3 0h1M4 12h16" />
-                                            </svg>
-                                            Generate Barcodes
-                                        </Button>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() => setFrOpen(true)}
-                                            className="gap-2"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 6a5 5 0 015 5m-5 5a5 5 0 100-10 5 5 0 000 10z" />
-                                            </svg>
-                                            Find & Replace
-                                        </Button>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() => setIsBulkEditMode(true)}
-                                            className="gap-2"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg>
-                                            Bulk Edit
-                                        </Button>
+                                        {can('generateBarcodes') && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={openBarcodeGen}
+                                                className="gap-2"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h1m3 0h1m3 0h1m3 0h1M4 18h1m3 0h1m3 0h1m3 0h1M4 12h16" />
+                                                </svg>
+                                                Generate Barcodes
+                                            </Button>
+                                        )}
+                                        {can('fixNames') && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={openRename}
+                                                className="gap-2"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7V5a1 1 0 011-1h14a1 1 0 011 1v2M9 20h6M12 4v16" />
+                                                </svg>
+                                                Fix Names
+                                            </Button>
+                                        )}
+                                        {can('findReplace') && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => setFrOpen(true)}
+                                                className="gap-2"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 6a5 5 0 015 5m-5 5a5 5 0 100-10 5 5 0 000 10z" />
+                                                </svg>
+                                                Find & Replace
+                                            </Button>
+                                        )}
+                                        {can('bulkEdit') && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => setIsBulkEditMode(true)}
+                                                className="gap-2"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                                Bulk Edit
+                                            </Button>
+                                        )}
                                     </>
                                 )}
                             </>
                         )}
                         {selectedItems.size > 0 && (
                             <>
+                                {can('printLabels') && (
                                 <Button
                                     variant="secondary"
                                     size="sm"
@@ -1495,7 +1697,8 @@ function InventoryPageContent() {
                                     </svg>
                                     {isGeneratingQR ? 'Generating…' : 'Print QR / Labels'}
                                 </Button>
-                                {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                )}
+                                {can('bulkDelete') && (
                                     <Button
                                         variant="danger"
                                         size="sm"
@@ -1541,18 +1744,21 @@ function InventoryPageContent() {
                                 <div className={`group bg-white dark:bg-[#1c1c1e] rounded-xl p-4 border transition-all duration-700 cursor-pointer h-full flex flex-col ${item.barcode === flashBarcode ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-inset ring-primary/30' : 'border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-md'}`}>
                                     <div className="flex items-start justify-between gap-2 mb-2">
                                         <div className="flex-1 min-w-0 pr-6">
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                                <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-primary transition-colors">
+                                            {/* Composed names ("Wellborn NP F 970 Big Battery") are long, so wrap
+                                                to two lines rather than truncating mid-word — and don't repeat
+                                                the brand, model or size the name already contains. */}
+                                            <div className="flex items-start gap-1.5 min-w-0">
+                                                <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 break-words min-w-0 group-hover:text-primary transition-colors">
                                                     {item.name}
                                                 </h3>
-                                                {item.metadata?.size && (
+                                                {item.metadata?.size && !nameCovers(item, item.metadata.size) && (
                                                     <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap max-w-[6rem] truncate">
                                                         {item.metadata.size}
                                                     </span>
                                                 )}
                                             </div>
                                             {(() => {
-                                                const detail = [item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ');
+                                                const detail = itemDetailLineForRow(item);
                                                 return detail ? (
                                                     <p className="text-[12px] font-medium text-foreground/75 truncate mt-0.5">{detail}</p>
                                                 ) : null;
@@ -1914,6 +2120,87 @@ function InventoryPageContent() {
                             <Button variant="outline" size="sm" onClick={() => setBcOpen(false)}>Cancel</Button>
                             <Button variant="primary" size="sm" disabled={bcApplying || bcChanges.length === 0} onClick={runBarcodeGen}>
                                 {bcApplying ? 'Applying…' : `Regenerate (${bcChanges.length})`}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Fix Names — compose names from brand + model + size + category, by category */}
+            {rnOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50">
+                    <div className="modal-overlay-in flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]">
+                        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Fix names</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    {selectedItems.size > 0
+                                        ? `${selectedItems.size} selected item${selectedItems.size !== 1 ? 's' : ''}`
+                                        : `all ${frTargets.length} filtered item${frTargets.length !== 1 ? 's' : ''}`}
+                                </p>
+                            </div>
+                            <button onClick={() => setRnOpen(false)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"><X size={18} /></button>
+                        </div>
+
+                        <div className="space-y-3 overflow-y-auto p-5">
+                            <div className="rounded-lg border border-border bg-secondary/30 px-3 py-2 text-[12px] text-muted-foreground">
+                                Rebuilds the name as <span className="font-medium text-foreground">brand · model · size · category</span> —
+                                e.g. <span className="font-medium text-foreground">Sony NP F970 Small Battery</span>. Items named after
+                                their category are ticked for you; anything that looks deliberately named is left
+                                unticked. Connectors are never touched.
+                            </div>
+
+                            <div className="rounded-xl border border-border bg-secondary/30 p-3">
+                                {rnCandidates.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Nothing here needs renaming. Filter or select different items to widen the scope.
+                                    </p>
+                                ) : (
+                                    <>
+                                        <p className="mb-2 text-xs font-semibold text-foreground">
+                                            {rnSelected.length} of {rnCandidates.length} selected
+                                        </p>
+                                        <div className="max-h-64 space-y-1 overflow-y-auto">
+                                            {rnCandidates.map(({ item, proposed, safe }) => {
+                                                const on = safe ? !rnSkipped.has(item.id) : rnSkipped.has(item.id);
+                                                return (
+                                                    <label
+                                                        key={item.id}
+                                                        className="flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1.5 text-[11px] leading-tight hover:bg-muted/60"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={on}
+                                                            onChange={() => toggleRenameItem(item.id)}
+                                                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary"
+                                                        />
+                                                        <span className="min-w-0 flex-1">
+                                                            <span className="block truncate text-red-500 line-through">{item.name}</span>
+                                                            <span className="block truncate font-semibold text-green-600 dark:text-green-400">{proposed}</span>
+                                                        </span>
+                                                        {!safe && (
+                                                            <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                                                custom
+                                                            </span>
+                                                        )}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+                            <Button variant="outline" size="sm" onClick={() => setRnOpen(false)}>Cancel</Button>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                disabled={rnApplying || rnSelected.length === 0}
+                                onClick={runRename}
+                            >
+                                {rnApplying ? 'Renaming…' : `Rename (${rnSelected.length})`}
                             </Button>
                         </div>
                     </div>

@@ -103,11 +103,13 @@ export async function middleware(request: NextRequest) {
             // Admin protection for /admin and /api/admin routes
             // Note: Shoots are now at /shoots and accessible to all roles
             const isAdminRoute = path.startsWith('/admin') || path.startsWith('/api/admin');
+            // Managers maintain the gear catalogue and the data team maintains theirs, so
+            // both need the equipment API even though neither is an admin.
             const isManagerEquipmentApi = path === '/api/admin/equipment';
             const hasAdminAccess =
                 role === 'ADMIN' ||
                 role === 'SUPER_ADMIN' ||
-                (role === 'MANAGER' && isManagerEquipmentApi);
+                ((role === 'MANAGER' || role === 'DATA_MANAGER') && isManagerEquipmentApi);
 
             if (isAdminRoute && !hasAdminAccess) {
                 if (path.startsWith('/api/')) {

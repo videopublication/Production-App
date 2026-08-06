@@ -73,11 +73,17 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
         setIsFetchingJira(true);
         try {
-            // Using raw fetch to prevent Supabase Client from attaching a potentially invalid Auth token
-            // which causes 401s when running locally or if session is stale.
-            // Function is deployed with --no-verify-jwt to allow this.
-            const projectId = 'uysumhukcopbnpmyxabw';
-            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fetch-ticket-details`, {
+            // Raw fetch rather than supabase.functions.invoke(): the client attaches the
+            // session token, which 401s when the session is stale or missing. The function
+            // is deployed with --no-verify-jwt to allow that, which also means the endpoint
+            // is callable by anyone on the internet with our Jira credentials behind it.
+            //
+            // Follows NEXT_PUBLIC_SUPABASE_URL rather than a pinned project ref, so each
+            // environment calls its own function. fetch-ticket-details must therefore be
+            // deployed to every Supabase project this app points at.
+            const functionsBase = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            if (!functionsBase) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured');
+            const response = await fetch(`${functionsBase}/functions/v1/fetch-ticket-details`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ticketId: formData.jiraTicketId.trim() })

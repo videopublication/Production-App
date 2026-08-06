@@ -23,7 +23,7 @@ export default function Home() {
 
     if (!isLoading && user) {
       const normalizedRole = user.role?.toUpperCase().replace(' ', '_') || 'CREW';
-      if (['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(normalizedRole)) {
+      if (['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'].includes(normalizedRole)) {
         router.push('/dashboard');
       } else {
         router.push('/checkout');

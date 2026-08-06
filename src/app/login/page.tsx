@@ -19,7 +19,7 @@ export default function LoginPage() {
     React.useEffect(() => {
         if (user) {
             const normalizedRole = user.role?.toUpperCase().replace(' ', '_') || 'CREW';
-            if (['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(normalizedRole)) {
+            if (['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'].includes(normalizedRole)) {
                 router.replace('/dashboard');
             } else {
                 router.replace('/checkout');

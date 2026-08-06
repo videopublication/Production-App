@@ -314,7 +314,8 @@ class StorageService {
                 additionalUsers: t.additional_users,
                 notes: decodedNotes.notes,
                 manualItems: decodedNotes.manualItems,
-                shootId: t.shoot_id
+                shootId: t.shoot_id,
+                dataReport: t.data_report || undefined
             };
         }) as Transaction[];
     }
@@ -375,7 +376,8 @@ class StorageService {
             additionalUsers: t.additional_users,
             notes: decodedNotes.notes,
             manualItems: decodedNotes.manualItems,
-            shootId: t.shoot_id
+            shootId: t.shoot_id,
+            dataReport: t.data_report || undefined
         } as Transaction;
     }
 
@@ -393,7 +395,8 @@ class StorageService {
             notes: encodeTransactionNotes(transaction.notes, transaction.manualItems),
             system_id: systemId,   // New UUID
             display_id: displayId, // New Readable ID
-            department_id: transaction.departmentId
+            department_id: transaction.departmentId,
+            data_report: transaction.dataReport
         };
 
         const { error } = await supabase
@@ -431,6 +434,11 @@ class StorageService {
 
         if (updates.departmentId !== undefined) { dbUpdates.department_id = updates.departmentId; }
         delete dbUpdates.departmentId;
+
+        // Needs an explicit pair like the rest: the {...updates} spread above would
+        // otherwise send the camelCase key straight to Postgres and error.
+        if (updates.dataReport !== undefined) { dbUpdates.data_report = updates.dataReport; }
+        delete dbUpdates.dataReport;
 
         if (updates.notes !== undefined || updates.manualItems !== undefined) {
             const { data: currentTxn } = await supabase

@@ -11,18 +11,32 @@ import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
 import { getNextEquipmentBarcode } from '@/lib/equipment-barcodes';
 import { isConnectorCategory, buildConnectorName, buildConnectorCode, EndGender } from '@/lib/connectors';
+import { isCardCategory } from '@/lib/data-assets';
+import { buildEquipmentName } from '@/lib/equipment-naming';
 
 export default function AddItemPage() {
     const router = useRouter();
     const { user } = useAuth();
-    const { department } = useDepartment();
+    const { department, hasFeature } = useDepartment();
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     useEffect(() => {
-        if (user && !['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+        if (user && !['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'DATA_MANAGER'].includes(user.role)) {
             router.replace('/inventory');
         }
     }, [user, router]);
+
+    // Pre-tick "data team item" when the add was started from the Data Assets page
+    // (?custodian=data), or when a data manager is adding — everything they add is theirs.
+    // Read from location rather than useSearchParams so this page needs no Suspense boundary.
+    useEffect(() => {
+        if (!user) return;
+        const fromDataPage = typeof window !== 'undefined'
+            && new URLSearchParams(window.location.search).get('custodian') === 'data';
+        if (fromDataPage || user.role === 'DATA_MANAGER') {
+            setFormData(prev => (prev.isDataAsset ? prev : { ...prev, isDataAsset: true }));
+        }
+    }, [user]);
     const [isLoading, setIsLoading] = useState(false);
     const [existingItems, setExistingItems] = useState<Equipment[]>([]);
     const [formData, setFormData] = useState({
@@ -37,6 +51,10 @@ export default function AddItemPage() {
         endAGender: '' as EndGender,
         endB: '',
         endBGender: '' as EndGender,
+        // Data team's own pool (cards, drives, laptops…) rather than the camera gear.
+        // Defaults on for a data manager, since everything they add is theirs.
+        isDataAsset: false,
+        cardNumber: '',
     });
 
     // Load current stock so we can live-preview the auto barcode.
@@ -50,7 +68,15 @@ export default function AddItemPage() {
     // For connectors, Name + Model are derived from the two ends.
     const connName = buildConnectorName(formData.endA, formData.endAGender, formData.endB, formData.endBGender);
     const connCode = buildConnectorCode(formData.endA, formData.endAGender, formData.endB, formData.endBGender);
-    const effectiveName = isConn ? connName : formData.name;
+    // Composed from the parts, so a blank Name field yields "Sony NP F970 Small Battery"
+    // rather than an item called the same thing as its category.
+    const autoName = buildEquipmentName({
+        brand: formData.brand,
+        model: formData.model,
+        size: formData.size,
+        category: formData.category,
+    });
+    const effectiveName = isConn ? connName : (formData.name.trim() || autoName);
     const effectiveModel = isConn ? connCode : formData.model;
 
     // Autocomplete list of connector ends already used.
@@ -77,6 +103,9 @@ export default function AddItemPage() {
 
         if (isLoading) return;
         if (isConn && !connName.trim()) { alert('Add at least one connector end (End A / End B).'); return; }
+        // The Name field is optional because it's composed from brand/model/size/category —
+        // but something has to come out the other end.
+        if (!effectiveName.trim()) { alert('Add a name, or fill in the brand, model and category so one can be built.'); return; }
 
         setIsLoading(true);
 
@@ -109,6 +138,8 @@ export default function AddItemPage() {
                         endB: formData.endB.trim() || undefined,
                         endBGender: formData.endBGender || undefined,
                     } : {}),
+                    ...(formData.isDataAsset ? { custodian: 'DATA' as const } : {}),
+                    ...(formData.cardNumber.trim() ? { cardNumber: formData.cardNumber.trim() } : {}),
                 },
                 departmentId: activeDepartmentId || undefined
             };
@@ -152,13 +183,21 @@ export default function AddItemPage() {
                 <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                         {!isConn && (
-                            <Input
-                                label="Equipment Name"
-                                required
-                                value={formData.name}
-                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                placeholder="e.g. Sony A7S III"
-                            />
+                            <div>
+                                <Input
+                                    label="Equipment Name"
+                                    value={formData.name}
+                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder={autoName || 'e.g. Sony A7S III'}
+                                />
+                                {/* Leave it blank and the name is composed from the fields below,
+                                    so items are born with a consistent name. Typing wins. */}
+                                {autoName && !formData.name.trim() && (
+                                    <p className="mt-1 px-1 text-[11px] text-muted-foreground">
+                                        Will be saved as <span className="font-medium text-foreground">{autoName}</span>
+                                    </p>
+                                )}
+                            </div>
                         )}
                         <Input
                             label="Category"
@@ -200,7 +239,35 @@ export default function AddItemPage() {
                             onChange={e => setFormData({ ...formData, serialNumber: e.target.value })}
                             placeholder="Optional"
                         />
+                        {/* The number the data team call this card by ("card 22"). Falls back
+                            to the barcode's trailing number when left blank. */}
+                        {isCardCategory(formData.category) && (
+                            <Input
+                                label="Card Number"
+                                value={formData.cardNumber}
+                                onChange={e => setFormData({ ...formData, cardNumber: e.target.value })}
+                                placeholder="e.g. 22"
+                            />
+                        )}
                     </div>
+
+                    {hasFeature('data_assets') && (
+                        <label className="flex items-start gap-3 cursor-pointer rounded-xl bg-muted/40 p-3">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                                checked={formData.isDataAsset}
+                                onChange={e => setFormData({ ...formData, isDataAsset: e.target.checked })}
+                            />
+                            <span>
+                                <span className="block text-sm font-medium text-foreground">Data team item</span>
+                                <span className="text-xs text-muted-foreground">
+                                    Cards, drives, laptops and readers the data team custody and lend out.
+                                    Returns of these always wait for the data team to copy the data off.
+                                </span>
+                            </span>
+                        </label>
+                    )}
 
                     {/* Connector / cable ends builder — auto-fills Name + Model code */}
                     {isConn && (

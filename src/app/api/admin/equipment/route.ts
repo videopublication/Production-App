@@ -43,7 +43,7 @@ async function ensureAdmin() {
         .eq('id', user.id)
         .single();
 
-    if (!profile || !['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(profile.role)) return null;
+    if (!profile || !['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'DATA_MANAGER'].includes(profile.role)) return null;
 
     return { userId: user.id, role: profile.role, departmentId: profile.department_id };
 }
@@ -67,6 +67,42 @@ export async function POST(request: Request) {
 
         if (caller.role !== 'SUPER_ADMIN' && !caller.departmentId) {
             return NextResponse.json({ error: 'User is not assigned to a department' }, { status: 403 });
+        }
+
+        // Security: the custodian boundary. The data team own their items (cards, drives,
+        // readers) and equipment managers own the gear; neither may write the other's.
+        // Checked against the STORED custodian as well as the incoming one, so an item
+        // can't be captured by simply claiming it in the payload.
+        if (caller.role === 'DATA_MANAGER' || caller.role === 'MANAGER') {
+            const admin = getSupabaseAdmin();
+            const ids = items.map(i => i.id).filter((id): id is string => typeof id === 'string');
+            const existing = ids.length
+                ? (await admin.from('equipment').select('id, metadata').in('id', ids)).data || []
+                : [];
+            const storedCustodian = new Map<string, unknown>(
+                existing.map((row: { id: string; metadata?: { custodian?: unknown } | null }) =>
+                    [row.id, row.metadata?.custodian])
+            );
+
+            const wantsData = caller.role === 'DATA_MANAGER';
+            const allowed = items.every((item) => {
+                const incoming = (item.metadata as { custodian?: unknown } | undefined)?.custodian;
+                const stored = typeof item.id === 'string' ? storedCustodian.get(item.id) : undefined;
+                // A brand-new item has no stored row, so only the incoming value applies.
+                const isDataIncoming = incoming === 'DATA';
+                const isDataStored = stored === 'DATA';
+                const existsAlready = typeof item.id === 'string' && storedCustodian.has(item.id);
+                return existsAlready
+                    ? isDataStored === wantsData && isDataIncoming === wantsData
+                    : isDataIncoming === wantsData;
+            });
+
+            if (!allowed) {
+                return NextResponse.json(
+                    { error: wantsData ? 'Data managers can only manage data team items' : 'Managers cannot manage data team items' },
+                    { status: 403 }
+                );
+            }
         }
 
         // Security: for non-Super Admins, enforce that all items belong to their department

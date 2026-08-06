@@ -15,6 +15,7 @@ import {
     issueToCondition,
     withActiveIssue,
 } from './equipment-issues';
+import { isDataAsset } from './data-assets';
 
 /**
  * Return disposition rules — shared by the crew returns flow and checkout.
@@ -33,10 +34,33 @@ import {
 export const getReturnVerificationMode = (department?: Department | null): ReturnVerificationMode =>
     department?.settings?.returnVerification ?? 'none';
 
-/** Whether the next person checking an item out is allowed to clear it themselves.
- *  False in 'manager' mode — otherwise crew could bypass the manager requirement. */
-export const canVerifyAtCheckout = (department?: Department | null): boolean =>
-    getReturnVerificationMode(department) !== 'manager';
+/**
+ * The mode that applies to one specific item.
+ *
+ * Data-team assets always require verification, whatever the department is set to: a
+ * returned card still has footage on it, and the data team must copy it to the server and
+ * wipe the card before anyone can take it again.
+ */
+export const getItemVerificationMode = (
+    department?: Department | null,
+    item?: Equipment | null,
+): ReturnVerificationMode =>
+    isDataAsset(item) ? 'manager' : getReturnVerificationMode(department);
+
+/**
+ * Whether the next person checking an item out may clear it themselves.
+ *
+ * False in 'manager' mode — otherwise crew could bypass the manager requirement — and
+ * ALWAYS false for data assets. Letting someone self-clear a card would hand them a card
+ * whose footage hasn't been copied off yet, i.e. silent data loss.
+ */
+export const canVerifyAtCheckout = (
+    department?: Department | null,
+    item?: Equipment | null,
+): boolean => {
+    if (isDataAsset(item)) return false;
+    return getReturnVerificationMode(department) !== 'manager';
+};
 
 export interface ReturnReport {
     condition: Condition;
@@ -105,11 +129,14 @@ export function resolveEquipmentReturn({
     const { condition, issueType, issueSeverity, issueNote } = report;
     const reportedIssue = isIssueCondition(condition);
     const issueCondition: Condition = reportedIssue ? issueToCondition(issueType, issueSeverity) : 'OK';
+    // Data assets override whatever the department asked for — enforced here rather than
+    // at the call sites so it can't be forgotten by a future caller.
+    const effectiveMode: ReturnVerificationMode = isDataAsset(item) ? 'manager' : mode;
 
     // Held back when an issue was reported (always — damaged gear never auto-releases),
     // or when the department wants a second pair of eyes on every return. In 'checkout'
     // mode the item waits, but the next person picking it up can clear it themselves.
-    if (reportedIssue || mode !== 'none') {
+    if (reportedIssue || effectiveMode !== 'none') {
         return {
             selfReleased: false,
             conditionToRecord: null,

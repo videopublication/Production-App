@@ -1,4 +1,4 @@
-export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'FINANCE_MANAGER' | 'CREW';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'FINANCE_MANAGER' | 'DATA_MANAGER' | 'CREW';
 
 export type EquipmentStatus =
     | 'AVAILABLE'
@@ -45,6 +45,9 @@ export type ReturnVerificationMode = 'none' | 'checkout' | 'manager';
 export interface DepartmentSettings {
     /** Defaults to 'none' when absent. */
     returnVerification?: ReturnVerificationMode;
+    /** Which roles may use each bulk inventory tool. Absent tools fall back to the
+     *  defaults in lib/tool-permissions. Keyed by ToolId. */
+    toolPermissions?: Record<string, Role[]>;
     uiLabels?: Record<string, string>;
     labels?: Record<string, string>;
     [key: string]: unknown;
@@ -92,6 +95,11 @@ export interface Equipment {
         endB?: string;
         endBGender?: 'M' | 'F' | '';
         serialNumber?: string;
+        // Which team custodies this item. Absent = the camera-gear pool; 'DATA' = the
+        // data team's own items (cards, hard disks, laptops, readers…). See lib/data-assets.
+        custodian?: 'DATA';
+        // Human card number ("22"), distinct from the scannable barcode ("CARD-22").
+        cardNumber?: string;
         activeIssue?: {
             condition?: Condition;
             issueType?: EquipmentIssueType;
@@ -115,6 +123,18 @@ export interface Equipment {
     departmentId?: string;
 }
 
+/**
+ * Extra answers the data team needs that aren't derivable from the transaction itself.
+ * Collected when data assets are returned. Kept as a small bag so more report questions
+ * can be added without another migration.
+ */
+export interface TransactionDataReport {
+    /** Was the Zoom recorder actually used on this shoot? Asked when cards come back. */
+    zoomRecorderUsed?: boolean;
+    answeredAt?: string;
+    answeredBy?: string;
+}
+
 export interface Transaction {
     id: string;
     userId: string;
@@ -130,6 +150,7 @@ export interface Transaction {
     additionalUsers?: string[]; // IDs of other users involved
     notes?: string;
     departmentId?: string;
+    dataReport?: TransactionDataReport;
 }
 
 export type ManualTransactionItemStatus =
