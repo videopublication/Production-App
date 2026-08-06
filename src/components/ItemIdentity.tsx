@@ -1,5 +1,7 @@
 import React from 'react';
 import { Equipment } from '@/types';
+import { getCardNumber, isCard } from '@/lib/data-assets';
+import { nameCovers } from '@/lib/equipment-naming';
 
 /**
  * Shared equipment-identity renderer. Every list/card/row that shows an item
@@ -48,6 +50,19 @@ export function itemDetailLine(item: ItemLike): string {
     return [item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ');
 }
 
+/**
+ * Brand / model line with anything the name already says stripped out.
+ *
+ * Names composed as "Sony NP F970 Small Battery" contain the brand and model, so printing
+ * "Sony · NP F970" underneath repeats the row back to itself. Items still named just
+ * "Battery" keep the full line, since there the detail is the only identifying information.
+ */
+export function itemDetailLineForRow(item: ItemLike): string {
+    return [item.metadata?.brand, item.metadata?.model]
+        .filter(part => part && !nameCovers(item, part))
+        .join(' · ');
+}
+
 export function itemMetaLine(item: ItemLike): string {
     const dup = item.category.trim().toLowerCase() === item.name.trim().toLowerCase();
     return dup ? item.barcode : `${item.category} • ${item.barcode}`;
@@ -68,7 +83,9 @@ export function ItemIdentity({
     wrapName?: boolean;
     className?: string;
 }) {
-    const detail = itemDetailLine(item);
+    const detail = itemDetailLineForRow(item);
+    // Same reasoning as the detail line: a name of "… Small Battery" already says "Small".
+    const showSizeChip = Boolean(item.metadata?.size) && !nameCovers(item, item.metadata?.size);
     const nameCls = wrapName
         ? NAME_CLASS[variant].replace('truncate', 'line-clamp-2 break-words min-w-0')
         : NAME_CLASS[variant];
@@ -76,9 +93,16 @@ export function ItemIdentity({
         <div className={`min-w-0 ${className}`}>
             <div className={`flex gap-1.5 min-w-0 ${wrapName ? 'items-start' : 'items-center'}`}>
                 <span className={nameCls}>{item.name}</span>
-                {item.metadata?.size && (
+                {/* A card's human number is how the data team refer to it ("card 22"), so
+                    it leads rather than hiding in the barcode. */}
+                {isCard(item) && getCardNumber(item) && (
+                    <span className={`shrink-0 font-bold rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 whitespace-nowrap ${CHIP_CLASS[variant]}`}>
+                        #{getCardNumber(item)}
+                    </span>
+                )}
+                {showSizeChip && (
                     <span className={`shrink-0 font-semibold rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap ${CHIP_CLASS[variant]}`}>
-                        {item.metadata.size}
+                        {item.metadata?.size}
                     </span>
                 )}
             </div>

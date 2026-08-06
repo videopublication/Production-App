@@ -39,6 +39,27 @@ export function FacetFilters({
     const btnRef = useRef<HTMLButtonElement>(null);
     const popRef = useRef<HTMLDivElement>(null);
 
+    /**
+     * Scrolls a freshly-opened option list to its first ticked value, so a selection buried at
+     * position 40 of 66 is visible without hunting for it — while leaving the list in
+     * alphabetical order.
+     *
+     * Attached as a ref callback and memoised with a stable identity on purpose: React then
+     * only runs it when the list mounts (opening the panel, switching facet), not on every
+     * render. Re-running it after each tick would yank the view back to the first selection
+     * while the user is still working down the list.
+     */
+    const revealSelected = React.useCallback((node: HTMLDivElement | null) => {
+        if (!node) return;
+        const first = node.querySelector<HTMLElement>('[data-selected="true"]');
+        if (!first) return;
+        const listBox = node.getBoundingClientRect();
+        const itemBox = first.getBoundingClientRect();
+        if (itemBox.top < listBox.top || itemBox.bottom > listBox.bottom) {
+            node.scrollTop += itemBox.top - listBox.top - 8;
+        }
+    }, []);
+
     useEffect(() => {
         const mq = window.matchMedia('(max-width: 767px), (pointer: coarse)');
         const sync = () => setIsMobile(mq.matches);
@@ -98,6 +119,9 @@ export function FacetFilters({
         const count = group.selected.length;
         const q = (groupQuery[group.key] || '').toLowerCase();
         const showSearch = group.options.length > 8;
+        // Alphabetical, always. Selections keep their place in the list — the panel scrolls to
+        // show them instead (see revealSelected), because moving a row out from under the
+        // cursor is worse than having to look for it.
         const opts = q ? group.options.filter(o => o.label.toLowerCase().includes(q)) : group.options;
         const allShownSelected = opts.length > 0 && opts.every(o => group.selected.includes(o.value));
         return (
@@ -134,7 +158,11 @@ export function FacetFilters({
                     />
                 )}
 
-                <div className={`grid grid-cols-1 gap-0.5 overflow-y-auto ${fill ? 'min-h-0 flex-1' : ''}`} style={fill ? undefined : { maxHeight: '14rem' }}>
+                <div
+                    ref={revealSelected}
+                    className={`grid grid-cols-1 gap-0.5 overflow-y-auto ${fill ? 'min-h-0 flex-1' : ''}`}
+                    style={fill ? undefined : { maxHeight: '14rem' }}
+                >
                     {opts.length === 0 ? (
                         <p className="px-1 py-2 text-[13px] text-muted-foreground">No matches.</p>
                     ) : opts.map(o => {
@@ -142,6 +170,7 @@ export function FacetFilters({
                         return (
                             <label
                                 key={o.value}
+                                data-selected={checked ? 'true' : undefined}
                                 className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-[14px] transition-colors focus-within:ring-2 focus-within:ring-primary ${checked ? 'bg-primary/5 text-primary font-semibold dark:bg-primary/15' : 'text-foreground hover:bg-muted'}`}
                             >
                                 <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${checked ? 'border-primary bg-primary text-white' : 'border-border bg-background'}`}>
