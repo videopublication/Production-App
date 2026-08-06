@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
-import { Transaction, Equipment, User } from '@/types';
+import { Transaction } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -15,6 +15,7 @@ import { useInventory } from '@/hooks/useInventory';
 import { useShoots } from '@/hooks/useShoots';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
+import { buildCheckoutMessage } from '@/lib/transaction-message';
 
 export default function TransactionsPage() {
     const router = useRouter();
@@ -64,7 +65,7 @@ export default function TransactionsPage() {
             router.push('/login');
             return;
         }
-        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) {
+        if (!['CREW', 'MANAGER', 'ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER', 'DATA_MANAGER'].includes(user.role)) {
             router.push('/');
             return;
         }
@@ -155,45 +156,8 @@ export default function TransactionsPage() {
         return foundUser?.name || foundUser?.email || 'Unknown User';
     };
 
-    const getItemNames = (itemIds: string[]) => {
-        return itemIds.map(id => {
-            const item = equipment.find(e => e.id === id);
-            return item?.name || 'Unknown Item';
-        });
-    };
-
-    const generateMessage = (txn: Transaction) => {
-        const userName = getUserName(txn.userId);
-        const additionalNames = (txn.additionalUsers || [])
-            .map(id => getUserName(id))
-            .filter(name => name !== 'Unknown User');
-
-        const allNames = [userName, ...additionalNames].join(', ');
-        const itemNames = getItemNames(txn.items);
-
-        // Group duplicate items and count them
-        const itemCounts = itemNames.reduce((acc, name) => {
-            acc[name] = (acc[name] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
-
-        // Format as "Item Name - 3" or "Item Name" depending on count
-        const formattedItems = Object.entries(itemCounts).map(([name, count]) => {
-            return count > 1 ? `• ${name} - ${count}` : `• ${name}`;
-        });
-
-        const date = new Date(txn.timestampOut).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-        return `🎥 *Equipment Checkout Details*
-
-*Project:* ${txn.project || 'Unspecified'}${txn.shootId && shoots.find(s => s.id === txn.shootId) ? `\n*Linked ${labels.workSingular}:* ${shoots.find(s => s.id === txn.shootId)?.title} ${shoots.find(s => s.id === txn.shootId)?.shootNumber ? `(#${shoots.find(s => s.id === txn.shootId)?.shootNumber})` : ''}` : ''}
-*ID:* ${txn.id}
-*Taken By:* ${allNames}
-*Date:* ${date}
-
-*Equipment List:*
-${formattedItems.join('\n')}${txn.notes ? `\n\n*Notes / Other Items:*\n${txn.notes}` : ''}`;
-    };
+    const generateMessage = (txn: Transaction) =>
+        buildCheckoutMessage({ transaction: txn, equipment, users, shoots, labels });
 
     const handleShareWhatsApp = (e: React.MouseEvent, txn: Transaction) => {
         e.stopPropagation();
