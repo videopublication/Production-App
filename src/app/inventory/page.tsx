@@ -849,6 +849,31 @@ function InventoryPageContent() {
 
         setIsActionLoading(true);
         try {
+            // Log before deleting: afterwards the row is gone and there's nothing left to
+            // describe. Deletions were previously silent, so an item could vanish with no
+            // record of who removed it — the one action most in need of an audit trail.
+            // newValue keeps a snapshot, since entity_id will point at a row that no longer exists.
+            if (user) {
+                await Promise.all(deletable.map(item => storage.addLog({
+                    id: crypto.randomUUID(),
+                    action: 'DELETE',
+                    entityId: item.id,
+                    userId: user.id,
+                    timestamp: new Date().toISOString(),
+                    details: `Deleted "${item.name}" (${item.barcode})${item.serialNumber ? `, S/N ${item.serialNumber}` : ''} from ${item.category}`,
+                    oldValue: {
+                        name: item.name,
+                        category: item.category,
+                        barcode: item.barcode,
+                        serialNumber: item.serialNumber,
+                        status: item.status,
+                        location: item.location,
+                        metadata: item.metadata,
+                    },
+                    departmentId: item.departmentId || undefined,
+                })));
+            }
+
             await deleteEquipment(deletable.map(i => i.id));
             showToast(
                 `Successfully deleted ${deletable.length} item${deletable.length === 1 ? '' : 's'}`

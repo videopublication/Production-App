@@ -465,6 +465,11 @@ class StorageService {
     }
 
     // Logs
+    //
+    // Supabase errors are PostgrestError objects whose fields aren't own-enumerable, so
+    // `console.error(msg, error)` prints an unhelpful `{}` and the real cause — a denied RLS
+    // policy, a bad column, a range past the end of the table — never surfaces. Pull the
+    // fields out explicitly wherever a query failure is only logged.
     async getLogs(page?: number, limit?: number, search?: string, departmentId?: string | null, actionFilter?: string): Promise<Log[]> {
         let query = supabase
             .from('logs')
@@ -499,7 +504,18 @@ class StorageService {
         const { data, error } = await query;
 
         if (error) {
-            console.error('Error fetching logs:', error);
+            // PGRST103 is "requested range not satisfiable" — the range starts past the last
+            // row. That happens legitimately on Load More at the end of the list, and on the
+            // first page when RLS leaves this user no visible rows. Not a failure: no rows.
+            if (error.code === 'PGRST103') return [];
+
+            console.error('Error fetching logs:', {
+                message: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                query: { page, limit, search, departmentId, actionFilter },
+            });
             return [];
         }
 

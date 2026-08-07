@@ -191,7 +191,7 @@ export interface ReturnRecord {
 
 export interface Log {
     id: string;
-    action: 'CHECKOUT' | 'RETURN' | 'VERIFY' | 'EDIT' | 'CREATE' | 'LOGIN' | 'SIGNUP' | 'LOGOUT' | 'LOGIN_FAILED';
+    action: 'CHECKOUT' | 'RETURN' | 'VERIFY' | 'EDIT' | 'CREATE' | 'DELETE' | 'LOGIN' | 'SIGNUP' | 'LOGOUT' | 'LOGIN_FAILED';
     entityId: string; // Item or Transaction ID
     userId?: string;
     timestamp: string;

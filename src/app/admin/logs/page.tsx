@@ -98,12 +98,14 @@ export default function AdminLogsPage() {
     // No client-side filter needed.
     const filteredLogs = logs;
 
-    const getActionVariant = (action: string): 'default' | 'success' | 'warning' | 'secondary' | 'outline' => {
+    const getActionVariant = (action: string): 'default' | 'success' | 'warning' | 'secondary' | 'outline' | 'destructive' => {
         switch (action) {
             case 'CHECKOUT': return 'default';
             case 'RETURN': return 'success';
             case 'EDIT': return 'warning';
             case 'CREATE': return 'default';
+            // Deletions are irreversible, so they read as such at a glance.
+            case 'DELETE': return 'destructive';
             case 'VERIFY': return 'secondary';
             case 'LOGIN': return 'success';
             case 'SIGNUP': return 'default';
@@ -148,7 +150,7 @@ export default function AdminLogsPage() {
                         className="w-full bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:bg-white dark:focus:bg-gray-800 transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                     />
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-2 px-2">
-                        {['ALL', 'CHECKOUT', 'RETURN', 'EDIT', 'CREATE', 'VERIFY', 'LOGIN', 'SIGNUP', 'LOGOUT', 'LOGIN_FAILED'].map(action => (
+                        {['ALL', 'CHECKOUT', 'RETURN', 'EDIT', 'CREATE', 'DELETE', 'VERIFY', 'LOGIN', 'SIGNUP', 'LOGOUT', 'LOGIN_FAILED'].map(action => (
                             <Button
                                 key={action}
                                 variant={filterAction === action ? 'primary' : 'outline'}
