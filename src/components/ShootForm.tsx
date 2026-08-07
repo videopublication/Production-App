@@ -78,12 +78,13 @@ export const ShootForm: React.FC<ShootFormProps> = ({
             // is deployed with --no-verify-jwt to allow that, which also means the endpoint
             // is callable by anyone on the internet with our Jira credentials behind it.
             //
-            // Follows NEXT_PUBLIC_SUPABASE_URL rather than a pinned project ref, so each
-            // environment calls its own function. fetch-ticket-details must therefore be
-            // deployed to every Supabase project this app points at.
-            const functionsBase = process.env.NEXT_PUBLIC_SUPABASE_URL;
-            if (!functionsBase) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured');
-            const response = await fetch(`${functionsBase}/functions/v1/fetch-ticket-details`, {
+            // Pinned to the project where fetch-ticket-details is actually deployed, NOT
+            // NEXT_PUBLIC_SUPABASE_URL. Jira is one shared external integration, so every
+            // environment calls this one function; following the env var made beta and local
+            // point at projects with no such function and the fetch 404'd.
+            const jiraFunctionsBase = process.env.NEXT_PUBLIC_JIRA_FUNCTIONS_URL
+                || 'https://uysumhukcopbnpmyxabw.supabase.co';
+            const response = await fetch(`${jiraFunctionsBase}/functions/v1/fetch-ticket-details`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ticketId: formData.jiraTicketId.trim() })
