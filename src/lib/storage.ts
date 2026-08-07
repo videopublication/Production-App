@@ -2,6 +2,42 @@ import { supabase } from './supabase';
 import { User, Equipment, Transaction, Log, Shoot, Assignment, Department, Leave, PlannerDraftAssignment, AssignmentSegment } from '@/types';
 import { decodeTransactionNotes, encodeTransactionNotes } from './transaction-manual-items';
 
+/**
+ * Turn whatever supabase-js hands back into something that actually prints.
+ *
+ * A PostgrestError's fields aren't own-enumerable, so `console.error(msg, error)` shows `{}`.
+ * Picking the known fields by hand isn't enough either: when the failure is a network error
+ * rather than a database one — project unreachable, CORS, DNS, offline — those fields are all
+ * undefined and JSON.stringify drops them, printing `{}` again. So walk every own property
+ * including non-enumerable ones, and always include name/message/string form.
+ */
+function describeSupabaseError(error: unknown): Record<string, unknown> {
+    if (error === null || typeof error !== 'object') {
+        return { value: String(error) };
+    }
+
+    const out: Record<string, unknown> = {};
+    for (const key of Object.getOwnPropertyNames(error)) {
+        if (key === 'stack') continue;
+        const value = (error as Record<string, unknown>)[key];
+        if (value !== undefined) out[key] = value;
+    }
+
+    const err = error as { name?: string; message?: string; cause?: unknown };
+    if (err.name) out.name = err.name;
+    if (err.message) out.message = err.message;
+    if (err.cause) out.cause = String(err.cause);
+
+    // A bare `{}` here means no own properties at all — say so rather than printing nothing.
+    if (Object.keys(out).length === 0) {
+        out.note = 'error object carried no readable fields';
+        out.stringified = String(error);
+        out.constructorName = error.constructor?.name;
+    }
+
+    return out;
+}
+
 class StorageService {
     // Departments
     async getDepartments(): Promise<Department[]> {
@@ -509,11 +545,7 @@ class StorageService {
             // first page when RLS leaves this user no visible rows. Not a failure: no rows.
             if (error.code === 'PGRST103') return [];
 
-            console.error('Error fetching logs:', {
-                message: error.message,
-                code: error.code,
-                details: error.details,
-                hint: error.hint,
+            console.error('Error fetching logs:', describeSupabaseError(error), {
                 query: { page, limit, search, departmentId, actionFilter },
             });
             return [];
