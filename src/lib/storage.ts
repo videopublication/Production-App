@@ -11,10 +11,8 @@ import { decodeTransactionNotes, encodeTransactionNotes } from './transaction-ma
  * undefined and JSON.stringify drops them, printing `{}` again. So walk every own property
  * including non-enumerable ones, and always include name/message/string form.
  */
-function describeSupabaseError(error: unknown): Record<string, unknown> {
-    if (error === null || typeof error !== 'object') {
-        return { value: String(error) };
-    }
+function describeSupabaseError(error: unknown): string {
+    if (error === null || typeof error !== 'object') return String(error);
 
     const out: Record<string, unknown> = {};
     for (const key of Object.getOwnPropertyNames(error)) {
@@ -28,14 +26,13 @@ function describeSupabaseError(error: unknown): Record<string, unknown> {
     if (err.message) out.message = err.message;
     if (err.cause) out.cause = String(err.cause);
 
-    // A bare `{}` here means no own properties at all — say so rather than printing nothing.
     if (Object.keys(out).length === 0) {
-        out.note = 'error object carried no readable fields';
-        out.stringified = String(error);
-        out.constructorName = error.constructor?.name;
+        return `${error.constructor?.name || 'object'} with no readable fields: ${String(error)}`;
     }
 
-    return out;
+    // Returned as a string, not an object: the Next.js dev overlay renders every object
+    // argument to console.error as `{}`, so anything structured is invisible there.
+    return JSON.stringify(out);
 }
 
 class StorageService {
@@ -507,9 +504,14 @@ class StorageService {
     // policy, a bad column, a range past the end of the table — never surfaces. Pull the
     // fields out explicitly wherever a query failure is only logged.
     async getLogs(page?: number, limit?: number, search?: string, departmentId?: string | null, actionFilter?: string): Promise<Log[]> {
+        // No `count: 'exact'` here. The count was never consumed — this returns Log[] and the
+        // page paginates on `rows.length < limit` — but asking for it made Postgres evaluate
+        // the whole table, and the logs RLS policy runs an EXISTS subquery against `users` for
+        // every row. On a large logs table that exceeds the statement timeout and the query
+        // fails outright, which is why the page came back empty.
         let query = supabase
             .from('logs')
-            .select('*', { count: 'exact' }) // Get count for UI logic if needed later
+            .select('*')
             .order('timestamp', { ascending: false });
 
         if (departmentId) {
@@ -545,9 +547,11 @@ class StorageService {
             // first page when RLS leaves this user no visible rows. Not a failure: no rows.
             if (error.code === 'PGRST103') return [];
 
-            console.error('Error fetching logs:', describeSupabaseError(error), {
-                query: { page, limit, search, departmentId, actionFilter },
-            });
+            // One string, no object arguments — see describeSupabaseError.
+            console.error(
+                `Error fetching logs: ${describeSupabaseError(error)}`
+                + ` | query: ${JSON.stringify({ page, limit, search, departmentId, actionFilter })}`
+            );
             return [];
         }
 
