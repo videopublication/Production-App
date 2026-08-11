@@ -37,6 +37,8 @@ yarn-error.log*
 /certs/
 
 # vercel
+
+# vercel
 .vercel
 
 # typescript
@@ -46,3 +48,5 @@ next-env.d.ts
 # maintenance scripts
 /maintenance
 
+# whatsapp gateway session auth
+scripts/whatsapp-gateway/auth_info

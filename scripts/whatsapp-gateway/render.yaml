@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: vp-whatsapp-gateway
+    env: node
+    rootDir: scripts/whatsapp-gateway
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production

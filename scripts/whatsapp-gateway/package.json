@@ -1,0 +1,15 @@
+{
+  "name": "vp-whatsapp-gateway",
+  "version": "1.0.0",
+  "description": "Free microservice for automated WhatsApp Group messaging using Baileys",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.12",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

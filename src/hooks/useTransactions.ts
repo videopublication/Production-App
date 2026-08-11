@@ -4,6 +4,9 @@ import { Equipment, ManualTransactionItem, Transaction } from '@/types';
 import { generateTransactionId } from '@/lib/id';
 import { sendPushNotification } from '@/lib/push-notifications';
 import { areManualItemsComplete } from '@/lib/transaction-manual-items';
+import { buildCheckoutMessage } from '@/lib/transaction-message';
+import { sendWhatsAppGroupMessage } from '@/lib/whatsapp-service';
+import { getDepartmentLabels } from '@/lib/department-labels';
 
 export const TRANSACTION_KEYS = {
     all: ['transactions'] as const,
@@ -186,6 +189,30 @@ export function useCheckOut() {
                 }
             } catch (error) {
                 console.error('Failed to notify managers about checkout', error);
+            }
+
+            // 5. Dispatch automated WhatsApp Group notification
+            try {
+                const notificationDepartmentId = departmentId || items[0]?.departmentId;
+                const [allUsers, allShoots] = await Promise.all([
+                    storage.getUsers(notificationDepartmentId),
+                    storage.getShoots(notificationDepartmentId)
+                ]);
+                const labels = getDepartmentLabels(notificationDepartmentId ? { id: notificationDepartmentId } as any : null);
+
+                const waMessage = buildCheckoutMessage({
+                    transaction,
+                    equipment: items,
+                    users: allUsers,
+                    shoots: allShoots,
+                    labels,
+                });
+
+                sendWhatsAppGroupMessage(waMessage).catch(e =>
+                    console.error('WhatsApp group dispatch failed for checkout transaction', e)
+                );
+            } catch (waErr) {
+                console.error('Failed to prepare WhatsApp checkout message', waErr);
             }
 
             return transaction;

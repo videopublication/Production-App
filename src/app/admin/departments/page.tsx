@@ -19,6 +19,7 @@ const AVAILABLE_FEATURES = [
     { id: 'crew_management', label: 'User & Crew Management', description: 'Manage users, roles and permissions' },
     { id: 'leaves', label: 'Leaves Management', description: 'Apply for leaves and manage approvals' },
     { id: 'data_assets', label: 'Data Team Assets', description: 'Cards, drives and other items custodied by a data team, plus their shoot report' },
+    { id: 'whatsapp', label: 'WhatsApp Automation', description: 'Automated group alerts, direct messaging, user mentions & WhatsApp Hub' },
 ];
 
 // How much sign-off a returned item needs before it can go out again.

@@ -50,6 +50,16 @@ export interface DepartmentSettings {
     toolPermissions?: Record<string, Role[]>;
     uiLabels?: Record<string, string>;
     labels?: Record<string, string>;
+    whatsappEnabled?: boolean;
+    whatsappGatewayUrl?: string;
+    whatsappGroupJid?: string;
+    whatsappApiKey?: string;
+    whatsappInstanceName?: string;
+    whatsappRules?: {
+        checkoutAlerts?: boolean;
+        returnAlerts?: boolean;
+        shootReminders?: boolean;
+    };
     [key: string]: unknown;
 }
 
