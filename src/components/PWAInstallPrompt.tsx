@@ -1,189 +1,202 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { Share, X, Download } from 'lucide-react';
-import { Button } from './Button';
+import React, { useState, useEffect, useRef } from 'react';
+import { Download, X, Smartphone, Share, PlusSquare, MoreVertical } from 'lucide-react';
 
-interface BeforeInstallPromptEvent extends Event {
-    readonly platforms: string[];
-    readonly userChoice: Promise<{
-        outcome: 'accepted' | 'dismissed';
-        platform: string;
-    }>;
-    prompt(): Promise<void>;
-}
-
-type NavigatorWithStandalone = Navigator & {
-    standalone?: boolean;
-};
-
-const isStandaloneApp = () => {
-    if (typeof window === 'undefined') return false;
-
-    return window.matchMedia('(display-mode: standalone)').matches
-        || window.matchMedia('(display-mode: fullscreen)').matches
-        || window.matchMedia('(display-mode: minimal-ui)').matches
-        || Boolean((window.navigator as NavigatorWithStandalone).standalone)
-        || document.referrer.startsWith('android-app://');
-};
-
-const isIOSDevice = () => {
-    if (typeof window === 'undefined') return false;
-
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    return /iphone|ipad|ipod/.test(userAgent)
-        || (userAgent.includes('mac') && navigator.maxTouchPoints > 2);
-};
-
-export const PWAInstallPrompt = () => {
-    const pathname = usePathname();
+export function PWAInstallPrompt() {
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [showPrompt, setShowPrompt] = useState(false);
-    const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-    const isIOS = isIOSDevice();
-    const hasBottomTabs = !['/', '/login', '/inactive'].includes(pathname);
+    const [isStandalone, setIsStandalone] = useState(false);
+    const [showGuideModal, setShowGuideModal] = useState(false);
+    const installClickedRef = useRef(false);
 
     useEffect(() => {
-        // Only run on client
-        if (typeof window === 'undefined') return;
+        // Sanitize and unregister any stale localhost service workers
+        if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+                for (const registration of registrations) {
+                    if (registration.active?.scriptURL.includes('localhost')) {
+                        console.log('Unregistering stale localhost service worker:', registration.active.scriptURL);
+                        registration.unregister();
+                    }
+                }
+            }).catch(() => {});
+        }
 
-        // check if already in standalone mode (installed)
-        if (isStandaloneApp()) return;
+        // Detect if user is ALREADY running the installed PWA
+        const checkStandalone = () => {
+            const standaloneMode =
+                window.matchMedia('(display-mode: standalone)').matches ||
+                (window.navigator as any).standalone === true;
+            setIsStandalone(standaloneMode);
+            return standaloneMode;
+        };
 
-        // Check if dismissed previously in this session
-        const isDismissed = sessionStorage.getItem('pwa-prompt-dismissed')
-            || localStorage.getItem('pwa-prompt-dismissed');
-        if (isDismissed === 'true') {
+        const inPWA = checkStandalone();
+
+        // IF ALREADY INSTALLED & RUNNING AS PWA -> DO NOT SHOW PROMPT!
+        if (inPWA) {
+            setShowPrompt(false);
             return;
         }
 
-        // 1. Listen for native install prompt (Android/Chrome)
-        const handleBeforeInstallPrompt = (e: Event) => {
-            e.preventDefault(); // Prevent automatic mini-infobar
-            setDeferredPrompt(e as BeforeInstallPromptEvent);
+        // Check if user previously dismissed prompt in this session
+        const isDismissed = sessionStorage.getItem('pwa_prompt_dismissed');
+        if (!isDismissed) {
             setShowPrompt(true);
-        };
+        }
 
-        const handleInstalled = () => {
-            localStorage.setItem('pwa-prompt-dismissed', 'true');
-            setShowPrompt(false);
-            setDeferredPrompt(null);
+        const handleBeforeInstallPrompt = (e: Event) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+            if (!checkStandalone()) {
+                setShowPrompt(true);
+            }
+            // If user already clicked "Install Now" before event arrived, trigger prompt immediately!
+            if (installClickedRef.current) {
+                (e as any).prompt();
+                installClickedRef.current = false;
+            }
         };
 
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-        window.addEventListener('appinstalled', handleInstalled);
-
-        // 2. Check if iOS (fallback since it doesn't support beforeinstallprompt)
-        if (isIOSDevice()) {
-            // Small delay to not overwhelm user immediately
-            const timer = setTimeout(() => setShowPrompt(true), 3000);
-            return () => {
-                clearTimeout(timer);
-                window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-                window.removeEventListener('appinstalled', handleInstalled);
-            };
-        }
 
         return () => {
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-            window.removeEventListener('appinstalled', handleInstalled);
         };
     }, []);
 
     const handleDismiss = () => {
+        sessionStorage.setItem('pwa_prompt_dismissed', 'true');
         setShowPrompt(false);
-        sessionStorage.setItem('pwa-prompt-dismissed', 'true');
-        localStorage.setItem('pwa-prompt-dismissed', 'true');
     };
 
-    const handleInstallClick = async () => {
-        if (!deferredPrompt) return;
-
-        // Show the native install prompt
-        await deferredPrompt.prompt();
-
-        // Wait for usage to respond
-        const { outcome } = await deferredPrompt.userChoice;
-
-        if (outcome === 'accepted') {
-            console.log('User accepted the install prompt');
+    const handleInstall = async () => {
+        if (deferredPrompt) {
+            try {
+                await deferredPrompt.prompt();
+                const choiceResult = await deferredPrompt.userChoice;
+                if (choiceResult && choiceResult.outcome === 'accepted') {
+                    setShowPrompt(false);
+                }
+                setDeferredPrompt(null);
+            } catch (err) {
+                console.warn('Install prompt failed, fallback to guide:', err);
+                setShowGuideModal(true);
+            }
         } else {
-            console.log('User dismissed the install prompt');
+            // Mark that install was clicked so if event fires in next 1 second it triggers
+            installClickedRef.current = true;
+            
+            // Check if iOS Safari (where Apple doesn't allow 1-click API)
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+            if (isIOS) {
+                setShowGuideModal(true);
+            } else {
+                // On Chrome, wait 1.5 seconds for deferredPrompt to arrive before showing fallback guide
+                setTimeout(() => {
+                    if (installClickedRef.current && !deferredPrompt) {
+                        setShowGuideModal(true);
+                        installClickedRef.current = false;
+                    }
+                }, 1200);
+            }
         }
-
-        // Save dismissal to prevent immediate re-prompting if installation fails or is cancelled
-        sessionStorage.setItem('pwa-prompt-dismissed', 'true');
-        localStorage.setItem('pwa-prompt-dismissed', 'true');
-
-        // We can't use the prompt again, discard it
-        setDeferredPrompt(null);
-        setShowPrompt(false);
     };
 
-    if (!showPrompt) return null;
+    // Hide prompt completely if running inside installed PWA or if user dismissed it
+    if (isStandalone || !showPrompt) return null;
 
     return (
-        <div className={`fixed left-4 right-4 z-[110] animate-in slide-in-from-bottom-5 duration-500 flex justify-center ${hasBottomTabs ? 'bottom-[calc(var(--mobile-tab-height)+0.75rem)] md:bottom-4' : 'bottom-4'}`}>
-            {/* 
-               We use a dark theme by default to match the screenshot provided by user
-               bg-[#1c1c1e] matches typical iOS dark mode / modern app feel 
-            */}
-            <div className="bg-[#1c1c1e] text-white/90 border border-white/10 shadow-2xl rounded-2xl p-5 w-full max-w-sm relative">
-                <button
-                    onClick={handleDismiss}
-                    className="absolute top-3 right-3 p-1 text-gray-400 hover:text-white transition-colors"
-                >
-                    <X size={18} />
-                </button>
-
-                <div className="flex gap-4 items-start">
-                    {/* App Icon / Graphic */}
-                    <div className="bg-primary/ p-3 rounded-xl shrink-0 flex items-center justify-center">
-                        {isIOS ? (
-                            <Share className="w-8 h-8 text-primary" />
-                        ) : (
-                            <Download className="w-8 h-8 text-primary" />
-                        )}
+        <>
+            <div className="fixed top-16 left-1/2 -translate-x-1/2 md:top-auto md:bottom-6 md:left-auto md:right-6 md:translate-x-0 z-[99999] w-[90%] max-w-sm bg-[#1c1d21] text-white p-5 rounded-2xl shadow-2xl border border-white/10 flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-4">
+                        <div className="text-[#34c759] pt-1.5 mt-0.5 flex-shrink-0">
+                            <Download className="w-7 h-7 stroke-[2.2] animate-bounce" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                                </span>
+                                <h4 className="font-bold text-base text-white tracking-tight">Update Required</h4>
+                            </div>
+                            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                Install the app for a better experience with offline access and notifications.
+                            </p>
+                        </div>
                     </div>
+                    <button
+                        onClick={handleDismiss}
+                        className="p-1 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors flex-shrink-0"
+                        aria-label="Close"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                <button
+                    onClick={handleInstall}
+                    className="w-full py-2.5 bg-[#34c759] hover:bg-[#2fb350] active:bg-[#28cd41] text-white font-semibold text-sm rounded-xl shadow-[0_0_20px_rgba(52,199,89,0.4)] transition-all text-center flex items-center justify-center gap-2"
+                >
+                    <Download className="w-4 h-4" />
+                    Install Now
+                </button>
+            </div>
 
-                    <div className="space-y-3 flex-1">
-                        <h3 className="font-bold text-white text-lg leading-tight">
-                            Install Vpub App
-                        </h3>
-                        <p className="text-sm text-gray-400 leading-snug">
-                            {isIOS
-                                ? "Install this application on your home screen for quick and easy access."
-                                : "Install the app for a better experience with offline access and notifications."
-                            }
+            {/* Custom Instruction Modal ONLY for iOS Safari or fallback */}
+            {showGuideModal && (
+                <div className="fixed inset-0 z-[100000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-[#1c1d21] border border-white/10 text-white rounded-2xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-[#34c759]">
+                                <Smartphone className="w-5 h-5" />
+                                <h3 className="font-bold text-base">Install App</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowGuideModal(false)}
+                                className="p-1 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-zinc-300 leading-relaxed">
+                            To install the VP App on your device:
                         </p>
 
-                        {/* Action Area */}
-                        {isIOS ? (
-                            <div className="flex flex-col gap-2 text-xs text-gray-300 mt-2 bg-white/5 p-3 rounded-xl">
-                                <div className="flex items-center gap-2">
-                                    <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-white/10 rounded-full text-[10px] font-bold">1</span>
-                                    <span>Tap the <Share className="w-3 h-3 inline mx-0.5" /> <strong>Share</strong> button below</span>
+                        <div className="space-y-3 text-xs text-zinc-300">
+                            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                                <div className="p-2 bg-[#34c759]/20 text-[#34c759] rounded-lg">
+                                    <MoreVertical className="w-4 h-4" />
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-white/10 rounded-full text-[10px] font-bold">2</span>
-                                    <span>Select <strong>Add to Home Screen</strong></span>
+                                <div>
+                                    <span className="font-semibold text-white">Step 1</span>
+                                    <p className="text-[11px] text-zinc-400">Tap your browser menu (<strong className="text-white">⋮</strong> or <strong className="text-white">Share</strong>)</p>
                                 </div>
                             </div>
-                        ) : (
-                            <Button
-                                onClick={handleInstallClick}
-                                className="w-full bg-primary hover:bg-primary text-white font-semibold py-2 rounded-xl mt-1 transition-all"
-                            >
-                                Install Now
-                            </Button>
-                        )}
+
+                            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                                <div className="p-2 bg-[#34c759]/20 text-[#34c759] rounded-lg">
+                                    <PlusSquare className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <span className="font-semibold text-white">Step 2</span>
+                                    <p className="text-[11px] text-zinc-400">Select <strong className="text-white">&quot;Install App&quot;</strong> or <strong className="text-white">&quot;Add to Home Screen&quot;</strong></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setShowGuideModal(false)}
+                            className="w-full py-2.5 bg-[#34c759] hover:bg-[#2fb350] text-white font-semibold text-xs rounded-xl shadow-md transition-all mt-2"
+                        >
+                            Got It
+                        </button>
                     </div>
                 </div>
-
-                {isIOS && (
-                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#1c1c1e] rotate-45 border-r border-b border-white/10"></div>
-                )}
-            </div>
-        </div>
+            )}
+        </>
     );
-};
+}
