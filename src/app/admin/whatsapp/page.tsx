@@ -640,7 +640,7 @@ export default function WhatsAppDashboardPage() {
                         </button>
 
                         <h3 className="text-lg font-bold">Scan WhatsApp QR Code</h3>
-                        <p className="text-xs text-muted-foreground mt-1 mb-4">Open WhatsApp $\rightarrow$ Linked Devices $\rightarrow$ Link a Device</p>
+                        <p className="text-xs text-muted-foreground mt-1 mb-4">Open WhatsApp → Linked Devices → Link a Device</p>
 
                         {status?.qrDataUrl ? (
                             <div className="flex justify-center">
