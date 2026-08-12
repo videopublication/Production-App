@@ -76,6 +76,8 @@ export interface User {
     name: string;
     role: Role;
     email: string;
+    phone?: string | null;
+    whatsappNumber?: string | null;
     active?: boolean; // Deprecated, kept for immediate backward compat during refactor
     status: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
     fcmToken?: string | null;
@@ -84,6 +86,7 @@ export interface User {
     isPrimaryLeaveApprover?: boolean;
     canManageExpenses?: boolean;
     canBeAssignedToShoots?: boolean;
+    canSelfEditProfile?: boolean;
 }
 
 export interface Equipment {

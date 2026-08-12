@@ -94,16 +94,31 @@ class StorageService {
         }
         return data.map((u: any) => ({
             ...u,
+            phone: u.phone || u.whatsapp_number || null,
+            whatsappNumber: u.whatsapp_number || u.phone || null,
             fcmToken: u.fcm_token,
+            avatarUrl: u.avatar_url,
             departmentId: u.department_id,
             isPrimaryLeaveApprover: u.is_primary_leave_approver,
             canManageExpenses: u.can_manage_expenses,
-            canBeAssignedToShoots: u.can_be_assigned_to_shoots
+            canBeAssignedToShoots: u.can_be_assigned_to_shoots,
+            canSelfEditProfile: u.can_self_edit_profile !== false
         })) as User[];
     }
 
     async updateUser(id: string, updates: Partial<User>): Promise<void> {
         const dbUpdates: any = { ...updates };
+        if (updates.phone !== undefined) {
+            dbUpdates.phone = updates.phone;
+        }
+        if (updates.whatsappNumber !== undefined) {
+            dbUpdates.whatsapp_number = updates.whatsappNumber;
+            delete dbUpdates.whatsappNumber;
+        }
+        if (updates.canSelfEditProfile !== undefined) {
+            dbUpdates.can_self_edit_profile = updates.canSelfEditProfile;
+            delete dbUpdates.canSelfEditProfile;
+        }
         if (updates.fcmToken !== undefined) {
             dbUpdates.fcm_token = updates.fcmToken;
             delete dbUpdates.fcmToken;
@@ -124,7 +139,6 @@ class StorageService {
             dbUpdates.can_be_assigned_to_shoots = updates.canBeAssignedToShoots;
             delete dbUpdates.canBeAssignedToShoots;
         }
-        // Remove known non-db fields if any, though User interface is clean
 
         const { error } = await supabase
             .from('users')
