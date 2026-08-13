@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
+import { logActionVariant } from '@/lib/log-display';
 import { Log, User } from '@/types';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -98,22 +99,7 @@ export default function AdminLogsPage() {
     // No client-side filter needed.
     const filteredLogs = logs;
 
-    const getActionVariant = (action: string): 'default' | 'success' | 'warning' | 'secondary' | 'outline' | 'destructive' => {
-        switch (action) {
-            case 'CHECKOUT': return 'default';
-            case 'RETURN': return 'success';
-            case 'EDIT': return 'warning';
-            case 'CREATE': return 'default';
-            // Deletions are irreversible, so they read as such at a glance.
-            case 'DELETE': return 'destructive';
-            case 'VERIFY': return 'secondary';
-            case 'LOGIN': return 'success';
-            case 'SIGNUP': return 'default';
-            case 'LOGOUT': return 'secondary';
-            case 'LOGIN_FAILED': return 'outline';
-            default: return 'outline';
-        }
-    };
+    const getActionVariant = logActionVariant;
 
     if (!user || !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
         return null; // Or unauthorized view

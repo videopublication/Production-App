@@ -193,6 +193,7 @@ export async function POST(request: Request) {
 const updateUserSchema = z.object({
     id: z.string(),
     password: z.string().min(6).optional(),
+    name: z.string().min(1).optional(),
     status: z.string().optional(),
     role: z.string().optional(),
     phone: z.string().optional().nullable(),
@@ -221,7 +222,7 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: 'Validation failed', details: result.error.flatten() }, { status: 400 });
         }
 
-        const { id, password, status, role, phone, departmentId, isPrimaryLeaveApprover, canManageExpenses, canBeAssignedToShoots, canSelfEditProfile } = result.data;
+        const { id, password, name, status, role, phone, departmentId, isPrimaryLeaveApprover, canManageExpenses, canBeAssignedToShoots, canSelfEditProfile } = result.data;
 
         if (password) {
             const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(id, {
@@ -231,6 +232,7 @@ export async function PUT(request: Request) {
         }
 
         const updates: {
+            name?: string;
             status?: string;
             role?: string;
             phone?: string | null;
@@ -241,6 +243,7 @@ export async function PUT(request: Request) {
             can_be_assigned_to_shoots?: boolean;
             can_self_edit_profile?: boolean;
         } = {};
+        if (name) updates.name = name;
         if (status) updates.status = status;
         if (role) updates.role = role;
         if (phone !== undefined) {

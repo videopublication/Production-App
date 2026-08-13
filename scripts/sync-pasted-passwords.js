@@ -1,0 +1,85 @@
+const { Client } = require('pg');
+
+const queries = [
+    "UPDATE auth.users SET encrypted_password = '$2a$10$QnwhB5CA69K.TZVgL49mRe9AIVCsb4jTSEWqmLSP/L/DEgHK9p.IO' WHERE id = '9ed75cdf-0fd1-4218-bdac-242eca00be04';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$sDsMD8rZGN.oOWiZj2hCPuKSqYb1eX2ToYopP8lAIJgGm2TnBuk.O' WHERE id = '5ba68164-89f5-4aaf-ba24-9332ec5c942e';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$iM6hh55c4rBLmcAtm/L/ZuRfzsxDMN5pL580xA1OFDVs1qRA/RhQe' WHERE id = 'f058a811-0f9e-4215-bc5c-4fe724d5d40e';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$Z3JeBMZyVj4g1uz40nDuKeRsRJm4N5XbScW8pRn/IN2zQnFvjMRjW' WHERE id = 'efb4041a-d66a-490a-977c-7b38a15e92d9';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$uO4D48i7wdi2t3TH6yU03OoCLKdWspI1dWnrcwo/MiGb.LhLVTvf6' WHERE id = '6a237aaa-e546-46b4-b210-0c7c6a7a7e07';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$NhJsHJEWqT3ZN7GaneVkR.1xeeU4ozVRX.os/ZDE038XJ3/YovNBW' WHERE id = 'f52fb72e-0e8c-43a5-8134-b0ab900cbfa8';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$NrzZgdobeD3OAinNqrxJJueJnqtJpPhiUDtJqMMWKmUOTwOL2RtUa' WHERE id = '66537335-ca6d-419f-8fa8-a507956837c1';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$489Q1VruRFmWUxNV64r1kO35Pgn6xAkzSypPod6S9TQRRy5HPhVuy' WHERE id = '2b30f61f-2fb4-4224-a6ec-c708c20bfb3e';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$Q2sKF/15XxwxJVVxeGeIsuHgEFgisq9G.569EY.CnYYVsbs.lSaAK' WHERE id = 'c7fdfad7-1473-44ad-8141-2d60243a2009';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$dDO7TyEstDnjUMWC0l5Cb.fhxehG0cVL3ZNZeqpGlTN9lZ6bHOGJK' WHERE id = '181cc845-7b89-43b9-84a2-62ab74379342';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$qMNnr.D.wAJaE9.KzO9Bu.QaFXWMgTUT6FBH8B2rrGMaNkzf3C0za' WHERE id = 'f57e82cb-58f7-4fa6-bcf4-f0653fef8d94';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$xWUDFC61uEcJyiaq9o/WTeTXYtkW.1jW4o1ANRU1kWOfdO0wi/wUG' WHERE id = 'd8ddab4b-0487-4d20-b88a-3fdadab3339b';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$NV9nU4BRkNIR2vfJBvxwtedJCs34I2TqPUNgALF7.yO47k/hjzhqy' WHERE id = '72cf2dd3-33c6-4876-9f99-3fcb9b524f78';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$SoM/Z8lVJmFXB95avb/AWuLrlcEiA6N0c/Tn09WCURW420THVpXCm' WHERE id = 'f1067815-fa84-434c-9057-cb7dc723a3da';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$EHv6TsBnORcqDEsjstpOUu9ZeafYbeipHgsV3eGNqEfl7VbRMeszW' WHERE id = 'e1d47334-17df-450a-861c-8465fe5b3719';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$arkl9wih.KyvkXba770znOv6Ckt.H/SME1nApnOlJUvSQAlllH4ZS' WHERE id = 'd247cd79-9207-4dca-b0b9-00ea6bf44e98';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$mM/G4M9.axKCw7/Uzj551u8kEUtqxXhfa.2YSht7ytEaPqLwG6j1y' WHERE id = '1b92dae2-6b0d-4e37-9ac8-92fecdb2bf14';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$1p2Hm/jxVR6zqtdUKlJRu.UKykmByxC3Y9MjWu9vQiBuJ7NOAetwm' WHERE id = 'da797c24-76c5-44fd-a238-fec6f843a7af';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$l7bo68csf1XG3xWJvVkNkO6lZeGSyJmwLK0HCCmOzRjW6KMFBPK1m' WHERE id = '80f30d33-4221-42e3-a93f-315093c3ac44';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$vnyUyWGQZmM8C/fErNdx3.REjjMDIMLN75epELnnvXOuC05eUaIXq' WHERE id = '8b6dc8c3-a3e9-493e-8149-42268f090ace';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$m/qOObu7rEoqIEajpQ4SmOKKYXTxFqdY3BOXCnY6cgOo2Lc7Sn3XO' WHERE id = '8db28910-778d-495d-9356-035c7900507b';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$it/S/Gtt5s4N20sApldxUuqZE9W4/9EkhI4XjzXMAQKZ7ePUyXRze' WHERE id = 'a5760883-b3cc-44c3-9aed-c91cb1d9e52c';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$HOp7rPPjH6c3hdxIbBLVGes6u9T9rYjA.QwDBa2RgfJoeQuWPBf5a' WHERE id = '8b92fac4-f3c7-49cd-89aa-f9592bec3bd2';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$E5Owfdo92K1vXgb8XMxd8eIjqfM5aHf6U4hssbWia41pKWLhs.8uW' WHERE id = '1200485b-c769-48d8-9671-ef37ad5b73dc';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$G4Pe4ltFDz9IldM1rlLawuv3jcIlPe6BDz7z20uzUw.rchSI3kJlS' WHERE id = 'e17d7383-f492-4b9c-b815-051a4af41191';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$VtihM/lug4JLMjNHUKP4PenU5EipPUROpX/dNpLS81z7Yi51.UL0y' WHERE id = 'b097835f-495c-4b5f-8d91-45c1ef3e20f7';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$bekk1dsWBWHmDYFrAgwD9uVWZLVNHhdeYBDnUv3Etm33itbd5KCLG' WHERE id = '743de6c0-6742-40d0-9234-2c394f72bdd5';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$Jc7No3jyL42BqLdAHjJw2.QRlXcQjnEfyFzSQij.W/sMD5UXBJf5q' WHERE id = '8ae112e5-b658-465f-8cf9-df62855dc6d8';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$gmZ35QXSPCKl5/Nkj6AL7ecSd4t0IBBqPTAXCsD74kJB43tkP2dX6' WHERE id = '8cbe4971-7dd2-4dd4-8120-0d98553ed9c2';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$0VTnojrVuVAiypjxrQq2MekFe.LICNDU.NFGg9X1RBAfflUUZmQEG' WHERE id = '67f61283-cd1c-4caa-9990-7bf8f7319940';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$.HLXccqYPPHDpYP6rIudbu4dwdvo0B0rRJeSbdVBgYQZ8JHCP1DDa' WHERE id = '308484d4-9ec4-402c-97a5-e28edc6cff29';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$Samw6VOdA1pHhHg4QZH41.4iFFIZTGiGm3xauQAu4H5KQf4bacJM2' WHERE id = '8ef438af-2d12-40e3-a85b-09226ba56d7d';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$RxsDHoqdbhiqXP92ufuv8u4b.SfCP3KesL6yKMrVzmsNDR/g8Wxei' WHERE id = '1f7dbbc3-86fb-40a2-828f-0032ea20602f';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$zMu.ncDbTYDMvUtYF.Ig1OI8IQ5N4muwaqVSHg6W1TcCDqJ70TNCa' WHERE id = '5d2b42b0-0620-4496-9e16-0cfad22ead3f';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$TyoHmWAvqA214eDusQUmjuqLAcvTP1pJw6cnGYfjbdgO9WrXX97Ha' WHERE id = '9cef0ef1-6516-4b0b-bc43-1848b9af4827';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$ItFOCi5X45fA157HMUhHi.fEQ4SMvWlPqqGGoLvU0SQdOszKKDkte' WHERE id = 'b0361242-07e7-4c51-93f5-58d50dbe40c7';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$/OEovnGyY2u/BlL7p4OSuOHIgvxxcgsfKn7QpasDmMEiWP4f1bcO.' WHERE id = '398762ea-1895-48ed-a866-d1117beba270';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$ctPGtLxwgVB9Y145OmxSrOB/GMhQTluj3EuxM.lM8kF7F7rm.XveW' WHERE id = '3abf491f-758c-4957-9ce3-bc4ee22d9f48';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$emHbEW5maQs/QF0UUelHluM9jhNhI/gPRwWkD1xTKmBw1R6z/SQ1O' WHERE id = '574053eb-a5c0-4761-a5c0-ae358d340301';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$ghP9ufJsfB5RQxR6zBrYXOtpHC0UQEMFDBylSDJP20Aj7NxRkZccu' WHERE id = '4a90c8b5-7261-4295-ab4e-28d01028941a';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$1KVIlH1s4ujfDSklzqIWXetDRrJ6gkhiu2WzLMM67zaSe.Fo5V8yG' WHERE id = '718c2845-20e6-45fa-984e-ccbdd977c0e5';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$ONWfKHmI/IH7ER0kxO.IN.1k3VY3KCpA1rXVzR/7f1W9cSB.zwtKS' WHERE id = 'e756200c-f0f3-4be7-8239-8afe6f5116ee';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$1e6Oy/uRModDdGIP4djzL.jARGU6xJkzpjzzJBqBRJYn73mbnbyJ2' WHERE id = '9172f5a9-b7d7-43e9-8668-919c556e39c5';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$N5md4m1ZKgMhdR5K5xr33.pnInW.NOLOhYEVERcgthWKqutjTlYmW' WHERE id = '2b07defb-55ed-4d3f-84a8-ca822baf3bba';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$NtTzj065sFbKXmHYRAf.xeSD.WW8tJitoppQ6HUMTRmOiPJxvUYtq' WHERE id = '46bd1474-efd2-4f35-9259-52d7d00793fa';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$Ti7/7MmjG0OxfkIi67cu/eCMrbwEXkkrnnLBMP8nCfzpgbNXtqrU2' WHERE id = 'f8eb03ba-00b1-4281-870d-f6e9b5af87e0';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$oTgUyXhhjis9IYa6NMULN.Dpzi5PPV04vG28HGO8LOeC8bSz9WLx.' WHERE id = '009d1a8c-a607-4b88-ab23-a268c5079186';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$jzq5/E1YXciwHYouHxvMquibihs2arcA/VSfOyQEQ30sA8EkFy.ie' WHERE id = '83276050-d498-4416-9347-8a3af4e6b5d3';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$SB3XFaWpHtwgpgRfP/YIC.AHBrtMzVFLHtrvORIccrslLANTSX1/O' WHERE id = 'ac0022c0-8e86-44d9-9a11-83ecadce8cec';",
+    "UPDATE auth.users SET encrypted_password = '$2a$10$fFtDGhGmSXGn8J2UQUDfR.8rUEqqxVEWhJT97eT1QzmkjKCN55vbG' WHERE id = 'd097aeb2-46a5-42f2-b888-945ac239032a';"
+];
+
+async function runPasswordUpdates() {
+    // Try connection strings
+    const connStr = 'postgres://postgres.ltnbkmjeyifjpxvcqpte:Y8EVONFmKe32V-ktFxGkdmeG0lDX9wt3va0ddsSiblQ@aws-0-ap-south-1.pooler.supabase.com:6543/postgres';
+    const client = new Client({
+        connectionString: connStr,
+        ssl: { rejectUnauthorized: false }
+    });
+
+    try {
+        console.log('🔌 Connecting to Mumbai Supabase via Pooler...');
+        await client.connect();
+        console.log('✅ Connected! Executing all 50 password updates...');
+
+        for (const sql of queries) {
+            await client.query(sql);
+        }
+
+        console.log('🎉 Successfully synced all 50 encrypted passwords to Mumbai Supabase!');
+    } catch (err) {
+        console.error('❌ Connection error:', err.message);
+        console.log('\nWriting queries to sync_all_passwords.sql for easy copy-paste in Supabase SQL Editor...');
+        const fs = require('fs');
+        fs.writeFileSync('sync_all_passwords.sql', queries.join('\n'));
+        console.log('✅ Created sync_all_passwords.sql file!');
+    } finally {
+        await client.end().catch(() => {});
+    }
+}
+
+runPasswordUpdates();

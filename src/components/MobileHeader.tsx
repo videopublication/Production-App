@@ -48,6 +48,7 @@ export const MobileHeader = () => {
                 if (pathname.includes('/inventory/')) return 'Item Details';
                 if (pathname.startsWith('/shoots/')) return `${labels.workSingular} Details`;
                 if (pathname.startsWith('/transactions/')) return 'Transaction Details';
+                if (pathname.startsWith('/admin/users/')) return 'Member';
                 return name;
             }
         }
@@ -68,7 +69,8 @@ export const MobileHeader = () => {
                             pathname === '/notifications' ||
                             (pathname.startsWith('/inventory/') && pathname !== '/inventory') ||
                             (pathname.startsWith('/shoots/') && pathname !== '/shoots') ||
-                            (pathname.startsWith('/transactions/') && pathname !== '/transactions')
+                            (pathname.startsWith('/transactions/') && pathname !== '/transactions') ||
+                            (pathname.startsWith('/admin/users/') && pathname !== '/admin/users')
                         ) && (
                                 <button
                                     onClick={() => router.back()}

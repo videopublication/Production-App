@@ -16,6 +16,7 @@ import { useShoots } from '@/hooks/useShoots';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
 import { buildCheckoutMessage } from '@/lib/transaction-message';
+import { WhatsAppDispatchModal } from '@/components/WhatsAppDispatchModal';
 
 export default function TransactionsPage() {
     const router = useRouter();
@@ -41,6 +42,14 @@ export default function TransactionsPage() {
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     const [copiedId, setCopiedId] = useState<string | null>(null);
+
+    // WhatsApp Direct Dispatch Confirmation Modal State
+    const [dispatchModalState, setDispatchModalState] = useState<{
+        isOpen: boolean;
+        message: string;
+        targetName?: string;
+        departmentId?: string;
+    }>({ isOpen: false, message: '' });
 
     // Debounce Search
     useEffect(() => {
@@ -162,8 +171,12 @@ export default function TransactionsPage() {
     const handleShareWhatsApp = (e: React.MouseEvent, txn: Transaction) => {
         e.stopPropagation();
         const message = generateMessage(txn);
-        const encodedMessage = encodeURIComponent(message);
-        window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+        setDispatchModalState({
+            isOpen: true,
+            message,
+            targetName: 'Configured WhatsApp Group',
+            departmentId: txn.departmentId || undefined
+        });
     };
 
     const handleCopyMessage = async (e: React.MouseEvent, txn: Transaction) => {
@@ -404,6 +417,14 @@ export default function TransactionsPage() {
                     )}
                 </Card>
             </div>
+
+            <WhatsAppDispatchModal
+                isOpen={dispatchModalState.isOpen}
+                onClose={() => setDispatchModalState(prev => ({ ...prev, isOpen: false }))}
+                initialMessage={dispatchModalState.message}
+                targetName={dispatchModalState.targetName}
+                departmentId={dispatchModalState.departmentId}
+            />
         </PullToRefresh>
     );
 }

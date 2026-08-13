@@ -106,6 +106,34 @@ class StorageService {
         })) as User[];
     }
 
+    async getUser(id: string): Promise<User | null> {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching user:', error);
+            return null;
+        }
+        if (!data) return null;
+
+        const u = data as Record<string, unknown> & { phone?: string; whatsapp_number?: string };
+        return {
+            ...u,
+            phone: u.phone || u.whatsapp_number || null,
+            whatsappNumber: u.whatsapp_number || u.phone || null,
+            fcmToken: u.fcm_token,
+            avatarUrl: u.avatar_url,
+            departmentId: u.department_id,
+            isPrimaryLeaveApprover: u.is_primary_leave_approver,
+            canManageExpenses: u.can_manage_expenses,
+            canBeAssignedToShoots: u.can_be_assigned_to_shoots,
+            canSelfEditProfile: u.can_self_edit_profile !== false
+        } as User;
+    }
+
     async updateUser(id: string, updates: Partial<User>): Promise<void> {
         const dbUpdates: any = { ...updates };
         if (updates.phone !== undefined) {
@@ -597,6 +625,34 @@ class StorageService {
             oldValue: l.old_value,
             newValue: l.new_value
         })) as Log[];
+    }
+
+    /**
+     * Everything a person did, newest first — the actor side of the log, as
+     * opposed to getLogsByEntity which returns what happened *to* a record.
+     * Rows where the user is the subject (their own signup/login) are included
+     * because those carry entity_id = the user id.
+     */
+    async getLogsByUser(userId: string, limit = 60): Promise<Log[]> {
+        const { data, error } = await supabase
+            .from('logs')
+            .select('*')
+            .or(`user_id.eq.${userId},entity_id.eq.${userId}`)
+            .order('timestamp', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            console.error('Error fetching logs for user:', error);
+            return [];
+        }
+
+        return data.map((l: Record<string, unknown>) => ({
+            ...l,
+            entityId: l.entity_id,
+            userId: l.user_id,
+            oldValue: l.old_value,
+            newValue: l.new_value
+        })) as unknown as Log[];
     }
 
     async getLogsByEntities(

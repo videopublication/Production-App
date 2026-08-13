@@ -12,7 +12,8 @@ import { storage } from '@/lib/storage'; // Still used for type referencing if v
 import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X, IndianRupee } from 'lucide-react';
 import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { Button } from '@/components/Button';
-import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
+import { formatWhatsAppMessage, generateShootWhatsAppPayload, openWhatsApp } from '@/lib/whatsapp';
+import { WhatsAppDispatchModal } from '@/components/WhatsAppDispatchModal';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { getRoleLabel } from '@/lib/roles';
 import { useDepartment } from '@/lib/department-context';
@@ -24,7 +25,6 @@ type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST' | 'CUSTOM';
 type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber' | 'expenses';
 
 import { Shoot, ShootExpense } from '@/types';
-
 import { getShootTotalExpense, generateShootsCSV, downloadCSV } from '@/lib/finance-utils';
 
 type SortDirection = 'asc' | 'desc';
@@ -71,6 +71,15 @@ export default function ShootList() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // WhatsApp Direct Dispatch Confirmation Modal State
+    const [dispatchModalState, setDispatchModalState] = useState<{
+        isOpen: boolean;
+        message: string;
+        mentions?: string[];
+        targetName?: string;
+        departmentId?: string;
+    }>({ isOpen: false, message: '' });
 
     const [isInitialized, setIsInitialized] = useState(false);
 
@@ -873,13 +882,19 @@ export default function ShootList() {
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        const text = formatWhatsAppMessage(
+                                                        const { message, mentions } = generateShootWhatsAppPayload(
                                                             shoot,
                                                             assignments.filter(a => a.shootId === shoot.id),
                                                             users,
                                                             labels
                                                         );
-                                                        openWhatsApp(text);
+                                                        setDispatchModalState({
+                                                            isOpen: true,
+                                                            message,
+                                                            mentions,
+                                                            targetName: 'Configured WhatsApp Group',
+                                                            departmentId: shoot.departmentId
+                                                        });
                                                     }}
                                                     className="p-1.5 rounded-md text-gray-400 hover:text-[#25D366] hover:bg-[#25D366]/10 transition-colors relative z-10"
                                                     title="Share on WhatsApp"
@@ -1142,13 +1157,21 @@ export default function ShootList() {
                                             </span>
                                         </div>
                                     </div>
-
                                 </div>
                             );
                         })}
                     </div>
                 )}
             </div>
-        </PullToRefresh >
+
+            <WhatsAppDispatchModal
+                isOpen={dispatchModalState.isOpen}
+                onClose={() => setDispatchModalState(prev => ({ ...prev, isOpen: false }))}
+                initialMessage={dispatchModalState.message}
+                mentions={dispatchModalState.mentions}
+                targetName={dispatchModalState.targetName}
+                departmentId={dispatchModalState.departmentId}
+            />
+        </PullToRefresh>
     );
 }

@@ -9,6 +9,7 @@
     "dev:beta": "cmd /c \"copy .env.beta .env.local\" && next dev --turbopack -p 3000",
     "dev:prod": "cmd /c \"copy .env.production .env.local\" && next dev --turbopack -p 3000",
     "build": "next build --webpack",
+    "gateway": "node scripts/whatsapp-gateway/server.js",
     "start": "next start",
     "lint": "eslint"
   },

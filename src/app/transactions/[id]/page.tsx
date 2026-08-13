@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { Transaction, Equipment, User, Log, Shoot, Assignment, ManualTransactionItem } from '@/types';
 import { Card } from '@/components/Card';
@@ -138,6 +138,12 @@ const formatLogDetails = (details?: string) => {
 export default function TransactionDetailPage() {
     const router = useRouter();
     const params = useParams();
+    const searchParams = useSearchParams();
+    // A caller (e.g. a member's profile) can say where Back should go and what
+    // to call it; without it the page behaves as before.
+    const returnTo = searchParams.get('returnTo');
+    const safeReturnTo = returnTo?.startsWith('/') ? returnTo : null;
+    const returnLabel = searchParams.get('returnLabel') || 'Back';
     const { user } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
@@ -1255,6 +1261,18 @@ export default function TransactionDetailPage() {
 
     return (
         <div className="space-y-6 animate-fade-in pb-12 max-w-5xl mx-auto">
+            {safeReturnTo && (
+                <Link
+                    href={safeReturnTo}
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-opacity hover:opacity-80"
+                >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    {returnLabel}
+                </Link>
+            )}
+
             {/* Header */}
             <Card className="p-4 sm:p-5">
                 <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold leading-tight tracking-tight break-words">

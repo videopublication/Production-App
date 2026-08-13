@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 export const dynamic = 'force-dynamic';
+
+const getSupabaseAdmin = () => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) return null;
+    return createClient(supabaseUrl, supabaseServiceKey);
+};
 
 export async function GET() {
     const gatewayUrl = (process.env.WHATSAPP_GATEWAY_URL || 'http://localhost:3001').replace(/\/$/, '');
@@ -63,6 +74,55 @@ export async function GET() {
             groupJid,
             instanceName,
             error: err.message || 'Connection refused'
+        });
+    }
+}
+
+// DELETE Handler to Disconnect / Reset WhatsApp Session
+export async function DELETE() {
+    const gatewayUrl = (process.env.WHATSAPP_GATEWAY_URL || 'http://localhost:3001').replace(/\/$/, '');
+
+    try {
+        // 1. Clear Supabase whatsapp_sessions table directly as double safety
+        const supabase = getSupabaseAdmin();
+        if (supabase) {
+            try {
+                await supabase.from('whatsapp_sessions').delete().neq('id', 'keep_table_alive');
+            } catch (sErr) {
+                console.warn('[WhatsApp Status API] Could not clear Supabase session rows:', sErr);
+            }
+        }
+
+        // 2. Clear local auth folder if running locally
+        try {
+            const authDir = process.env.AUTH_DIR || path.join(os.tmpdir(), 'vp_whatsapp_auth_info');
+            if (fs.existsSync(authDir)) {
+                fs.rmSync(authDir, { recursive: true, force: true });
+            }
+        } catch (fErr) {
+            console.warn('[WhatsApp Status API] Could not clear local auth dir:', fErr);
+        }
+
+        // 3. Trigger gateway reset endpoint
+        try {
+            await fetch(`${gatewayUrl}/logout`, {
+                method: 'POST',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (gErr) {
+            console.warn('[WhatsApp Status API] Gateway reset trigger offline:', gErr);
+        }
+
+        return NextResponse.json({
+            success: true,
+            message: 'WhatsApp session reset cleanly. Fresh QR generating...'
+        });
+    } catch (err: any) {
+        return NextResponse.json({
+            success: true,
+            message: 'Session cleared locally.',
+            warning: err.message
         });
     }
 }

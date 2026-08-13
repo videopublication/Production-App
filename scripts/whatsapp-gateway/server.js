@@ -30,13 +30,20 @@ let sock;
 let currentQrBase64 = null;
 let connectionStatus = 'initializing';
 
-const AUTH_DIR = path.join(__dirname, 'auth_info');
+const os = require('os');
+const AUTH_DIR = process.env.AUTH_DIR || path.join(os.tmpdir(), 'vp_whatsapp_auth_info');
 
 async function restoreSessionFromSupabase() {
     if (!supabase) return;
     try {
         if (!fs.existsSync(AUTH_DIR)) {
             fs.mkdirSync(AUTH_DIR, { recursive: true });
+        } else {
+            const existingFiles = fs.readdirSync(AUTH_DIR);
+            if (existingFiles.length > 0) {
+                console.log('[WhatsApp Gateway] Active local session files found. Skipping restore to preserve live keys.');
+                return;
+            }
         }
 
         const { data, error } = await supabase.from('whatsapp_sessions').select('id, data');
@@ -91,55 +98,98 @@ async function backupSessionToSupabase() {
     }
 }
 
+let isConnecting = false;
+
 async function connectToWhatsApp() {
-    await restoreSessionFromSupabase();
+    if (isConnecting) return;
+    isConnecting = true;
 
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-
-    sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,
-    });
-
-    sock.ev.on('creds.update', async () => {
-        await saveCreds();
-        backupSessionToSupabase().catch(() => {});
-    });
-
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            connectionStatus = 'qr_ready';
+    try {
+        if (sock) {
             try {
-                currentQrBase64 = await QRCode.toDataURL(qr);
-            } catch (err) {
-                console.error('[WhatsApp Gateway] Failed to generate QR image:', err.message);
-            }
-            console.log('\n==================================================');
-            console.log('📱 SCAN THIS QR CODE IN WHATSAPP (LINKED DEVICES)');
-            console.log('   OR OPEN IN BROWSER: /qr');
-            console.log('==================================================\n');
-            qrcodeTerminal.generate(qr, { small: true });
+                sock.ev.removeAllListeners();
+                sock.end(undefined);
+            } catch {}
+            sock = null;
         }
 
-        if (connection === 'close') {
-            currentQrBase64 = null;
-            connectionStatus = 'disconnected';
-            const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('[WhatsApp Gateway] Connection closed. Reconnecting...', shouldReconnect);
-            if (shouldReconnect) {
-                connectToWhatsApp();
-            }
-        } else if (connection === 'open') {
-            currentQrBase64 = null;
-            connectionStatus = 'connected';
-            console.log('\n==================================================');
-            console.log('✅ [WhatsApp Gateway] CONNECTED SUCCESSFULLY TO WHATSAPP!');
-            console.log('==================================================\n');
+        await restoreSessionFromSupabase();
+
+        const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+
+        sock = makeWASocket({
+            auth: state,
+            printQRInTerminal: false,
+            browser: ['VP Production App', 'Chrome', '1.0.0'],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 25000,
+            retryRequestDelayMs: 3000,
+            markOnlineOnConnect: false,
+            syncFullHistory: false
+        });
+
+        sock.ev.on('creds.update', async () => {
+            await saveCreds();
             backupSessionToSupabase().catch(() => {});
-        }
-    });
+        });
+
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                connectionStatus = 'qr_ready';
+                try {
+                    currentQrBase64 = await QRCode.toDataURL(qr);
+                } catch (err) {
+                    console.error('[WhatsApp Gateway] Failed to generate QR image:', err.message);
+                }
+                console.log('\n==================================================');
+                console.log('📱 SCAN THIS QR CODE IN WHATSAPP (LINKED DEVICES)');
+                console.log('   OR OPEN IN BROWSER: /qr');
+                console.log('==================================================\n');
+                qrcodeTerminal.generate(qr, { small: true });
+            }
+
+            if (connection === 'close') {
+                const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+                const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+                const isConflict = statusCode === 440;
+
+                console.log(`[WhatsApp Gateway] Connection closed (code ${statusCode}). Logged out: ${isLoggedOut}, Conflict: ${isConflict}`);
+
+                if (isLoggedOut) {
+                    currentQrBase64 = null;
+                    connectionStatus = 'disconnected';
+                    console.log('[WhatsApp Gateway] Logged out / invalid session. Wiping auth state...');
+                    if (fs.existsSync(AUTH_DIR)) {
+                        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+                    }
+                    if (supabase) {
+                        try {
+                            await supabase.from('whatsapp_sessions').delete().neq('id', 'keep_table_alive');
+                        } catch {}
+                    }
+                    setTimeout(connectToWhatsApp, 3000);
+                } else if (isConflict) {
+                    console.warn('[WhatsApp Gateway] Session conflict (code 440). Delaying reconnect to allow primary session to settle...');
+                    setTimeout(connectToWhatsApp, 15000);
+                } else {
+                    console.log('[WhatsApp Gateway] Temporary connection hiccup. Reconnecting seamlessly...');
+                    setTimeout(connectToWhatsApp, 5000);
+                }
+            } else if (connection === 'open') {
+                currentQrBase64 = null;
+                connectionStatus = 'connected';
+                console.log('\n==================================================');
+                console.log('✅ [WhatsApp Gateway] CONNECTED SUCCESSFULLY TO WHATSAPP!');
+                console.log('==================================================\n');
+                backupSessionToSupabase().catch(() => {});
+            }
+        });
+    } finally {
+        isConnecting = false;
+    }
 }
 
 connectToWhatsApp();
@@ -147,6 +197,39 @@ connectToWhatsApp();
 // Healthcheck Endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', connected: connectionStatus === 'connected', state: connectionStatus });
+});
+
+// Force Reset & Clear Session Endpoint
+app.all(['/reset', '/force-qr'], async (req, res) => {
+    try {
+        console.log('[WhatsApp Gateway] Force reset requested. Clearing all auth keys...');
+        if (sock) {
+            try { sock.logout(); } catch {}
+            try { sock.end(); } catch {}
+            sock = null;
+        }
+
+        currentQrBase64 = null;
+        connectionStatus = 'disconnected';
+
+        if (fs.existsSync(AUTH_DIR)) {
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        }
+
+        if (supabase) {
+            try {
+                await supabase.from('whatsapp_sessions').delete().neq('id', 'keep_table_alive');
+            } catch {}
+        }
+
+        setTimeout(() => {
+            connectToWhatsApp().catch(console.error);
+        }, 1000);
+
+        return res.json({ success: true, message: 'Gateway session reset cleanly. Fresh QR generating.' });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
 });
 
 // Browser QR Code Page
@@ -164,6 +247,7 @@ app.get(['/', '/qr'], (req, res) => {
                     .icon { font-size: 64px; margin-bottom: 16px; }
                     h2 { margin: 0 0 8px 0; color: #25d366; }
                     p { color: #8696a0; margin: 0; }
+                    a { color: #25d366; text-decoration: none; font-size: 13px; font-weight: bold; margin-top: 16px; inline-block: true; }
                 </style>
             </head>
             <body>
@@ -171,6 +255,8 @@ app.get(['/', '/qr'], (req, res) => {
                     <div class="icon">✅</div>
                     <h2>WhatsApp Connected!</h2>
                     <p>Your WhatsApp gateway session is 24/7 active and backed up to cloud DB.</p>
+                    <br/>
+                    <a href="/reset">🔌 Logout / Reset Session</a>
                 </div>
             </body>
             </html>
@@ -190,7 +276,8 @@ app.get(['/', '/qr'], (req, res) => {
                     .spinner { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #25d366; border-radius: 50%; width: 48px; height: 48px; animation: spin 1s linear infinite; margin: 0 auto 16px auto; }
                     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
                     h2 { margin: 0 0 8px 0; color: white; }
-                    p { color: #8696a0; margin: 0; }
+                    p { color: #8696a0; margin: 0 0 16px 0; }
+                    a { color: #25d366; text-decoration: none; font-size: 12px; }
                 </style>
             </head>
             <body>
@@ -198,6 +285,7 @@ app.get(['/', '/qr'], (req, res) => {
                     <div class="spinner"></div>
                     <h2>Generating QR Code...</h2>
                     <p>Please wait a moment while the connection initializes.</p>
+                    <a href="/reset">Click here if stuck to force reset session</a>
                 </div>
             </body>
             </html>
@@ -238,6 +326,81 @@ app.get(['/', '/qr'], (req, res) => {
     `);
 });
 
+// Disconnect & Logout Session API
+app.post(['/logout', '/disconnect'], async (req, res) => {
+    try {
+        console.log('[WhatsApp Gateway] Disconnect/Logout requested. Resetting session...');
+        if (sock) {
+            try {
+                await sock.logout();
+            } catch {
+                try { sock.end(); } catch {}
+            }
+            sock = null;
+        }
+
+        currentQrBase64 = null;
+        connectionStatus = 'disconnected';
+
+        // Clear local auth directory
+        if (fs.existsSync(AUTH_DIR)) {
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        }
+
+        // Clear Supabase session storage table
+        if (supabase) {
+            try {
+                await supabase.from('whatsapp_sessions').delete().neq('id', 'keep_table_alive');
+            } catch {}
+        }
+
+        // Restart listener for fresh QR code
+        setTimeout(() => {
+            connectToWhatsApp().catch(console.error);
+        }, 1000);
+
+        return res.json({ success: true, message: 'WhatsApp session logged out & reset successfully. New QR code generating.' });
+    } catch (err) {
+        console.error('[WhatsApp Gateway] Failed to logout session:', err);
+        return res.status(500).json({ error: err.message || 'Failed to disconnect session' });
+    }
+});
+
+// List Joined WhatsApp Groups API
+app.get(['/groups', '/group/list'], async (req, res) => {
+    try {
+        if (connectionStatus !== 'connected' || !sock) {
+            return res.status(503).json({ error: 'WhatsApp Gateway not connected' });
+        }
+
+        let groups;
+        try {
+            groups = await sock.groupFetchAllParticipating();
+        } catch (fetchErr) {
+            if (fetchErr.message && (fetchErr.message.includes('Closed') || fetchErr.message.includes('closed'))) {
+                console.warn('[WhatsApp Gateway] Group fetch encountered closed connection. Reconnecting...');
+                connectionStatus = 'disconnected';
+                await connectToWhatsApp();
+                if (sock) groups = await sock.groupFetchAllParticipating();
+            } else {
+                throw fetchErr;
+            }
+        }
+
+        const groupList = Object.values(groups || {}).map((g) => ({
+            id: g.id,
+            subject: g.subject,
+            participantsCount: g.participants?.length || 0,
+            creation: g.creation
+        }));
+
+        return res.json({ success: true, groups: groupList });
+    } catch (err) {
+        console.error('[WhatsApp Gateway] Failed to fetch groups:', err);
+        return res.status(500).json({ error: err.message || 'Failed to fetch groups' });
+    }
+});
+
 // Send Group Message API
 app.post(['/send-group-message', '/message/sendText/vp-app-1'], async (req, res) => {
     try {
@@ -258,11 +421,41 @@ app.post(['/send-group-message', '/message/sendText/vp-app-1'], async (req, res)
         }
 
         const options = {};
-        if (mentions && Array.isArray(mentions) && mentions.length > 0) {
-            options.mentions = mentions;
+        let finalMentions = Array.isArray(mentions) ? [...mentions] : [];
+
+        // Auto-extract any @phone tags in text for live WhatsApp group tagging
+        if (msgText) {
+            const matches = msgText.match(/@(\d{10,13})/g);
+            if (matches) {
+                matches.forEach(m => {
+                    const num = m.replace('@', '');
+                    const jid = num.length === 10 ? `91${num}@s.whatsapp.net` : `${num}@s.whatsapp.net`;
+                    if (!finalMentions.includes(jid)) finalMentions.push(jid);
+                });
+            }
         }
 
-        await sock.sendMessage(targetJid, { text: msgText, ...options });
+        if (finalMentions.length > 0) {
+            options.mentions = finalMentions;
+        }
+
+        let sent = false;
+        try {
+            await sock.sendMessage(targetJid, { text: msgText, ...options });
+            sent = true;
+        } catch (sendErr) {
+            console.warn('[WhatsApp Gateway] Send attempt failed, checking socket reconnect:', sendErr.message);
+            if (sendErr.message && (sendErr.message.includes('Closed') || sendErr.message.includes('closed'))) {
+                connectionStatus = 'disconnected';
+                await connectToWhatsApp();
+                if (sock) {
+                    await sock.sendMessage(targetJid, { text: msgText, ...options });
+                    sent = true;
+                }
+            }
+            if (!sent) throw sendErr;
+        }
+
         console.log(`[WhatsApp Gateway] Dispatched message to target JID: ${targetJid}`);
         return res.json({ success: true, targetJid });
     } catch (err) {
@@ -302,6 +495,20 @@ app.post(['/send-poll', '/message/sendPoll/vp-app-1'], async (req, res) => {
         console.error('[WhatsApp Gateway] Failed to send poll:', err);
         return res.status(500).json({ error: err.message || 'Failed to send poll' });
     }
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('[WhatsApp Gateway] Uncaught Exception:', err.message || err);
+    if (err.message && (err.message.includes('Connection Closed') || err.message.includes('Stream Errored'))) {
+        console.log('[WhatsApp Gateway] Recovering from socket error, reconnecting in 3s...');
+        setTimeout(() => {
+            try { connectToWhatsApp(); } catch (e) { console.error('Reconnect failed:', e); }
+        }, 3000);
+    }
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('[WhatsApp Gateway] Unhandled Rejection:', reason?.message || reason);
 });
 
 app.listen(PORT, () => {

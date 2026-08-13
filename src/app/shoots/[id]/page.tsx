@@ -38,6 +38,9 @@ export default function ShootDetailsPage() {
     const id = params?.id as string;
     const returnTo = searchParams.get('returnTo');
     const safeReturnTo = returnTo?.startsWith('/') ? returnTo : null;
+    // The caller names its own Back link; the planner passes none, so it keeps
+    // the label it always had.
+    const returnLabel = searchParams.get('returnLabel') || 'Back to Planner';
     const withReturnTo = (href: string) =>
         safeReturnTo ? `${href}?returnTo=${encodeURIComponent(safeReturnTo)}` : href;
     const queryClient = useQueryClient();
@@ -400,7 +403,7 @@ export default function ShootDetailsPage() {
                             className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:opacity-80 transition-opacity"
                         >
                             <ArrowLeft className="w-4 h-4" />
-                            Back to Planner
+                            {returnLabel}
                         </Link>
                     )}
 
