@@ -83,64 +83,59 @@ export const ActiveSessions = () => {
 
     if (loading) {
         return (
-            <div className="p-8 text-center">
-                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-sm text-gray-500">Loading sessions...</p>
+            <div className="rounded-2xl border border-border/70 bg-card p-8 text-center">
+                <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <p className="text-[13px] text-muted-foreground">Loading devices…</p>
             </div>
         );
     }
 
     return (
-        <div className="space-y-3 mt-8">
-            <div className="px-4 flex items-center justify-between">
-                <p className="section-header-ios !p-0">Active Sessions</p>
-                <span className="text-[11px] font-bold text-primary bg-primary/ px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    {sessions.length} {sessions.length === 1 ? 'Device' : 'Devices'}
-                </span>
-            </div>
+        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+            <header className="flex items-center justify-between gap-3 px-5 py-4">
+                <h2 className="text-[15px] font-semibold tracking-tight text-foreground">Signed-in devices</h2>
+                <span className="text-[13px] tabular-nums text-muted-foreground">{sessions.length}</span>
+            </header>
 
-            <div className="mx-4 overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] shadow-sm ring-1 ring-gray-200 dark:ring-white/10 divide-y divide-gray-100 dark:divide-white/5">
+            <div className="divide-y divide-border/60 border-t border-border/60">
                 {sessions.map((session) => {
                     const isCurrent = session.user_agent === navigator.userAgent;
                     const details = parseUserAgent(session.user_agent);
                     const lastActive = new Date(session.last_active_at);
 
                     return (
-                        <div key={session.id} className="p-4 flex items-start gap-4 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors relative group">
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isCurrent ? 'bg-green-100 dark:bg-green-900/20' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                        <div key={session.id} className="group relative flex items-start gap-4 px-5 py-4 transition-colors hover:bg-secondary/40">
+                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${isCurrent ? 'bg-success/12' : 'bg-secondary'}`}>
                                 {details.device === 'Mobile' ?
-                                    <Smartphone className={`w-6 h-6 ${isCurrent ? 'text-green-600 dark:text-green-500' : 'text-gray-500'}`} /> :
-                                    <Laptop className={`w-6 h-6 ${isCurrent ? 'text-green-600 dark:text-green-500' : 'text-gray-500'}`} />
+                                    <Smartphone className={`h-4 w-4 ${isCurrent ? 'text-[#248a3d] dark:text-[#34c759]' : 'text-muted-foreground'}`} /> :
+                                    <Laptop className={`h-4 w-4 ${isCurrent ? 'text-[#248a3d] dark:text-[#34c759]' : 'text-muted-foreground'}`} />
                                 }
                             </div>
 
                             <div className="flex-1 min-w-0 pt-0.5">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="text-[16px] font-semibold text-gray-900 dark:text-white truncate">
-                                        {details.os} {details.browser}
+                                    <h3 className="truncate text-[14px] font-medium text-foreground">
+                                        {details.os} · {details.browser}
                                     </h3>
                                     {isCurrent && (
-                                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-500 uppercase tracking-wide">
-                                            <CheckCircle2 className="w-2.5 h-2.5" />
-                                            Current
+                                        <span className="flex items-center gap-1 rounded-full bg-success/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#248a3d] dark:text-[#34c759]">
+                                            <CheckCircle2 className="h-2.5 w-2.5" />
+                                            This device
                                         </span>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-2 text-[13px] text-gray-500 dark:text-gray-400 mb-1">
-                                    <Clock className="w-3.5 h-3.5" />
+                                <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                                    <Clock className="h-3.5 w-3.5" />
                                     <span>
-                                        {isCurrent ? 'Just now' : `${formatDistanceToNow(lastActive)} ago`}
+                                        {isCurrent ? 'Active now' : `Active ${formatDistanceToNow(lastActive)} ago`}
                                     </span>
                                 </div>
-                                <p className="text-[11px] text-gray-400 dark:text-gray-500 font-mono truncate opacity-60">
-                                    {session.user_agent}
-                                </p>
                             </div>
 
                             {!isCurrent && (
                                 <button
                                     onClick={() => removeSession(session.user_agent)}
-                                    className="p-2 text-gray-400 hover:text-red-500 transition-colors rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 sm:opacity-0 group-hover:opacity-100"
+                                    className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive sm:opacity-0 group-hover:opacity-100"
                                     title="Revoke session"
                                 >
                                     <X className="w-5 h-5" />
@@ -151,39 +146,38 @@ export const ActiveSessions = () => {
                 })}
 
                 {/* Info Row & Action */}
-                <div className="p-4 flex gap-4 bg-gray-50 dark:bg-white/5">
-                    <div className="w-12 flex justify-center shrink-0 pt-0.5">
-                        <Shield className="w-5 h-5 text-gray-400" />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400 pt-0.5">
-                            To secure your account, you can <button onClick={() => setShowSignOutModal(true)} className="text-[#ff453a] hover:underline font-medium inline-block">sign out from all devices</button>.
-                        </p>
-                    </div>
+                <div className="flex items-start gap-3 bg-secondary/30 px-5 py-4">
+                    <Shield className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                        Signed in somewhere you do not recognise?{' '}
+                        <button onClick={() => setShowSignOutModal(true)} className="font-medium text-destructive hover:underline">
+                            Sign out everywhere
+                        </button>.
+                    </p>
                 </div>
             </div>
 
             {/* Custom Modal */}
             {showSignOutModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in" onClick={() => setShowSignOutModal(false)} />
-                    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white dark:bg-[#1c1c1e] shadow-2xl ring-1 ring-gray-200 dark:ring-white/10 scale-100 animate-scale-in">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-fade-in" onClick={() => setShowSignOutModal(false)} />
+                    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-card shadow-2xl ring-1 ring-border scale-100 animate-scale-in">
                         <div className="p-6 text-center">
-                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/10">
-                                <Trash2 className="h-8 w-8 text-red-600 dark:text-red-500" />
+                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+                                <Trash2 className="h-8 w-8 text-destructive" />
                             </div>
-                            <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">Sign Out All Devices?</h3>
-                            <p className="text-[15px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                            <h3 className="mb-2 text-xl font-bold text-foreground">Sign Out All Devices?</h3>
+                            <p className="text-[15px] leading-relaxed text-muted-foreground">
                                 This will invalidate all your active sessions everywhere. You will be logged out on all devices.
                             </p>
                         </div>
-                        <div className="grid grid-cols-2 gap-px bg-gray-100 dark:bg-white/10 border-t border-gray-100 dark:border-white/10">
-                            <button onClick={() => setShowSignOutModal(false)} className="py-4 text-[17px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 active:bg-gray-100 dark:active:bg-white/10 transition-colors bg-white dark:bg-transparent">Cancel</button>
-                            <button onClick={confirmSignOutAll} className="py-4 text-[17px] font-bold text-[#ff453a] hover:bg-gray-50 dark:hover:bg-white/5 active:bg-gray-100 dark:active:bg-white/10 transition-colors bg-white dark:bg-transparent">Sign Out All</button>
+                        <div className="grid grid-cols-2 gap-px border-t border-border bg-border">
+                            <button onClick={() => setShowSignOutModal(false)} className="bg-card py-4 text-[17px] font-medium text-muted-foreground transition-colors hover:bg-secondary/60">Cancel</button>
+                            <button onClick={confirmSignOutAll} className="bg-card py-4 text-[17px] font-bold text-destructive transition-colors hover:bg-destructive/10">Sign Out All</button>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
+        </section>
     );
 };

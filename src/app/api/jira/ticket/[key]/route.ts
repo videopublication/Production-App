@@ -27,9 +27,9 @@ export async function GET(request: Request, props: { params: Promise<{ key: stri
         return NextResponse.json({ error: 'That does not look like a Jira ticket ID (e.g. VP-54984)' }, { status: 400 });
     }
 
-    if (isJiraConfigured()) {
+    if (isJiraConfigured(auth.actor.jiraToken)) {
         try {
-            const ticket = await getIssue(key);
+            const ticket = await getIssue(key, auth.actor.jiraToken);
             return NextResponse.json(ticket, {
                 headers: {
                     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -106,7 +106,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ key: st
 
     try {
         const body = (await request.json()) as JiraIssueUpdateInput;
-        const result = await updateJiraIssue(key, body);
+        const result = await updateJiraIssue(key, body, auth.actor.jiraToken);
         return NextResponse.json(result);
     } catch (err) {
         if (err instanceof JiraError) {

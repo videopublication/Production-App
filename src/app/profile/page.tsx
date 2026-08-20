@@ -5,12 +5,82 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
 import { ActiveSessions } from '@/components/ActiveSessions';
+import { UserAvatar } from '@/components/UserAvatar';
 
 import { APP_CONFIG } from '@/lib/config';
 import { useToast } from '@/lib/toast-context';
 import { getRoleLabel } from '@/lib/roles';
+import { roleBadgeClass, TEXT_WHATSAPP, whatsappTag } from '@/lib/user-display';
 import { useDepartment } from '@/lib/department-context';
 import { storage } from '@/lib/storage';
+import { JiraIcon } from '@/components/icons/JiraIcon';
+import {
+    Check,
+    CheckCircle2,
+    ChevronRight,
+    Copy,
+    ExternalLink,
+    Eye,
+    EyeOff,
+    Key,
+    Loader2,
+    Lock,
+    LogOut,
+    MessageSquare,
+    ScrollText,
+    Sliders,
+    Users,
+} from 'lucide-react';
+
+/** Section shell shared by every block on this page. */
+const Section = ({
+    title,
+    action,
+    children,
+}: {
+    title: string;
+    action?: React.ReactNode;
+    children: React.ReactNode;
+}) => (
+    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+        <header className="flex items-center justify-between gap-3 px-5 py-4">
+            <h2 className="text-[15px] font-semibold tracking-tight text-foreground">{title}</h2>
+            {action}
+        </header>
+        <div className="border-t border-border/60">{children}</div>
+    </section>
+);
+
+const Row = ({
+    label,
+    value,
+    onClick,
+    hint,
+}: {
+    label: string;
+    value: React.ReactNode;
+    onClick?: () => void;
+    hint?: string;
+}) => {
+    const body = (
+        <>
+            <span className="min-w-0">
+                <span className="block text-[14px] text-foreground">{label}</span>
+                {hint && <span className="mt-0.5 block text-[13px] text-muted-foreground">{hint}</span>}
+            </span>
+            <span className="shrink-0 text-[14px] text-muted-foreground">{value}</span>
+        </>
+    );
+    const shell = 'flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left';
+    return onClick ? (
+        <button onClick={onClick} className={`${shell} transition-colors hover:bg-secondary/40`}>{body}</button>
+    ) : (
+        <div className={shell}>{body}</div>
+    );
+};
+
+const FIELD = 'h-11 w-full rounded-xl border border-input bg-secondary px-3.5 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60';
+const LABEL = 'mb-1.5 block text-[13px] font-medium text-foreground';
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -18,22 +88,38 @@ export default function ProfilePage() {
     const { showToast } = useToast();
     const { department, allDepartments, switchDepartment } = useDepartment();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [copied, setCopied] = useState<string | null>(null);
 
     // Profile Edit State
     const [phone, setPhone] = useState('');
     const [name, setName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
+    // Jira PAT State
+    const [jiraPat, setJiraPat] = useState('');
+    const [showJiraPat, setShowJiraPat] = useState(false);
+    const [isTestingJira, setIsTestingJira] = useState(false);
+    const [isSavingJira, setIsSavingJira] = useState(false);
+    const [jiraVerifiedUser, setJiraVerifiedUser] = useState<{ displayName: string; emailAddress?: string } | null>(null);
+
     useEffect(() => {
         if (user) {
             setPhone(user.phone || user.whatsappNumber || '');
             setName(user.name || '');
+            setJiraPat(user.jiraToken || '');
         }
     }, [user]);
 
     if (!user) return null;
 
     const canEdit = user.canSelfEditProfile !== false || ['ADMIN', 'SUPER_ADMIN'].includes(user.role);
+
+    const copyValue = (value: string, key: string, message: string) => {
+        navigator.clipboard.writeText(value);
+        setCopied(key);
+        showToast(message, 'success');
+        setTimeout(() => setCopied(null), 1600);
+    };
 
     const handleSaveProfile = async () => {
         if (!canEdit) {
@@ -56,11 +142,62 @@ export default function ProfilePage() {
             });
 
             showToast('Profile updated successfully!', 'success');
-        } catch (err: any) {
+        } catch (err) {
             console.error('Failed to update profile:', err);
-            showToast(err.message || 'Failed to update profile', 'error');
+            showToast(err instanceof Error ? err.message : 'Failed to update profile', 'error');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleTestJiraToken = async () => {
+        if (!jiraPat.trim()) {
+            showToast('Please enter a Jira Personal Access Token first', 'error');
+            return;
+        }
+
+        setIsTestingJira(true);
+        try {
+            const res = await fetch('/api/jira/verify-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: jiraPat.trim() })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.valid) {
+                setJiraVerifiedUser({ displayName: data.displayName, emailAddress: data.emailAddress });
+                showToast(`Token valid! Verified as ${data.displayName}`, 'success');
+            } else {
+                setJiraVerifiedUser(null);
+                showToast(data.error || 'Invalid Jira token. Please check permissions.', 'error');
+            }
+        } catch (err) {
+            console.error('Jira token test failed:', err);
+            showToast('Failed to connect to Jira server', 'error');
+        } finally {
+            setIsTestingJira(false);
+        }
+    };
+
+    const handleSaveJiraToken = async () => {
+        setIsSavingJira(true);
+        try {
+            const cleanedToken = jiraPat.trim() || null;
+            await storage.updateUser(user.id, {
+                jiraToken: cleanedToken
+            });
+
+            if (cleanedToken) {
+                showToast('Personal Jira token saved! Your actions will now be attributed to your Jira account.', 'success');
+            } else {
+                showToast('Personal token cleared. The app will now use the default system account (video.support).', 'success');
+            }
+        } catch (err) {
+            console.error('Failed to save Jira token:', err);
+            showToast(err instanceof Error ? err.message : 'Failed to save Jira token', 'error');
+        } finally {
+            setIsSavingJira(false);
         }
     };
 
@@ -70,254 +207,329 @@ export default function ProfilePage() {
     };
 
     const handleCopyDebugInfo = () => {
-        const info = `
-App: ${APP_CONFIG.name}
-Version: ${APP_CONFIG.version}
-Environment: ${APP_CONFIG.build}
-User ID: ${user.id}
-Email: ${user.email}
-Phone: ${phone}
-Role: ${getRoleLabel(user.role)}
-User Agent: ${navigator.userAgent}
-        `.trim();
+        const info = [
+            `App: ${APP_CONFIG.name}`,
+            `Version: ${APP_CONFIG.version}`,
+            `Environment: ${APP_CONFIG.build}`,
+            `User ID: ${user.id}`,
+            `Email: ${user.email}`,
+            `Phone: ${phone}`,
+            `Role: ${getRoleLabel(user.role)}`,
+            `User Agent: ${navigator.userAgent}`,
+        ].join('\n');
 
         navigator.clipboard.writeText(info);
         showToast('Debug info copied to clipboard', 'success');
     };
 
     const menuItems = [
-        {
-            label: 'User Management',
-            path: '/admin/users',
-            roles: ['ADMIN', 'SUPER_ADMIN'],
-            icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-        },
-        {
-            label: 'WhatsApp Hub',
-            path: '/admin/whatsapp',
-            roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'],
-            icon: <svg className="w-5 h-5 text-[#25d366]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-        },
-        {
-            label: 'Activity Logs',
-            path: '/admin/logs',
-            roles: ['ADMIN', 'SUPER_ADMIN'],
-            icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-        }
+        { label: 'User Management', path: '/admin/users', roles: ['ADMIN', 'SUPER_ADMIN'], icon: <Users className="h-4 w-4" /> },
+        { label: 'WhatsApp Hub', path: '/admin/whatsapp', roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'], icon: <MessageSquare className={`h-4 w-4 ${TEXT_WHATSAPP}`} /> },
+        { label: 'Activity Logs', path: '/admin/logs', roles: ['ADMIN', 'SUPER_ADMIN'], icon: <ScrollText className="h-4 w-4" /> },
     ];
 
     const visibleMenuItems = menuItems.filter(item => item.roles.includes(user.role));
-
-    // Formatted WhatsApp Tag
-    const formattedTag = phone ? `@${phone.replace(/[^\d]/g, '')}` : 'Not configured';
+    const tag = whatsappTag(phone);
 
     return (
-        <div className="max-w-lg mx-auto space-y-6 animate-fade-in relative pb-12">
+        <div className="mx-auto w-full max-w-6xl animate-fade-in pb-16">
             <SettingsDrawer isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
-            {/* Profile Header */}
-            <div className="flex flex-col items-center py-6">
-                {user.avatarUrl ? (
-                    <img
-                        src={user.avatarUrl}
-                        alt={user.name}
-                        className="w-20 h-20 rounded-full object-cover mb-4 shadow-lg border-2 border-primary/20"
-                    />
-                ) : (
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-3xl mb-4 shadow-lg">
-                        {user.name.charAt(0).toUpperCase()}
-                    </div>
-                )}
-                <h1 className="text-xl font-semibold text-[#1d1d1f] dark:text-white">{user.name}</h1>
-                <p className="text-[15px] text-[#86868b] dark:text-gray-400">{getRoleLabel(user.role)}</p>
+            {/* Desktop puts identity in a sticky rail, so the settings column is not a
+                narrow ribbon stranded in the middle of a wide screen. */}
+            <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
 
-                {/* WhatsApp Tag Badge */}
-                <div className="mt-2 flex items-center gap-1.5 px-3 py-1 bg-[#25d366]/10 text-[#25d366] text-xs font-semibold rounded-full border border-[#25d366]/20">
-                    <span>📱</span>
-                    <span>{formattedTag}</span>
-                </div>
-            </div>
+                {/* ── Identity rail ──────────────────────────────────────── */}
+                <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+                    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+                        <div className="flex flex-col items-center px-5 py-6 text-center">
+                            <UserAvatar name={user.name} role={user.role} avatarUrl={user.avatarUrl} size="xl" />
+                            <h1 className="mt-4 text-[20px] font-semibold tracking-[-0.02em] text-foreground">
+                                {user.name}
+                            </h1>
+                            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${roleBadgeClass(user.role)}`}>
+                                    {getRoleLabel(user.role)}
+                                </span>
+                                {department && (
+                                    <span className="text-[13px] text-muted-foreground">{department.name}</span>
+                                )}
+                            </div>
+                            {tag && (
+                                <p className={`mt-3 text-[13px] font-medium tabular-nums ${TEXT_WHATSAPP}`}>{tag}</p>
+                            )}
+                        </div>
 
-            {/* Account Details & Phone Number */}
-            <div className="space-y-2">
-                <div className="flex items-center justify-between px-1">
-                    <p className="section-header-ios mb-0">Personal Profile</p>
-                    {!canEdit && (
-                        <span className="text-[11px] font-semibold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md flex items-center gap-1">
-                            🔒 Edit Locked by Admin
-                        </span>
-                    )}
-                </div>
-
-                <div className="grouped-container p-4 space-y-4">
-                    <div>
-                        <label className="block text-xs font-semibold text-[#86868b] dark:text-gray-400 uppercase tracking-wider mb-1">Full Name</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            disabled={!canEdit}
-                            placeholder="Enter your name"
-                            className="w-full bg-background dark:bg-[#2c2c2e] border border-border dark:border-gray-700 rounded-xl px-3.5 py-2.5 text-[15px] text-[#1d1d1f] dark:text-white outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-[#86868b] dark:text-gray-400 uppercase tracking-wider mb-1">WhatsApp Phone Number</label>
-                        <div className="relative">
-                            <input
-                                type="tel"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                disabled={!canEdit}
-                                placeholder="+91 9876543210"
-                                className="w-full bg-background dark:bg-[#2c2c2e] border border-border dark:border-gray-700 rounded-xl px-3.5 py-2.5 text-[15px] text-[#1d1d1f] dark:text-white outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed font-mono"
+                        <div className="divide-y divide-border/60 border-t border-border/60">
+                            <Row
+                                label="Email"
+                                value={
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <span className="max-w-[150px] truncate">{user.email || 'Not set'}</span>
+                                        {copied === 'email'
+                                            ? <Check className="h-3.5 w-3.5 text-primary" />
+                                            : <Copy className="h-3.5 w-3.5 text-muted-foreground/60" />}
+                                    </span>
+                                }
+                                onClick={() => copyValue(user.email || '', 'email', 'Email copied')}
+                            />
+                            <Row
+                                label="User ID"
+                                value={
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <span className="font-mono text-[13px]">{user.id.substring(0, 8)}…</span>
+                                        {copied === 'id'
+                                            ? <Check className="h-3.5 w-3.5 text-primary" />
+                                            : <Copy className="h-3.5 w-3.5 text-muted-foreground/60" />}
+                                    </span>
+                                }
+                                onClick={() => copyValue(user.id, 'id', 'User ID copied')}
                             />
                         </div>
-                        <p className="text-[11px] text-[#86868b] dark:text-gray-400 mt-1">
-                            Used for shoot call sheet tagging & group WhatsApp notifications.
-                        </p>
-                    </div>
+                    </section>
 
-                    {canEdit && (
-                        <button
-                            onClick={handleSaveProfile}
-                            disabled={isSaving}
-                            className="w-full py-2.5 bg-[#34c759] hover:bg-[#2fb350] text-white font-semibold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                            {isSaving ? 'Saving Changes...' : 'Save Profile Details'}
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {/* Account Settings */}
-            <div className="space-y-2">
-                <p className="section-header-ios">Account</p>
-                <div className="grouped-container">
                     <button
-                        onClick={() => setIsSettingsOpen(true)}
-                        className="list-item-native w-full flex items-center justify-between"
+                        onClick={handleLogout}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border/70 bg-card py-3.5 text-[15px] font-medium text-destructive transition-colors hover:bg-destructive/5"
                     >
-                        <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                                </svg>
-                            </div>
-                            <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">App Appearance</span>
-                        </div>
-                        <svg className="w-4 h-4 text-[#c7c7cc]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
+                        <LogOut className="h-4 w-4" />
+                        Sign out
                     </button>
+                </aside>
 
-                    <div className="list-item-native flex items-center justify-between">
-                        <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Email</span>
-                        <span className="text-[15px] text-[#86868b] dark:text-gray-400">{user.email || 'Not set'}</span>
-                    </div>
+                {/* ── Settings column ────────────────────────────────────── */}
+                <div className="min-w-0 space-y-5">
 
-                    <div className="list-item-native flex items-center justify-between">
-                        <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Role</span>
-                        <span className="text-[15px] text-[#86868b] dark:text-gray-400">{getRoleLabel(user.role)}</span>
-                    </div>
-                    <div
-                        className="list-item-native flex items-center justify-between active:bg-gray-100 dark:active:bg-[#2c2c2e] cursor-pointer"
-                        onClick={() => {
-                            navigator.clipboard.writeText(user.id);
-                            showToast('User ID copied', 'success');
-                        }}
+                    <Section
+                        title="Personal details"
+                        action={!canEdit ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/25 px-2.5 py-0.5 text-[11px] font-semibold text-[#8a6d00] dark:text-[var(--warning)]">
+                                <Lock className="h-3 w-3" />
+                                Locked by admin
+                            </span>
+                        ) : undefined}
                     >
-                        <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">User ID</span>
-                        <span className="text-[13px] text-[#86868b] dark:text-gray-400 font-mono">{user.id.substring(0, 8)}...</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Default view (Super Admin only) */}
-            {user.role === 'SUPER_ADMIN' && switchDepartment && (
-                <div className="space-y-2">
-                    <p className="section-header-ios">Preferences</p>
-                    <div className="grouped-container">
-                        <div className="list-item-native flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                                <span className="block text-[15px] text-[#1d1d1f] dark:text-gray-100">Default department</span>
-                                <span className="block text-[13px] text-[#86868b] dark:text-gray-400">Loads on app start</span>
+                        <div className="grid gap-4 p-5 sm:grid-cols-2">
+                            <div>
+                                <label className={LABEL}>Full name</label>
+                                <input
+                                    type="text"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    disabled={!canEdit}
+                                    placeholder="Enter your name"
+                                    className={FIELD}
+                                />
                             </div>
-                            <select
-                                value={department?.id || ''}
-                                onChange={(e) => {
-                                    switchDepartment(e.target.value || null);
-                                    showToast(
-                                        e.target.value
-                                            ? `Default set to ${allDepartments.find(d => d.id === e.target.value)?.name || 'department'}`
-                                            : 'Default set to Global view',
-                                        'success'
-                                    );
-                                }}
-                                className="max-w-[55%] shrink-0 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-[15px] text-[#1d1d1f] outline-none focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-[#2c2c2e] dark:text-white"
-                            >
-                                <option value="">Global (all departments)</option>
-                                {allDepartments.map(dept => (
-                                    <option key={dept.id} value={dept.id}>{dept.name}</option>
-                                ))}
-                            </select>
+
+                            <div>
+                                <label className={LABEL}>WhatsApp number</label>
+                                <input
+                                    type="tel"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    disabled={!canEdit}
+                                    placeholder="+91 98765 43210"
+                                    className={`${FIELD} tabular-nums`}
+                                />
+                            </div>
+
+                            <p className="text-[13px] text-muted-foreground sm:col-span-2">
+                                Your number is used for call-sheet tagging and group WhatsApp notifications.
+                            </p>
+
+                            {canEdit && (
+                                <div className="sm:col-span-2">
+                                    <button
+                                        onClick={handleSaveProfile}
+                                        disabled={isSaving}
+                                        className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                                    >
+                                        {isSaving ? 'Saving…' : 'Save changes'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </Section>
+
+                    <Section
+                        title="Jira integration"
+                        action={user.jiraToken ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-success/12 px-2.5 py-0.5 text-[11px] font-semibold text-[#248a3d] dark:text-[#34c759]">
+                                <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                                Personal token active
+                            </span>
+                        ) : (
+                            <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                System account
+                            </span>
+                        )}
+                    >
+                        <div className="space-y-4 p-5">
+                            <div className="flex items-start gap-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#0052CC]/20 bg-[#0052CC]/10 text-[#0052CC] dark:text-[#4c9aff]">
+                                    <JiraIcon size={20} />
+                                </span>
+                                <p className="text-[13px] leading-relaxed text-muted-foreground">
+                                    Add your personal access token so status changes and comments are recorded under
+                                    your Jira account. Left blank, the app posts as the shared system account.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className={LABEL}>Personal access token</label>
+                                <div className="relative">
+                                    <input
+                                        type={showJiraPat ? 'text' : 'password'}
+                                        value={jiraPat}
+                                        onChange={(e) => {
+                                            setJiraPat(e.target.value);
+                                            setJiraVerifiedUser(null);
+                                        }}
+                                        placeholder="Paste your token"
+                                        className={`${FIELD} pr-11 font-mono`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowJiraPat(!showJiraPat)}
+                                        aria-label={showJiraPat ? 'Hide token' : 'Show token'}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                                    >
+                                        {showJiraPat ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+
+                                {jiraVerifiedUser && (
+                                    <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-success/12 px-3 py-2.5 text-[13px] text-[#248a3d] dark:text-[#34c759]">
+                                        <CheckCircle2 size={15} className="shrink-0" />
+                                        <span>
+                                            Verified as <strong className="font-semibold">{jiraVerifiedUser.displayName}</strong>
+                                            {jiraVerifiedUser.emailAddress ? ` (${jiraVerifiedUser.emailAddress})` : ''}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleTestJiraToken}
+                                    disabled={!jiraPat.trim() || isTestingJira}
+                                    className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-border bg-secondary px-4 text-[14px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                                >
+                                    {isTestingJira ? <Loader2 size={15} className="animate-spin" /> : <Key size={15} />}
+                                    Test connection
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleSaveJiraToken}
+                                    disabled={isSavingJira}
+                                    className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-[#0052CC] px-4 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                    {isSavingJira ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                                    {jiraPat.trim() ? 'Save token' : 'Use system account'}
+                                </button>
+
+                                <a
+                                    href="https://servicedesk.isha.in/secure/ViewProfile.jspa"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-medium text-primary"
+                                >
+                                    Create a token
+                                    <ExternalLink size={13} />
+                                </a>
+                            </div>
+                        </div>
+                    </Section>
+
+                    <div className="grid gap-5 xl:grid-cols-2">
+                        <Section title="Account">
+                            <div className="divide-y divide-border/60">
+                                <button
+                                    onClick={() => setIsSettingsOpen(true)}
+                                    className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition-colors hover:bg-secondary/40"
+                                >
+                                    <span className="flex items-center gap-3">
+                                        <Sliders className="h-4 w-4 text-muted-foreground" />
+                                        <span className="text-[14px] text-foreground">App appearance</span>
+                                    </span>
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
+                                </button>
+                                <Row label="Role" value={getRoleLabel(user.role)} />
+                                <Row
+                                    label="Version"
+                                    value={APP_CONFIG.version}
+                                    hint="Tap to copy diagnostics"
+                                    onClick={handleCopyDebugInfo}
+                                />
+                                <Row
+                                    label="Environment"
+                                    value={
+                                        <span className="inline-flex items-center gap-2">
+                                            <span className={`h-2 w-2 rounded-full ${APP_CONFIG.build === 'Production' ? 'bg-success' : 'bg-[var(--orange)]'}`} />
+                                            {APP_CONFIG.build}
+                                        </span>
+                                    }
+                                />
+                            </div>
+                        </Section>
+
+                        <div className="space-y-5">
+                            {user.role === 'SUPER_ADMIN' && switchDepartment && (
+                                <Section title="Preferences">
+                                    <div className="flex items-center justify-between gap-4 px-5 py-4">
+                                        <div className="min-w-0">
+                                            <p className="text-[14px] text-foreground">Default department</p>
+                                            <p className="mt-0.5 text-[13px] text-muted-foreground">Loads on app start</p>
+                                        </div>
+                                        <select
+                                            value={department?.id || ''}
+                                            onChange={(e) => {
+                                                switchDepartment(e.target.value || null);
+                                                showToast(
+                                                    e.target.value
+                                                        ? `Default set to ${allDepartments.find(d => d.id === e.target.value)?.name || 'department'}`
+                                                        : 'Default set to Global view',
+                                                    'success'
+                                                );
+                                            }}
+                                            className="h-10 max-w-[55%] shrink-0 rounded-xl border border-input bg-secondary px-3 text-[14px] font-medium text-foreground outline-none focus:ring-2 focus:ring-primary"
+                                        >
+                                            <option value="">Global (all departments)</option>
+                                            {allDepartments.map(dept => (
+                                                <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </Section>
+                            )}
+
+                            {visibleMenuItems.length > 0 && (
+                                <Section title="Management">
+                                    <div className="divide-y divide-border/60">
+                                        {visibleMenuItems.map((item) => (
+                                            <button
+                                                key={item.path}
+                                                onClick={() => router.push(item.path)}
+                                                className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition-colors hover:bg-secondary/40"
+                                            >
+                                                <span className="flex items-center gap-3">
+                                                    <span className="text-muted-foreground">{item.icon}</span>
+                                                    <span className="text-[14px] text-foreground">{item.label}</span>
+                                                </span>
+                                                <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </Section>
+                            )}
                         </div>
                     </div>
+
+                    <ActiveSessions />
                 </div>
-            )}
-
-            {/* Quick Actions for Managers/Admins */}
-            {visibleMenuItems.length > 0 && (
-                <div className="space-y-2">
-                    <p className="section-header-ios">Management</p>
-                    <div className="grouped-container">
-                        {visibleMenuItems.map((item) => (
-                            <button
-                                key={item.path}
-                                onClick={() => router.push(item.path)}
-                                className="list-item-native w-full flex items-center gap-3"
-                            >
-                                <span className="text-[var(--primary)]">{item.icon}</span>
-                                <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100 flex-1 text-left">{item.label}</span>
-                                <svg className="w-4 h-4 text-[#c7c7cc]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* App Info */}
-            <div className="grouped-container overflow-hidden">
-                <button
-                    onClick={handleCopyDebugInfo}
-                    className="list-item-native w-full flex items-center justify-between active:bg-gray-100 dark:active:bg-[#2c2c2e] transition-colors"
-                >
-                    <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Version</span>
-                    <span className="text-[15px] text-[#86868b] dark:text-gray-400">{APP_CONFIG.version}</span>
-                </button>
-                <div className="list-item-native flex items-center justify-between">
-                    <span className="text-[15px] text-[#1d1d1f] dark:text-gray-100">Environment</span>
-                    <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${APP_CONFIG.build === 'Production' ? 'bg-green-500' : 'bg-orange-500'}`}></span>
-                        <span className="text-[15px] text-[#86868b] dark:text-gray-400">{APP_CONFIG.build}</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Active Sessions */}
-            <ActiveSessions />
-
-            {/* Logout Button */}
-            <div className="px-4 pt-4">
-                <button
-                    onClick={handleLogout}
-                    className="w-full py-3 bg-white dark:bg-[#1c1c1e] rounded-xl text-[#ff3b30] text-[17px] font-medium active:bg-[#f5f5f7] dark:active:bg-[#2c2c2e] transition-colors shadow-sm"
-                >
-                    Sign Out
-                </button>
             </div>
         </div>
     );

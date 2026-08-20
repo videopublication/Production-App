@@ -28,7 +28,7 @@ export async function PUT(
         return NextResponse.json({ error: 'Invalid comment ID' }, { status: 400 });
     }
 
-    if (!isJiraConfigured()) {
+    if (!isJiraConfigured(auth.actor.jiraToken)) {
         return NextResponse.json({ error: 'Jira is not configured' }, { status: 503 });
     }
 
@@ -41,7 +41,7 @@ export async function PUT(
         }
 
         const authorName = auth.actor?.email ? auth.actor.email.split('@')[0] : 'Production App User';
-        const result = await updateIssueComment(key, commentId, commentText, authorName);
+        const result = await updateIssueComment(key, commentId, commentText, authorName, auth.actor.jiraToken);
 
         return NextResponse.json(result);
     } catch (err) {
@@ -77,12 +77,12 @@ export async function DELETE(
         return NextResponse.json({ error: 'Invalid comment ID' }, { status: 400 });
     }
 
-    if (!isJiraConfigured()) {
+    if (!isJiraConfigured(auth.actor.jiraToken)) {
         return NextResponse.json({ error: 'Jira is not configured' }, { status: 503 });
     }
 
     try {
-        const result = await deleteIssueComment(key, commentId);
+        const result = await deleteIssueComment(key, commentId, auth.actor.jiraToken);
         return NextResponse.json(result);
     } catch (err) {
         if (err instanceof JiraError) {

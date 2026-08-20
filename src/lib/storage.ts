@@ -102,7 +102,8 @@ class StorageService {
             isPrimaryLeaveApprover: u.is_primary_leave_approver,
             canManageExpenses: u.can_manage_expenses,
             canBeAssignedToShoots: u.can_be_assigned_to_shoots,
-            canSelfEditProfile: u.can_self_edit_profile !== false
+            canSelfEditProfile: u.can_self_edit_profile !== false,
+            jiraToken: u.jira_token || null
         })) as User[];
     }
 
@@ -119,7 +120,7 @@ class StorageService {
         }
         if (!data) return null;
 
-        const u = data as Record<string, unknown> & { phone?: string; whatsapp_number?: string };
+        const u = data as Record<string, unknown> & { phone?: string; whatsapp_number?: string; jira_token?: string };
         return {
             ...u,
             phone: u.phone || u.whatsapp_number || null,
@@ -130,7 +131,8 @@ class StorageService {
             isPrimaryLeaveApprover: u.is_primary_leave_approver,
             canManageExpenses: u.can_manage_expenses,
             canBeAssignedToShoots: u.can_be_assigned_to_shoots,
-            canSelfEditProfile: u.can_self_edit_profile !== false
+            canSelfEditProfile: u.can_self_edit_profile !== false,
+            jiraToken: u.jira_token || null
         } as User;
     }
 
@@ -167,11 +169,25 @@ class StorageService {
             dbUpdates.can_be_assigned_to_shoots = updates.canBeAssignedToShoots;
             delete dbUpdates.canBeAssignedToShoots;
         }
+        if (updates.jiraToken !== undefined) {
+            dbUpdates.jira_token = updates.jiraToken;
+            delete dbUpdates.jiraToken;
+        }
 
-        const { error } = await supabase
+        let { error } = await supabase
             .from('users')
             .update(dbUpdates)
             .eq('id', id);
+
+        if (error && (error.code === '42703' || error.message?.includes('jira_token')) && 'jira_token' in dbUpdates) {
+            delete dbUpdates.jira_token;
+            if (Object.keys(dbUpdates).length > 0) {
+                const retry = await supabase.from('users').update(dbUpdates).eq('id', id);
+                error = retry.error;
+            } else {
+                error = null;
+            }
+        }
 
         if (error) {
             console.error('Error updating user:', error);

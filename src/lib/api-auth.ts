@@ -11,6 +11,7 @@ export interface ApiActor {
     email?: string;
     role: string;
     departmentId: string | null;
+    jiraToken?: string | null;
 }
 
 const sessionClient = async () => {
@@ -59,27 +60,42 @@ export const requireUser = async (): Promise<{ actor: ApiActor } | { error: stri
 
     if (!user) return { error: 'Unauthorized', status: 401 };
 
-    // Role and status come from the database
+    // Role, status, and custom Jira PAT come from the database
     let profile: any = null;
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        try {
-            const { data } = await supabaseAdmin
+
+    const fetchUserProfile = async (client: typeof supabase) => {
+        const { data, error } = await client
+            .from('users')
+            .select('role, status, department_id, jira_token')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!error && data) {
+            return data;
+        }
+
+        // If jira_token column does not exist in DB yet (PostgREST code 42703), query without it
+        if (error && (error.code === '42703' || error.message?.includes('jira_token'))) {
+            const { data: fallbackData } = await client
                 .from('users')
                 .select('role, status, department_id')
                 .eq('id', user.id)
                 .maybeSingle();
-            profile = data;
+            return fallbackData;
+        }
+
+        return null;
+    };
+
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+            profile = await fetchUserProfile(supabaseAdmin);
         } catch {}
     }
 
     if (!profile) {
         try {
-            const { data } = await supabase
-                .from('users')
-                .select('role, status, department_id')
-                .eq('id', user.id)
-                .maybeSingle();
-            profile = data;
+            profile = await fetchUserProfile(supabase);
         } catch {}
     }
 
@@ -92,6 +108,7 @@ export const requireUser = async (): Promise<{ actor: ApiActor } | { error: stri
             email: user.email,
             role: profile.role,
             departmentId: profile.department_id ?? null,
+            jiraToken: profile.jira_token || null,
         },
     };
 };

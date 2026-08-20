@@ -30,7 +30,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Invalid Jira ticket key' }, { status: 400 });
         }
 
-        const result = await transitionJiraIssue(ticketKey, body.status as ShootStatus);
+        const result = await transitionJiraIssue(ticketKey, body.status as ShootStatus, auth.actor.jiraToken);
         return NextResponse.json(result);
     } catch (err) {
         if (err instanceof JiraError) {

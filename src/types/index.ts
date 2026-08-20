@@ -87,6 +87,7 @@ export interface User {
     canManageExpenses?: boolean;
     canBeAssignedToShoots?: boolean;
     canSelfEditProfile?: boolean;
+    jiraToken?: string | null;
 }
 
 export interface Equipment {

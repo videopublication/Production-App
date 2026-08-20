@@ -40,8 +40,17 @@ const customFields = () => ({
  * swallowed this case and silently fell through, which is why nobody noticed the
  * direct REST path had never been wired up.
  */
-export const jiraConfig = (): JiraConfig | null => {
+export const jiraConfig = (userPat?: string | null): JiraConfig | null => {
     const baseUrl = (process.env.JIRA_BASE_URL || 'https://servicedesk.isha.in').replace(/\/+$/, '');
+
+    // User-specific PAT takes precedence if provided
+    if (userPat && userPat.trim()) {
+        return {
+            baseUrl,
+            authHeader: `Bearer ${userPat.trim()}`
+        };
+    }
+
     const mode = (process.env.JIRA_AUTH_MODE || 'bearer').toLowerCase();
 
     if (mode === 'basic') {
@@ -60,7 +69,7 @@ export const jiraConfig = (): JiraConfig | null => {
     return { baseUrl, authHeader: `Bearer ${token}` };
 };
 
-export const isJiraConfigured = () => jiraConfig() !== null;
+export const isJiraConfigured = (userPat?: string | null) => jiraConfig(userPat) !== null;
 
 export class JiraError extends Error {
     constructor(message: string, readonly status: number) {
@@ -69,8 +78,8 @@ export class JiraError extends Error {
     }
 }
 
-async function jiraFetch<T>(path: string): Promise<T> {
-    const config = jiraConfig();
+async function jiraFetch<T>(path: string, userPat?: string | null): Promise<T> {
+    const config = jiraConfig(userPat);
     if (!config) throw new JiraError('Jira is not configured on this server', 503);
 
     const res = await fetch(`${config.baseUrl}${path}`, {
@@ -95,7 +104,7 @@ async function jiraFetch<T>(path: string): Promise<T> {
             }
         }
         const message = res.status === 404 ? 'Ticket not found in Jira'
-            : res.status === 401 || res.status === 403 ? 'Jira rejected the app credentials'
+            : res.status === 401 || res.status === 403 ? 'Jira rejected the credentials'
                 : detail || `Jira request failed (${res.status})`;
         throw new JiraError(message, res.status);
     }
@@ -212,6 +221,7 @@ export const normaliseIssue = (issue: RawIssue): JiraTicket => {
 };
 
 export interface JiraIssueUpdateInput {
+    summary?: string;
     description?: string;
     location?: string; // Event Location dropdown ('Inside Ashram' | 'Outside Ashram - India' | 'Outside Ashram - Overseas')
     venue?: string; // Event Venue text
@@ -222,7 +232,7 @@ export interface JiraIssueUpdateInput {
 
 export function formatJiraDateTime(dateStr: string): string {
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '';
+    if (isNaN(d.getTime())) return dateStr;
     const pad = (n: number) => String(n).padStart(2, '0');
     const pad3 = (n: number) => String(n).padStart(3, '0');
     const year = d.getFullYear();
@@ -244,34 +254,30 @@ export function formatJiraDateTime(dateStr: string): string {
 }
 
 /**
- * Safely updates fields of a Jira ticket.
- * STRICT SAFETY GUARD: Respects JIRA_WRITE_ENABLED.
+ * Updates an existing Jira ticket's editable fields.
  */
 export const updateJiraIssue = async (
     key: string,
-    updates: JiraIssueUpdateInput
+    updates: JiraIssueUpdateInput,
+    userPat?: string | null
 ): Promise<{ success: boolean; dryRun?: boolean; message?: string }> => {
     const isWriteEnabled = process.env.JIRA_WRITE_ENABLED === 'true';
-
     const fields: Record<string, unknown> = {};
 
+    if (updates.summary !== undefined) {
+        fields['summary'] = updates.summary;
+    }
     if (updates.description !== undefined) {
-        fields['customfield_63425'] = updates.description;
+        fields['description'] = updates.description;
     }
     if (updates.location !== undefined) {
-        fields['customfield_63416'] = { value: updates.location };
-    }
-    if (updates.venue !== undefined) {
-        fields['customfield_63402'] = updates.venue;
+        fields['customfield_63402'] = updates.location;
     }
     if (updates.startTime !== undefined && updates.startTime) {
         fields['customfield_63400'] = formatJiraDateTime(updates.startTime);
     }
     if (updates.endTime !== undefined && updates.endTime) {
         fields['customfield_63401'] = formatJiraDateTime(updates.endTime);
-    }
-    if (updates.title !== undefined) {
-        fields['summary'] = updates.title;
     }
 
     if (Object.keys(fields).length === 0) {
@@ -287,7 +293,7 @@ export const updateJiraIssue = async (
         };
     }
 
-    const config = jiraConfig();
+    const config = jiraConfig(userPat);
     if (!config) throw new JiraError('Jira is not configured on this server', 503);
 
     const res = await fetch(`${config.baseUrl}/rest/api/2/issue/${encodeURIComponent(key)}`, {
@@ -316,24 +322,33 @@ export const updateJiraIssue = async (
 };
 
 /** One issue by key. Callers must validate the key first. */
-export const getIssue = async (key: string): Promise<JiraTicket> => {
-    const raw = await jiraFetch<RawIssue>(`/rest/api/2/issue/${encodeURIComponent(key)}`);
+export const getIssue = async (key: string, userPat?: string | null): Promise<JiraTicket> => {
+    const raw = await jiraFetch<RawIssue>(`/rest/api/2/issue/${encodeURIComponent(key)}`, userPat);
     return normaliseIssue(raw);
 };
 
 /** Paged JQL search, used by the background sync. */
 export const searchIssues = async (
     jql: string,
-    options?: { startAt?: number; maxResults?: number }
+    options?: { startAt?: number; maxResults?: number; userPat?: string | null }
 ): Promise<{ issues: JiraTicket[]; total: number; startAt: number }> => {
     const startAt = options?.startAt ?? 0;
     const maxResults = Math.min(options?.maxResults ?? 50, 100);
-    const query = `jql=${encodeURIComponent(jql)}&startAt=${startAt}&maxResults=${maxResults}`;
-    const data = await jiraFetch<{ issues?: RawIssue[]; total?: number }>(`/rest/api/2/search?${query}`);
+
+    const data = await jiraFetch<{
+        issues?: RawIssue[];
+        total?: number;
+        startAt?: number;
+    }>(
+        `/rest/api/2/search?jql=${encodeURIComponent(jql)}&startAt=${startAt}&maxResults=${maxResults}`,
+        options?.userPat
+    );
+
+    const issues = (data.issues || []).map(normaliseIssue);
     return {
-        issues: (data.issues || []).map(normaliseIssue),
-        total: data.total ?? 0,
-        startAt,
+        issues,
+        total: data.total ?? issues.length,
+        startAt: data.startAt ?? startAt,
     };
 };
 
@@ -341,8 +356,8 @@ export const searchIssues = async (
  * Field catalogue, so the custom-field ids above can be filled in from reality
  * instead of guessed. Admin-only; see /api/jira/fields.
  */
-export const listFields = () =>
-    jiraFetch<Array<{ id: string; name: string; custom: boolean }>>('/rest/api/2/field');
+export const listFields = (userPat?: string | null) =>
+    jiraFetch<Array<{ id: string; name: string; custom: boolean }>>('/rest/api/2/field', userPat);
 
 import { ShootStatus } from '@/types';
 import { jiraStatusToAppStatus, appStatusToJiraStatus } from '@/lib/jira-utils';
@@ -351,9 +366,10 @@ export { jiraStatusToAppStatus, appStatusToJiraStatus };
 /**
  * Checks available transitions for a Jira ticket.
  */
-export const getIssueTransitions = async (key: string) => {
+export const getIssueTransitions = async (key: string, userPat?: string | null) => {
     return jiraFetch<{ transitions: Array<{ id: string; name: string; to: { id: string; name: string } }> }>(
-        `/rest/api/2/issue/${encodeURIComponent(key)}/transitions`
+        `/rest/api/2/issue/${encodeURIComponent(key)}/transitions`,
+        userPat
     );
 };
 
@@ -364,7 +380,8 @@ export const getIssueTransitions = async (key: string) => {
  */
 export const transitionJiraIssue = async (
     key: string,
-    targetAppStatus: ShootStatus
+    targetAppStatus: ShootStatus,
+    userPat?: string | null
 ): Promise<{ success: boolean; dryRun?: boolean; message?: string }> => {
     const isWriteEnabled = process.env.JIRA_WRITE_ENABLED === 'true';
     const targetStatusName = appStatusToJiraStatus(targetAppStatus);
@@ -378,11 +395,11 @@ export const transitionJiraIssue = async (
         };
     }
 
-    const config = jiraConfig();
+    const config = jiraConfig(userPat);
     if (!config) throw new JiraError('Jira is not configured on this server', 503);
 
     // 1. Fetch valid transitions for this ticket
-    const { transitions } = await getIssueTransitions(key);
+    const { transitions } = await getIssueTransitions(key, userPat);
     const match = transitions.find(t =>
         t.name.toLowerCase().includes(targetStatusName.toLowerCase()) ||
         t.to.name.toLowerCase().includes(targetStatusName.toLowerCase())
@@ -428,9 +445,10 @@ export interface JiraComment {
 /**
  * Fetches comments for a specific Jira ticket.
  */
-export const getIssueComments = async (key: string): Promise<JiraComment[]> => {
+export const getIssueComments = async (key: string, userPat?: string | null): Promise<JiraComment[]> => {
     const data = await jiraFetch<{ comments?: Array<any> }>(
-        `/rest/api/2/issue/${encodeURIComponent(key)}/comment?expand=properties`
+        `/rest/api/2/issue/${encodeURIComponent(key)}/comment?expand=properties`,
+        userPat
     );
     return (data.comments || [])
         .map(c => {
@@ -461,7 +479,8 @@ export const addIssueComment = async (
     key: string,
     body: string,
     authorName?: string,
-    isInternal?: boolean
+    isInternal?: boolean,
+    userPat?: string | null
 ): Promise<{ success: boolean; comment?: JiraComment; dryRun?: boolean }> => {
     const isWriteEnabled = process.env.JIRA_WRITE_ENABLED === 'true';
     const finalBody = body;
@@ -481,7 +500,7 @@ export const addIssueComment = async (
         };
     }
 
-    const config = jiraConfig();
+    const config = jiraConfig(userPat);
     if (!config) throw new JiraError('Jira is not configured on this server', 503);
 
     const payload: Record<string, unknown> = { body: finalBody };
@@ -530,7 +549,8 @@ export const updateIssueComment = async (
     key: string,
     commentId: string,
     body: string,
-    authorName?: string
+    authorName?: string,
+    userPat?: string | null
 ): Promise<{ success: boolean; comment?: JiraComment; dryRun?: boolean }> => {
     const isWriteEnabled = process.env.JIRA_WRITE_ENABLED === 'true';
     const finalBody = body;
@@ -540,7 +560,7 @@ export const updateIssueComment = async (
         return { success: true, dryRun: true };
     }
 
-    const config = jiraConfig();
+    const config = jiraConfig(userPat);
     if (!config) throw new JiraError('Jira is not configured on this server', 503);
 
     const res = await fetch(`${config.baseUrl}/rest/api/2/issue/${encodeURIComponent(key)}/comment/${encodeURIComponent(commentId)}`, {
@@ -582,7 +602,8 @@ export const updateIssueComment = async (
  */
 export const deleteIssueComment = async (
     key: string,
-    commentId: string
+    commentId: string,
+    userPat?: string | null
 ): Promise<{ success: boolean; dryRun?: boolean }> => {
     const isWriteEnabled = process.env.JIRA_WRITE_ENABLED === 'true';
 
@@ -591,7 +612,7 @@ export const deleteIssueComment = async (
         return { success: true, dryRun: true };
     }
 
-    const config = jiraConfig();
+    const config = jiraConfig(userPat);
     if (!config) throw new JiraError('Jira is not configured on this server', 503);
 
     const res = await fetch(`${config.baseUrl}/rest/api/2/issue/${encodeURIComponent(key)}/comment/${encodeURIComponent(commentId)}`, {
@@ -631,9 +652,10 @@ export interface JiraHistoryItem {
 /**
  * Fetches the changelog / activity history of a Jira ticket.
  */
-export const getIssueChangelog = async (key: string): Promise<JiraHistoryItem[]> => {
+export const getIssueChangelog = async (key: string, userPat?: string | null): Promise<JiraHistoryItem[]> => {
     const data = await jiraFetch<{ changelog?: { histories?: Array<any> } }>(
-        `/rest/api/2/issue/${encodeURIComponent(key)}?expand=changelog&fields=summary,status`
+        `/rest/api/2/issue/${encodeURIComponent(key)}?expand=changelog&fields=summary,status`,
+        userPat
     );
     const histories = data.changelog?.histories || [];
     return histories
@@ -657,4 +679,28 @@ export const getIssueChangelog = async (key: string): Promise<JiraHistoryItem[]>
         .sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
 };
 
+/**
+ * Verifies a user-provided Jira Personal Access Token.
+ */
+export const verifyJiraPat = async (pat: string): Promise<{ valid: boolean; displayName?: string; name?: string; emailAddress?: string }> => {
+    const baseUrl = (process.env.JIRA_BASE_URL || 'https://servicedesk.isha.in').replace(/\/+$/, '');
+    const res = await fetch(`${baseUrl}/rest/api/2/myself`, {
+        headers: {
+            Authorization: `Bearer ${pat.trim()}`,
+            Accept: 'application/json',
+        },
+        cache: 'no-store'
+    });
 
+    if (!res.ok) {
+        throw new JiraError(`Invalid Jira Token (${res.status})`, res.status);
+    }
+
+    const data = await res.json();
+    return {
+        valid: true,
+        displayName: data.displayName || data.name,
+        name: data.name,
+        emailAddress: data.emailAddress,
+    };
+};

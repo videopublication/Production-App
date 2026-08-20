@@ -60,6 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     .eq('id', userId)
                     .single();
 
+                // jira_token is aliased here rather than in the select so that a
+                // database without that column still returns a usable profile.
+                if (data && (data as Record<string, unknown>).jira_token !== undefined) {
+                    (data as Record<string, unknown>).jiraToken = (data as Record<string, unknown>).jira_token;
+                }
+
                 if (data) {
                     // Check if user is active
                     if (data.status === 'PENDING' || data.status === 'SUSPENDED') {
@@ -129,6 +135,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         )
                         .subscribe();
 
+                } else if (error && error.code !== 'PGRST116') {
+                    // Anything other than "no rows" is a real query failure (a missing
+                    // column, an RLS change). Surface it: swallowing it renders the app
+                    // shell with no sidebar and no data, which reads as a broken login.
+                    console.error('[auth] profile query failed:', error.code, error.message);
+                    setIsLoading(false);
                 } else if (error && error.code === 'PGRST116') {
                     // User exists in Auth but not in public.users table yet (e.g., first Google Login)
                     // OR: User exists but RLS blocked the SELECT (e.g., PENDING user)

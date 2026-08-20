@@ -5,7 +5,8 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { Shoot, ShootStatus, User, Assignment, Log, PlannerDraftAssignment, Leave } from '@/types';
-import { formatWhatsAppMessage, openWhatsApp } from '@/lib/whatsapp';
+import { formatWhatsAppMessage, openWhatsApp, generateShootWhatsAppPayload } from '@/lib/whatsapp';
+import { WhatsAppDispatchModal } from '@/components/WhatsAppDispatchModal';
 import { isSameDay } from 'date-fns';
 import { Button } from '@/components/Button';
 import { APP_CONFIG } from '@/lib/config';
@@ -77,6 +78,7 @@ export default function ShootDetailsPage() {
     const loading = shootLoading || assignmentsLoading || usersLoading;
     const [isSyncing, setIsSyncing] = useState(false);
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+    const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
     const [cancelReason, setCancelReason] = useState('');
     const [isCancelling, setIsCancelling] = useState(false);
 
@@ -1735,10 +1737,7 @@ export default function ShootDetailsPage() {
                         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0">
                             {/* WhatsApp */}
                             <button
-                                onClick={() => {
-                                    const message = formatWhatsAppMessage(shoot, assignmentsForMessage, users, labels);
-                                    openWhatsApp(message);
-                                }}
+                                onClick={() => setIsWhatsAppModalOpen(true)}
                                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-semibold transition-all shadow-xs hover:shadow-green-500/20 active:scale-95 bg-[#25D366] hover:bg-[#22bf5b] text-white text-xs sm:text-sm whitespace-nowrap cursor-pointer"
                                 title="Share Call Sheet via WhatsApp"
                             >
@@ -3323,6 +3322,16 @@ export default function ShootDetailsPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {shoot && (
+                <WhatsAppDispatchModal
+                    isOpen={isWhatsAppModalOpen}
+                    onClose={() => setIsWhatsAppModalOpen(false)}
+                    initialMessage={generateShootWhatsAppPayload(shoot, assignmentsForMessage, users, labels).message}
+                    mentions={generateShootWhatsAppPayload(shoot, assignmentsForMessage, users, labels).mentions}
+                    departmentId={shoot.departmentId}
+                />
             )}
         </div>
     );

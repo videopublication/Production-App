@@ -21,12 +21,12 @@ export async function GET(request: Request, props: { params: Promise<{ key: stri
         return NextResponse.json({ error: 'Invalid Jira ticket key' }, { status: 400 });
     }
 
-    if (!isJiraConfigured()) {
+    if (!isJiraConfigured(auth.actor.jiraToken)) {
         return NextResponse.json({ error: 'Jira is not configured' }, { status: 503 });
     }
 
     try {
-        const comments = await getIssueComments(key);
+        const comments = await getIssueComments(key, auth.actor.jiraToken);
         return NextResponse.json({ comments });
     } catch (err) {
         if (err instanceof JiraError) {
@@ -54,7 +54,7 @@ export async function POST(request: Request, props: { params: Promise<{ key: str
         return NextResponse.json({ error: 'Invalid Jira ticket key' }, { status: 400 });
     }
 
-    if (!isJiraConfigured()) {
+    if (!isJiraConfigured(auth.actor.jiraToken)) {
         return NextResponse.json({ error: 'Jira is not configured' }, { status: 503 });
     }
 
@@ -68,7 +68,7 @@ export async function POST(request: Request, props: { params: Promise<{ key: str
         }
 
         const authorName = auth.actor?.email ? auth.actor.email.split('@')[0] : 'Production App User';
-        const result = await addIssueComment(key, commentText, authorName, isInternal);
+        const result = await addIssueComment(key, commentText, authorName, isInternal, auth.actor.jiraToken);
 
         return NextResponse.json(result);
     } catch (err) {
