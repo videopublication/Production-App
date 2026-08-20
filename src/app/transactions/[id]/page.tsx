@@ -18,6 +18,7 @@ import { useDepartment } from '@/lib/department-context';
 import Link from 'next/link';
 import { areManualItemsComplete, decodeTransactionNotes } from '@/lib/transaction-manual-items';
 import { getDepartmentLabels } from '@/lib/department-labels';
+import { getEquipmentIssue, isEquipmentIssueBlocking, getIssueSummary } from '@/lib/equipment-issues';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -205,12 +206,12 @@ export default function TransactionDetailPage() {
             router.push('/');
             return;
         }
-        loadData();
+        loadData(!!transaction);
         setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
-    }, [user, router, transactionId]);
+    }, [user?.id, user?.role, router, transactionId]);
 
     const loadData = async (silent = false) => {
-        if (!silent) setLoading(true);
+        if (!silent && !transaction) setLoading(true);
         try {
             const [txns, equip, users, shoots, assignments] = await Promise.all([
                 storage.getTransactions(undefined, undefined, undefined, 'ALL', undefined, undefined, effectiveDeptId),
@@ -250,7 +251,7 @@ export default function TransactionDetailPage() {
 
             let txn = loadedTxn;
             const txnUser = users.find(u => u.id === txn.userId);
-            const available = equip.filter(e => e.status === 'AVAILABLE');
+            const available = equip.filter(e => e.status === 'AVAILABLE' && !isEquipmentIssueBlocking(e) && e.condition !== 'NOT_FUNCTIONING');
 
             // Find linked shoot and assignments
             let linkedShootData = null;
@@ -259,6 +260,13 @@ export default function TransactionDetailPage() {
             if (txn.shootId) {
                 linkedShootData = shoots.find(s => s.id === txn.shootId) || null;
                 linkedAssignments = assignments.filter(a => a.shootId === txn.shootId);
+                // If linked assignments are empty in local scope, load directly
+                if (linkedAssignments.length === 0) {
+                    try {
+                        const directAssignments = await storage.getAssignments(null);
+                        linkedAssignments = directAssignments.filter(a => a.shootId === txn.shootId);
+                    } catch {}
+                }
             }
 
             // Check if department filter needs to be applied manually for SUPER_ADMIN when viewing cross-dept
@@ -411,11 +419,19 @@ export default function TransactionDetailPage() {
         return source.charAt(0).toUpperCase() || '?';
     };
 
+    const isCurrentlyOutInThisTxn = (id: string) => {
+        if (!transaction || !transaction.items.includes(id)) return false;
+        return transaction.postReturnConditions?.[id] === undefined;
+    };
+
     const getAddableItem = (itemId: string) => {
         if (!transaction) return null;
         const item = equipment.find(e => e.id === itemId);
         if (!item) return null;
-        if (transaction.items.includes(itemId)) return null;
+        // Block if the item has a blocking issue or is not functioning
+        if (isEquipmentIssueBlocking(item) || item.condition === 'NOT_FUNCTIONING') return null;
+        // Block only if the item is currently OUT in this transaction
+        if (isCurrentlyOutInThisTxn(itemId)) return null;
         if (item.status !== 'AVAILABLE') return null;
         return item;
     };
@@ -427,8 +443,14 @@ export default function TransactionDetailPage() {
             return;
         }
 
-        if (transaction?.items.includes(itemId)) {
-            showToast('Item already in this transaction', 'error');
+        if (isEquipmentIssueBlocking(item) || item.condition === 'NOT_FUNCTIONING') {
+            const issue = getEquipmentIssue(item);
+            showToast(`Cannot add "${item.name}": ${issue ? getIssueSummary(issue) : 'Item is marked as not usable'}`, 'error');
+            return;
+        }
+
+        if (isCurrentlyOutInThisTxn(itemId)) {
+            showToast('Item is already checked out in this transaction', 'error');
             return;
         }
 
@@ -474,14 +496,20 @@ export default function TransactionDetailPage() {
             ? itemSummaries.join(', ')
             : `${itemSummaries.slice(0, 6).join(', ')} and ${itemSummaries.length - 6} more`;
 
-        if (validItems.length === 0) {
-            return;
-        }
-
         setSaving(true);
         try {
+            // For items already in transaction.items (previously returned), clear their postReturnConditions
+            const updatedPostReturn = { ...(transaction.postReturnConditions || {}) };
+            validItems.forEach(item => {
+                delete updatedPostReturn[item.id];
+            });
+
+            // Merge items list ensuring uniqueness
+            const mergedItems = Array.from(new Set([...transaction.items, ...itemIdsToAdd]));
+
             await storage.updateTransaction(transaction.id, {
-                items: [...transaction.items, ...itemIdsToAdd],
+                items: mergedItems,
+                postReturnConditions: updatedPostReturn,
                 preCheckoutConditions: {
                     ...transaction.preCheckoutConditions,
                     ...Object.fromEntries(validItems.map(item => [item.id, item.condition])),
@@ -557,12 +585,15 @@ export default function TransactionDetailPage() {
         try {
             // Update transaction
             const updatedItems = transaction.items.filter(id => id !== itemId);
-            const updatedConditions = { ...transaction.preCheckoutConditions };
-            delete updatedConditions[itemId];
+            const updatedPreConditions = { ...transaction.preCheckoutConditions };
+            delete updatedPreConditions[itemId];
+            const updatedPostConditions = { ...(transaction.postReturnConditions || {}) };
+            delete updatedPostConditions[itemId];
 
             await storage.updateTransaction(transaction.id, {
                 items: updatedItems,
-                preCheckoutConditions: updatedConditions,
+                preCheckoutConditions: updatedPreConditions,
+                postReturnConditions: updatedPostConditions,
             });
 
             // Update item status back to available
@@ -595,6 +626,12 @@ export default function TransactionDetailPage() {
     const handleQRScan = async (decodedText: string) => {
         const item = equipment.find(e => e.barcode === decodedText || e.id === decodedText);
         if (item) {
+            if (isEquipmentIssueBlocking(item) || item.condition === 'NOT_FUNCTIONING') {
+                const issue = getEquipmentIssue(item);
+                showToast(`Cannot add "${item.name}": ${issue ? getIssueSummary(issue) : 'Item is marked as not usable'}`, 'error');
+                return;
+            }
+
             if (itemsToAdd.has(item.id)) {
                 showToast(`${item.name} is already selected`, 'success');
                 return;
@@ -654,12 +691,20 @@ export default function TransactionDetailPage() {
 
         setSaving(true);
         try {
-            // 1. Update item status directly to AVAILABLE and CLEAR assignee
-            await storage.updateEquipment(itemId, {
-                status: 'AVAILABLE',
-                assignedTo: null as unknown as string,
-                lastActivity: new Date().toISOString()
-            });
+            // 1. Update item status to AVAILABLE only if it is NOT actively checked out in another open transaction
+            const otherOpenTxns = (await storage.getTransactions(undefined, undefined, undefined, 'OPEN', undefined, undefined, effectiveDeptId))
+                .filter(t => t.id !== transaction?.id);
+            const inOtherOpenTxn = otherOpenTxns.some(t =>
+                t.items?.includes(itemId) && (!t.postReturnConditions || t.postReturnConditions[itemId] === undefined)
+            );
+
+            if (!inOtherOpenTxn) {
+                await storage.updateEquipment(itemId, {
+                    status: 'AVAILABLE',
+                    assignedTo: null as unknown as string,
+                    lastActivity: new Date().toISOString()
+                });
+            }
 
             // 2. Update Transaction (Close if all returned)
             const currentConditions: Record<string, Equipment['condition']> = transaction?.postReturnConditions || {};
@@ -701,6 +746,93 @@ export default function TransactionDetailPage() {
         } catch (error) {
             console.error('Error force returning item:', error);
             showToast('Failed to force return item', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleReCheckoutItem = async (itemId: string) => {
+        if (!canForceReturnItems) {
+            showToast('Only managers and admins can re-checkout items', 'error');
+            return;
+        }
+
+        if (!transaction || transaction.status !== 'OPEN') {
+            showToast('Cannot modify closed transactions', 'error');
+            return;
+        }
+
+        const item = equipment.find(e => e.id === itemId);
+        if (!item) {
+            showToast('Item not found', 'error');
+            return;
+        }
+
+        if (isEquipmentIssueBlocking(item) || item.condition === 'NOT_FUNCTIONING') {
+            const issue = getEquipmentIssue(item);
+            showToast(`Cannot re-checkout "${item.name}": ${issue ? getIssueSummary(issue) : 'Item is marked as not usable'}`, 'error');
+            return;
+        }
+
+        // Check if item is actively checked out in ANOTHER open transaction
+        const otherOpenTxns = (await storage.getTransactions(undefined, undefined, undefined, 'OPEN', undefined, undefined, effectiveDeptId))
+            .filter(t => t.id !== transaction?.id);
+        const isOutInOtherTxn = otherOpenTxns.some(t =>
+            t.items?.includes(itemId) && (!t.postReturnConditions || t.postReturnConditions[itemId] === undefined)
+        );
+
+        if (isOutInOtherTxn) {
+            showToast(`"${item.name}" is currently checked out in another transaction and cannot be re-checked out`, 'error');
+            return;
+        }
+
+        if (['MAINTENANCE', 'RETIRED', 'MISSING', 'DAMAGED'].includes(item.status)) {
+            showToast(`"${item.name}" is currently marked as ${item.status.toLowerCase()} and cannot be checked out`, 'error');
+            return;
+        }
+
+        const isConfirmed = await confirm({
+            title: 'Re-checkout Item?',
+            message: `Re-checkout "${item.name}" (${item.barcode || 'No barcode'}) back to ${transactionUser?.name || 'this transaction'}?`,
+            confirmLabel: 'Re-checkout',
+            variant: 'primary',
+        });
+
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            // 1. Remove return condition from transaction so it is active again
+            const updatedConditions = { ...(transaction.postReturnConditions || {}) };
+            delete updatedConditions[itemId];
+
+            await storage.updateTransaction(transaction.id, {
+                postReturnConditions: updatedConditions,
+            });
+
+            // 2. Set equipment to CHECKED_OUT
+            await storage.updateEquipment(itemId, {
+                status: 'CHECKED_OUT',
+                assignedTo: transaction.userId,
+                lastActivity: new Date().toISOString(),
+            });
+
+            // 3. Log the action
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'CHECKOUT',
+                entityId: transaction.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Re-checked out item "${item.name}" (${item.barcode || 'No barcode'}) for ${transactionUser?.name || 'user'} in transaction "${transaction.project || 'Unspecified'}"`,
+                departmentId: effectiveDeptId || transaction.departmentId,
+            });
+
+            await loadData(true);
+            showToast(`Re-checked out ${item.name}`, 'success');
+        } catch (error) {
+            console.error('Error re-checking out item:', error);
+            showToast('Failed to re-checkout item', 'error');
         } finally {
             setSaving(false);
         }
@@ -858,9 +990,8 @@ export default function TransactionDetailPage() {
 
     // Dynamic Crew List Logic
     let displayUserIds: string[] = [];
-    if (linkedShoot) {
-        // If linked to a shoot, use the LIVE assignments as the source of truth
-        // This ensures if an admin removes a crew member from the shoot, they disappear here.
+    if (linkedShoot && shootAssignments.length > 0) {
+        // If linked to a shoot with active assignments, use the LIVE assignments as the source of truth
         const activeCrewIds = shootAssignments
             .filter(a => ['ACCEPTED', 'PENDING'].includes(a.status))
             .map(a => a.userId);
@@ -868,7 +999,7 @@ export default function TransactionDetailPage() {
         // Remove primary user from this list to avoid duplication
         displayUserIds = activeCrewIds.filter(id => id !== transaction.userId);
     } else {
-        // Fallback to static snapshot for non-shoot transactions
+        // Fallback to static snapshot stored on transaction
         displayUserIds = transaction.additionalUsers || [];
     }
 
@@ -1228,8 +1359,13 @@ export default function TransactionDetailPage() {
             });
 
             // IMPORTANT: Also update the equipment items! 
-            // Any item that was still checked out or pending should now be available and unassigned.
+            // Any item that was still checked out or pending should now be available, UNLESS it is in another OPEN transaction!
+            const otherOpenTxns = (await storage.getTransactions(undefined, undefined, undefined, 'OPEN', undefined, undefined, effectiveDeptId))
+                .filter(t => t.id !== transaction!.id);
+            const itemsInOtherOpenTxns = new Set(otherOpenTxns.flatMap(t => t.items || []));
+
             await Promise.all(transaction!.items.map(async (itemId) => {
+                if (itemsInOtherOpenTxns.has(itemId)) return; // Keep active in newer transaction
                 const item = equipment.find(e => e.id === itemId);
                 if (item && (item.status === 'CHECKED_OUT' || item.status === 'PENDING_VERIFICATION')) {
                     await storage.updateEquipment(itemId, {
@@ -1261,18 +1397,6 @@ export default function TransactionDetailPage() {
 
     return (
         <div className="space-y-6 animate-fade-in pb-12 max-w-5xl mx-auto">
-            {safeReturnTo && (
-                <Link
-                    href={safeReturnTo}
-                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-opacity hover:opacity-80"
-                >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                    {returnLabel}
-                </Link>
-            )}
-
             {/* Header */}
             <Card className="p-4 sm:p-5">
                 <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold leading-tight tracking-tight break-words">
@@ -1314,7 +1438,7 @@ export default function TransactionDetailPage() {
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
                     {linkedShoot ? (
                         <Link
-                            href={`/shoots/${linkedShoot.id}`}
+                            href={`/shoots/${linkedShoot.id}?returnTo=${encodeURIComponent(`/transactions/${transaction.id}`)}&returnLabel=${encodeURIComponent('Back to Transaction')}`}
                             className="group inline-flex max-w-full items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
                         >
                             <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
@@ -1826,6 +1950,24 @@ export default function TransactionDetailPage() {
                                                     </span>
                                                 )}
 
+                                                {/* Re-checkout button - for returned items in an open transaction */}
+                                                {transaction.status === 'OPEN' && !isCheckedOut && canForceReturnItems && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleReCheckoutItem(itemId);
+                                                        }}
+                                                        disabled={saving}
+                                                        title="Re-checkout this item"
+                                                        className="flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors cursor-pointer"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                        Re-checkout
+                                                    </button>
+                                                )}
+
                                                 {/* Force Return button - only for checked out items */}
                                                 {transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems && (
                                                     <button
@@ -1835,7 +1977,7 @@ export default function TransactionDetailPage() {
                                                         }}
                                                         disabled={saving}
                                                         title="Force return this item"
-                                                        className="flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+                                                        className="flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600 cursor-pointer"
                                                     >
                                                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />

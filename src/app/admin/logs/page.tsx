@@ -68,7 +68,11 @@ export default function AdminLogsPage() {
             if (isReset) {
                 setLogs(newLogs);
             } else {
-                setLogs(prev => [...prev, ...newLogs]);
+                setLogs(prev => {
+                    const existingIds = new Set(prev.map(l => l.id));
+                    const uniqueNew = newLogs.filter(l => !existingIds.has(l.id));
+                    return [...prev, ...uniqueNew];
+                });
             }
         } catch (error) {
             console.error('Error loading logs:', error);
@@ -170,8 +174,8 @@ export default function AdminLogsPage() {
                                         <td colSpan={4} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">No logs found</td>
                                     </tr>
                                 ) : (
-                                    filteredLogs.map((log) => (
-                                        <tr key={log.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors">
+                                    filteredLogs.map((log, index) => (
+                                        <tr key={`${log.id}-${index}`} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors">
                                             <td className="px-5 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                                                 {new Date(log.timestamp).toLocaleString()}
                                             </td>
@@ -201,8 +205,8 @@ export default function AdminLogsPage() {
                             No logs found
                         </div>
                     ) : (
-                        filteredLogs.map((log) => (
-                            <div key={log.id} className="bg-white dark:bg-[#1c1c1e] p-4 rounded-2xl border border-gray-200/60 dark:border-gray-800 shadow-sm space-y-3">
+                        filteredLogs.map((log, index) => (
+                            <div key={`${log.id}-${index}`} className="bg-white dark:bg-[#1c1c1e] p-4 rounded-2xl border border-gray-200/60 dark:border-gray-800 shadow-sm space-y-3">
                                 <div className="flex justify-between items-start">
                                     <div className="space-y-1">
                                         <p className="font-semibold text-[15px] text-gray-900 dark:text-white">{getUserName(log.userId)}</p>

@@ -22,9 +22,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
+    const userRef = React.useRef<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [authError, setAuthError] = useState<string | null>(null);
     const router = useRouter();
+
+    const handleSetUser = (newUser: User | null) => {
+        userRef.current = newUser;
+        setUser(newUser);
+    };
 
     // Safety timeout: If auth takes more than 10 seconds, force stop loading
     useEffect(() => {
@@ -43,8 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         let channel: RealtimeChannel | null = null;
 
-        const fetchProfile = async (userId: string, email: string) => {
+        const fetchProfile = async (userId: string, email: string, showLoading: boolean = true) => {
             try {
+                if (showLoading && !userRef.current) {
+                    setIsLoading(true);
+                }
                 const { data, error } = await supabase
                     .from('users')
                     .select('*, avatarUrl:avatar_url, departmentId:department_id, canManageExpenses:can_manage_expenses, isPrimaryLeaveApprover:is_primary_leave_approver, canBeAssignedToShoots:can_be_assigned_to_shoots')
@@ -56,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     if (data.status === 'PENDING' || data.status === 'SUSPENDED') {
                         if (data.status === 'PENDING' && !data.departmentId) {
                             // New user (likely Google signup) without a department selected yet
-                            setUser(data as User);
+                            handleSetUser(data as User);
                             setIsLoading(false);
                             if (window.location.pathname !== '/select-department') {
                                 router.replace('/select-department');
@@ -64,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             return;
                         }
                         const reason = data.status === 'SUSPENDED' ? 'suspended' : 'pending';
-                        setUser(null);
+                        handleSetUser(null);
                         setIsLoading(false);
                         router.replace(`/inactive?reason=${reason}`);
                         await supabase.auth.signOut();
@@ -76,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         router.replace('/login');
                     }
 
-                    setUser(data as User);
+                    handleSetUser(data as User);
 
                     // Track this session
                     storage.upsertSession(data.id, navigator.userAgent).catch(console.error);
@@ -105,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                                 if (updatedUser.status === 'PENDING' || updatedUser.status === 'SUSPENDED') {
                                     const reason = updatedUser.status === 'SUSPENDED' ? 'suspended' : 'pending';
-                                    setUser(null);
+                                    handleSetUser(null);
                                     router.replace(`/inactive?reason=${reason}`);
                                     await supabase.auth.signOut();
                                 } else {
@@ -114,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                         router.replace('/login');
                                     }
                                     // Update local user state
-                                    setUser(updatedUser as User);
+                                    handleSetUser(updatedUser as User);
                                 }
                             }
                         )
@@ -142,10 +151,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             })
                             .then(({ error: insertErr }) => {
                                 if (insertErr && insertErr.code !== '23505') {
-                                    // Log non-duplicate errors
                                     console.warn('Insert attempt result:', insertErr.message);
                                 }
-                                // 23505 = duplicate key = user already exists, that's fine
                             });
 
                         // Step 2: Always fetch via admin API (bypasses RLS)
@@ -154,24 +161,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             const profileData = await res.json();
                             if (profileData) {
                                 if (profileData.status === 'PENDING' && !profileData.departmentId) {
-                                    // New user without department → select department page
-                                    setUser(profileData as User);
+                                    handleSetUser(profileData as User);
                                     setIsLoading(false);
                                     if (window.location.pathname !== '/select-department') {
                                         router.replace('/select-department');
                                     }
                                     return;
                                 } else if (profileData.status === 'PENDING' || profileData.status === 'SUSPENDED') {
-                                    // Has department but not approved yet
                                     const reason = profileData.status === 'SUSPENDED' ? 'suspended' : 'pending';
-                                    setUser(null);
+                                    handleSetUser(null);
                                     setIsLoading(false);
                                     router.replace(`/inactive?reason=${reason}`);
                                     await supabase.auth.signOut();
                                     return;
                                 }
-                                // Active user (RLS was just overly restrictive)
-                                setUser(profileData as User);
+                                handleSetUser(profileData as User);
                                 storage.upsertSession(profileData.id, navigator.userAgent).catch(console.error);
                                 setIsLoading(false);
                                 return;
@@ -179,11 +183,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         }
 
                         console.error('Failed to fetch profile via API, status:', res.status);
-                        setUser(null);
+                        handleSetUser(null);
                         setIsLoading(false);
                     } catch (err) {
                         console.error('Error in profile creation/fetch:', err);
-                        setUser(null);
+                        handleSetUser(null);
                         setIsLoading(false);
                     }
                 }
@@ -197,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Check active session
         supabase.auth.getSession().then(({ data: { session } }) => {
             if (session?.user) {
-                fetchProfile(session.user.id, session.user.email!);
+                fetchProfile(session.user.id, session.user.email!, true);
             } else {
                 setIsLoading(false);
             }
@@ -208,11 +212,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             data: { subscription },
         } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (session?.user) {
-                // If we already have a user and IDs match, we might not need to refetch
-                // But to be safe on sign-in, we fetch.
-                fetchProfile(session.user.id, session.user.email!);
+                const isSameUser = userRef.current?.id === session.user.id;
+                // If it's just a token refresh or focus event and we already have the user, fetch silently in the background
+                const showLoading = !isSameUser && event !== 'TOKEN_REFRESHED';
+                fetchProfile(session.user.id, session.user.email!, showLoading);
             } else {
-                setUser(null);
+                handleSetUser(null);
                 setIsLoading(false);
                 if (channel) {
                     supabase.removeChannel(channel);
@@ -232,14 +237,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const checkGoogleLoginSuccess = async () => {
             const pendingLogin = sessionStorage.getItem('auth_logging_pending');
             if (pendingLogin === 'google' && user) {
-                // Clear immediately to prevent double logging
                 sessionStorage.removeItem('auth_logging_pending');
 
-                // Log success
                 try {
-                    if (user.status === 'ACTIVE' || user.status === 'PENDING') { // Pending users also managed via signup flow usually, but Google might be different
-                        // For Google, if they are brand new, they might be PENDING.
-                        // If existing active user, log LOGIN.
+                    if (user.status === 'ACTIVE' || user.status === 'PENDING') {
                         storage.addLog({
                             id: generateUUID(),
                             action: 'LOGIN',
@@ -268,14 +269,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user]);
 
     const login = async (email: string, password: string) => {
-        // isLoading is handled locally by the caller to prevent full app unmount/remount
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
 
         if (error) {
-            // Log failed login attempt
             storage.addLog({
                 id: generateUUID(),
                 action: 'LOGIN_FAILED',
@@ -305,7 +304,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 details: `User logged in: ${email}`
             }).catch(err => console.error('Error logging login:', err));
         } else if (data.user && (profile?.status === 'PENDING' || profile?.status === 'SUSPENDED')) {
-            // Log a special entry for inactive login attempts
             storage.addLog({
                 id: generateUUID(),
                 action: 'LOGIN_FAILED',
@@ -320,8 +318,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const signUp = async (email: string, password: string, name: string, departmentId?: string) => {
-        // isLoading is handled locally
-        // 1. Sign up in Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
             password,
@@ -335,7 +331,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (authData.user) {
-            // 2. Create profile in public.users table
             const { error: profileError } = await supabase
                 .from('users')
                 .insert([
@@ -351,26 +346,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ]);
 
             if (profileError) {
-                // Handle duplicate key error (User already has a profile)
                 if (profileError.code === '23505') {
-                    // Do not log to console.error to avoid scary red box in dev mode
                     console.log(`[SignUp] Duplicate account attempt for ${email}`);
                     return { error: new Error('An account with this email already exists. Please try logging in instead.') };
                 }
 
-                // Log detailed error for other cases
                 console.error(`[SignUp] Profile creation failed for ${email}:`,
                     profileError.message,
                     profileError.code,
                     profileError.details
                 );
 
-                // Attempt to sign out since they were technically signed up but profile creation failed
                 await supabase.auth.signOut();
                 return { error: new Error(`Account setup failed: ${profileError.message}. Please contact an admin.`) };
             }
 
-            // Log signup success
             storage.addLog({
                 id: generateUUID(),
                 action: 'SIGNUP',
@@ -387,16 +377,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const logout = async () => {
         const currentUser = user;
 
-        // Log logout BEFORE signing out (so we still have RLS permission)
         if (currentUser) {
-            // Remove this session from our tracker
             storage.deleteSession(currentUser.id, navigator.userAgent).catch(console.error);
 
             try {
                 await storage.addLog({
                     id: generateUUID(),
                     action: 'LOGOUT',
-                    userId: currentUser.id, // Use the ID from the captured user object
+                    userId: currentUser.id,
                     entityId: 'AUTH',
                     timestamp: new Date().toISOString(),
                     details: `User logged out: ${currentUser.email}`
@@ -406,10 +394,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
-        // Use scope: 'local' so we don't invalidate sessions on other devices
         await supabase.auth.signOut({ scope: 'local' });
-
-        setUser(null);
+        handleSetUser(null);
         router.replace('/login');
     };
 
@@ -429,8 +415,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const loginWithGoogle = async () => {
-        // Log the attempt (Non-blocking)
-        // We do NOT await this, so the redirect happens immediately without waiting for the log to save.
         storage.addLog({
             id: generateUUID(),
             action: 'LOGIN',
@@ -439,18 +423,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             details: `Google login attempt initiated`
         }).catch(e => console.error('Failed to log google attempt', e));
 
-        // Set flag to track this login attempt across the redirect
         sessionStorage.setItem('auth_logging_pending', 'google');
 
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                // Request emails scope and Calendar scope to get user details and enable calendar integration
                 scopes: 'https://www.googleapis.com/auth/calendar.events',
                 redirectTo: `${window.location.origin}/login`,
                 queryParams: {
                     access_type: 'offline',
-                    // prompt: 'consent', // Removed to prevent forcing consent screen on every login
                 },
             },
         });

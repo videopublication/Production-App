@@ -16,6 +16,8 @@ import { sendPushNotification } from '@/lib/push-notifications';
 import { getRoleLabel } from '@/lib/roles';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 
 export default function EditShootPage() {
     const router = useRouter();
@@ -60,6 +62,12 @@ export default function EditShootPage() {
 
     const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string) => {
         if (!shoot || isSubmittingRef.current || isLoading) return;
+
+        // Guard: Cannot set status to Ready for Shoot without assigned cameramen / crew
+        if ((data.status === 'READY_FOR_SHOOT' || data.status === 'CONFIRMED') && crewIds.length === 0) {
+            alert('Please assign cameramen / crew before setting status to Ready for Shoot.');
+            return;
+        }
 
         isSubmittingRef.current = true;
         setIsLoading(true);
@@ -234,6 +242,60 @@ export default function EditShootPage() {
                 await storage.deletePlannerDraftAssignments(currentDraftAssignments.map(a => a.id));
             }
 
+            // Synchronize any linked open transactions with the updated shoot crew
+            try {
+                const linkedTxns = await storage.getTransactions(undefined, undefined, undefined, 'OPEN', undefined, undefined, shoot.departmentId);
+                const shootTxns = linkedTxns.filter(t => t.shootId === shoot.id);
+                for (const t of shootTxns) {
+                    const primaryUserId = inchargeId || (crewIds.length > 0 ? crewIds[0] : t.userId);
+                    const additionalUsers = crewIds.filter(id => id !== primaryUserId);
+                    await storage.updateTransaction(t.id, {
+                        userId: primaryUserId,
+                        additionalUsers: additionalUsers,
+                        project: updatedShoot.title || t.project
+                    });
+                }
+                await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            } catch (syncTxnErr) {
+                console.warn('Failed to sync linked transaction crew:', syncTxnErr);
+            }
+
+            if (shoot.jiraTicketId && updatedShoot.status && updatedShoot.status !== shoot.status) {
+                fetch('/api/jira/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticketKey: shoot.jiraTicketId, status: updatedShoot.status })
+                }).catch(err => console.debug('[Jira Status Sync]:', err));
+
+                if (updatedShoot.status === 'READY_FOR_SHOOT' || updatedShoot.status === 'CONFIRMED') {
+                    const assignedUsers = crewIds
+                        .map(uid => allUsers.find(u => u.id === uid))
+                        .filter((u): u is typeof allUsers[0] => Boolean(u));
+
+                    if (assignedUsers.length > 0) {
+                        const crewText = assignedUsers
+                            .map(u => u.phone ? `${u.name}-${u.phone}` : u.name)
+                            .join(', ');
+
+                        const deptTitle = pageDepartment?.name
+                            ? (pageDepartment.name === 'Video Publication' ? 'Video Publications' : pageDepartment.name)
+                            : 'Video Publications';
+
+                        const autoCommentBody = `Namaskaram\n\nPlease find the cameramen for this shoot & their contact numbers below\n${crewText}\n\nPranam\n${deptTitle}`;
+
+                        fetch(`/api/jira/ticket/${encodeURIComponent(shoot.jiraTicketId)}/comments`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                body: autoCommentBody,
+                                isInternal: false,
+                                authorName: user?.name || 'System'
+                            })
+                        }).catch(err => console.error('[Jira Auto Comment Error]:', err));
+                    }
+                }
+            }
+
             try {
                 // Log activity
                 const changes: string[] = [];
@@ -271,7 +333,6 @@ export default function EditShootPage() {
             router.push(getShootDetailsHref(shoot.id));
         } catch (error) {
             console.error(`Failed to update ${labels.workLower}:`, error);
-            isSubmittingRef.current = false;
         } finally {
             setIsLoading(false);
         }

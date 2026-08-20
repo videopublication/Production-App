@@ -252,16 +252,23 @@ export default function CalendarPage() {
         });
     };
 
-    // Get crew for a shoot
+    // Get crew for a shoot (deduplicated by userId)
     const getCrewForShoot = (shootId: string) => {
         const shootAssignments = assignments.filter(a => a.shootId === shootId);
-        return shootAssignments.map(a => {
-            const user = users.find(u => u.id === a.userId);
-            return {
-                ...a,
-                user
-            };
-        });
+        const seenUsers = new Set<string>();
+        const uniqueCrew: any[] = [];
+
+        for (const a of shootAssignments) {
+            if (!seenUsers.has(a.userId)) {
+                seenUsers.add(a.userId);
+                const user = users.find(u => u.id === a.userId);
+                uniqueCrew.push({
+                    ...a,
+                    user
+                });
+            }
+        }
+        return uniqueCrew;
     };
 
     // Calendar Weeks calculation (Standard Grid approach usually works better with Weeks logic if we want spanning)
@@ -309,13 +316,31 @@ export default function CalendarPage() {
         return shootColorPalette[index % shootColorPalette.length];
     };
 
-    // Get status-specific styling (for cancelled shoots)
+    // Get status-specific styling
     const getStatusStyle = (status: string, shootId: string) => {
         if (status === 'DRAFT') {
-            return { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' };
+            return { bg: '#f3f4f6', text: '#4b5563', border: '#d1d5db' };
+        }
+        if (status === 'CLOSED') {
+            return { bg: '#f3e8ff', text: '#6b21a8', border: '#d8b4fe' };
         }
         if (status === 'CANCELLED') {
             return { bg: '#ef4444', text: '#ffffff', border: '#b91c1c' };
+        }
+        if (status === 'ON_HOLD') {
+            return { bg: '#fef3c7', text: '#b45309', border: '#fcd34d' };
+        }
+        if (status === 'SHOOT_IN_PROGRESS') {
+            return { bg: '#dcfce7', text: '#15803d', border: '#86efac' };
+        }
+        if (status === 'OPEN') {
+            return { bg: '#e0f2fe', text: '#0369a1', border: '#7dd3fc' };
+        }
+        if (status === 'WAITING_FOR_REQUESTER') {
+            return { bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' };
+        }
+        if (status === 'PENDING_PRODUCTION_SETUP') {
+            return { bg: '#ffedd5', text: '#c2410c', border: '#fdba74' };
         }
         return getShootColor(shootId);
     };

@@ -30,9 +30,9 @@ import { isDataAsset } from './data-assets';
  */
 
 /** Reads the per-department verification mode. Absent, or Super Admin in the global view
- *  with no department pinned, ⇒ 'none'. */
+ *  with no department pinned, ⇒ 'checkout' default. */
 export const getReturnVerificationMode = (department?: Department | null): ReturnVerificationMode =>
-    department?.settings?.returnVerification ?? 'none';
+    department?.settings?.returnVerification ?? 'checkout';
 
 /**
  * The mode that applies to one specific item.

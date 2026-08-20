@@ -189,6 +189,8 @@ export default function ReturnsPage() {
     const [issueSeverities, setIssueSeverities] = useState<Record<string, EquipmentIssueSeverity>>({});
     const [issueNotes, setIssueNotes] = useState<Record<string, string>>({});
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = React.useRef(false);
     const returnableItemIds = checkedOutItems.map(item => item.id);
     const returnableManualKeys = manualReturnItems.map(item => item.key);
     const totalReturnableCount = returnableItemIds.length + returnableManualKeys.length;
@@ -490,7 +492,7 @@ export default function ReturnsPage() {
     };
 
     const handleSubmitReturn = async () => {
-        if (selectedCount === 0) return;
+        if (selectedCount === 0 || isSubmittingRef.current || isSubmitting) return;
 
         if (!isOnline) {
             showToast('You are offline. Please connect to the internet to return items.', 'error');
@@ -514,6 +516,8 @@ export default function ReturnsPage() {
             return;
         }
 
+        isSubmittingRef.current = true;
+        setIsSubmitting(true);
         try {
             // How much sign-off this department wants: 'none' releases clean returns
             // immediately, 'checkout' holds them for the next person picking them up, and
@@ -768,6 +772,9 @@ export default function ReturnsPage() {
         } catch (error) {
             console.error('Submit return failed:', error);
             showToast('Failed to return items. Please check your connection and try again.', 'error');
+        } finally {
+            isSubmittingRef.current = false;
+            setIsSubmitting(false);
         }
     };
 
@@ -981,11 +988,11 @@ export default function ReturnsPage() {
                     )}
                     <Button
                         onClick={handleSubmitReturn}
-                        disabled={selectedCount === 0 || !isOnline || missingZoomAnswer}
+                        disabled={selectedCount === 0 || !isOnline || missingZoomAnswer || isSubmitting}
                         className="w-full sm:w-auto"
                         size="sm"
                     >
-                        {!isOnline ? 'Offline' : missingZoomAnswer ? 'Answer Zoom question' : `Return Selected (${selectedCount})`}
+                        {isSubmitting ? 'Submitting...' : !isOnline ? 'Offline' : missingZoomAnswer ? 'Answer Zoom question' : `Return Selected (${selectedCount})`}
                     </Button>
                 </div>
             </div>

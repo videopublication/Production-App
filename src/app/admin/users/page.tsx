@@ -25,8 +25,16 @@ import {
     phoneDigits,
     roleBadgeClass,
     roleLabel,
+    ICON_BUTTON,
+    PILL_ACTIVATE,
+    PILL_APPROVER_OFF,
+    PILL_APPROVER_ON,
+    PILL_OFF,
+    PILL_ON,
+    PILL_SUSPEND,
     statusBadgeClass,
     statusGlyph,
+    STATUS_TAB_ACTIVE,
     TEXT_WHATSAPP,
     userPhone,
     whatsappTag,
@@ -180,7 +188,7 @@ export default function TeamMembersPage() {
     };
 
     const SortIcon = ({ active, dir }: { active: boolean; dir: SortDir }) => (
-        <svg className={`h-3.5 w-3.5 ${active ? 'text-primary' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <svg className={`h-3.5 w-3.5 ${active ? 'text-primary' : 'text-muted-foreground'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d={dir === 'asc' ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
         </svg>
     );
@@ -193,7 +201,7 @@ export default function TeamMembersPage() {
                     {roleLabel(role)}
                 </span>
                 {showGlobalMarker && (
-                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                         Global
                     </span>
                 )}
@@ -515,14 +523,14 @@ export default function TeamMembersPage() {
     if (isLoading) return (
         <div className="mx-auto max-w-[1400px] p-8 xl:max-w-[1600px]">
             <div className="animate-pulse space-y-4">
-                <div className="h-8 w-48 rounded-xl bg-gray-200 dark:bg-gray-800" />
-                <div className="h-12 rounded-xl bg-gray-200 dark:bg-gray-800" />
-                {[1, 2, 3, 4].map(i => <div key={i} className="h-20 rounded-xl bg-gray-200 dark:bg-gray-800" />)}
+                <div className="h-8 w-48 rounded-xl bg-secondary" />
+                <div className="h-12 rounded-xl bg-secondary" />
+                {[1, 2, 3, 4].map(i => <div key={i} className="h-20 rounded-xl bg-secondary" />)}
             </div>
         </div>
     );
 
-    const headerButton = 'flex-1 sm:flex-none px-4 py-2.5 bg-white dark:bg-[#1c1c1e] font-semibold text-sm rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all flex items-center justify-center gap-2';
+    const headerButton = 'flex-1 sm:flex-none px-4 py-2.5 bg-card font-semibold text-sm rounded-xl shadow-sm border border-border hover:bg-secondary/40 active:scale-95 transition-all flex items-center justify-center gap-2';
     const pillButton = 'h-9 rounded-xl px-3 text-[12.5px] font-semibold transition-all active:scale-95';
     const iconButton = 'flex h-9 w-9 items-center justify-center rounded-xl transition-colors';
 
@@ -531,16 +539,16 @@ export default function TeamMembersPage() {
             {/* Header */}
             <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+                    <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
                         Team Members
                     </h1>
-                    <p className="mt-1.5 text-[13px] text-gray-500 dark:text-gray-400">
+                    <p className="mt-1.5 text-[13px] text-muted-foreground">
                         {filteredUsers.length} of {statusCounts.ALL} people
                         {department ? ` in ${department.name}` : ''}
                     </p>
                 </div>
                 <div className="flex w-full gap-2 sm:w-auto">
-                    <button onClick={exportCsv} className={`${headerButton} text-gray-700 dark:text-gray-200`} title="Download the people currently listed">
+                    <button onClick={exportCsv} className={`${headerButton} text-foreground`} title="Download the people currently listed">
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                         </svg>
@@ -555,7 +563,7 @@ export default function TeamMembersPage() {
                     {isSuperAdmin && (
                         <button
                             onClick={() => setShowMergeModal(true)}
-                            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 shadow-sm transition-all hover:bg-red-50 active:scale-95 sm:flex-none dark:border-red-900/50 dark:bg-[#1c1c1e] dark:text-red-500 dark:hover:bg-red-950/30"
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-destructive/30 bg-card px-4 py-2.5 text-sm font-semibold text-destructive shadow-sm transition-all hover:bg-destructive/10 active:scale-95 sm:flex-none"
                         >
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
@@ -565,7 +573,7 @@ export default function TeamMembersPage() {
                     )}
                     <button
                         onClick={() => setShowAddModal(true)}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition-all hover:opacity-90 active:scale-95 sm:flex-none"
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:opacity-90 active:scale-95 sm:flex-none"
                     >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -578,7 +586,7 @@ export default function TeamMembersPage() {
             {/* Search & status tabs */}
             <div className="mb-4 space-y-3">
                 <div className="relative">
-                    <svg className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                     </svg>
                     <input
@@ -586,10 +594,10 @@ export default function TeamMembersPage() {
                         placeholder="Search by name, email, number, role, or department..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-11 pr-10 text-[14px] text-gray-900 placeholder-gray-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary dark:border-gray-800 dark:bg-[#1c1c1e] dark:text-white"
+                        className="w-full rounded-xl border border-border bg-card py-3 pl-11 pr-10 text-[14px] text-foreground transition-all placeholder:text-muted-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                     {search && (
-                        <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" aria-label="Clear search">
+                        <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -597,17 +605,14 @@ export default function TeamMembersPage() {
                     )}
                 </div>
 
-                <div className="flex gap-1.5 overflow-x-auto rounded-xl bg-gray-100 p-1 dark:bg-gray-800/50">
+                <div className="flex gap-1.5 overflow-x-auto rounded-xl bg-secondary p-1">
                     {(['ALL', 'ACTIVE', 'PENDING', 'SUSPENDED'] as StatusFilter[]).map(status => (
                         <button
                             key={status}
                             onClick={() => setStatusFilter(status)}
                             className={`min-w-fit flex-1 whitespace-nowrap rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wide transition-all ${statusFilter === status
-                                ? status === 'ALL' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white'
-                                    : status === 'ACTIVE' ? 'bg-green-500 text-white shadow-sm'
-                                        : status === 'PENDING' ? 'bg-amber-500 text-white shadow-sm'
-                                            : 'bg-red-500 text-white shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                                ? STATUS_TAB_ACTIVE[status]
+                                : 'text-muted-foreground hover:text-foreground'
                                 }`}
                         >
                             {status === 'ALL' ? `All (${statusCounts.ALL})` : `${status.charAt(0)}${status.slice(1).toLowerCase()} (${statusCounts[status]})`}
@@ -618,22 +623,22 @@ export default function TeamMembersPage() {
 
             {/* List */}
             <PullToRefresh onRefresh={async () => { await refetch(); }}>
-                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-[#1c1c1e]">
+                <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
                     {/* Sort header (desktop) */}
                     <div
-                        className="hidden items-center gap-4 border-b border-gray-100 bg-gray-50/70 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 lg:grid dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
+                        className="hidden items-center gap-4 border-b border-border bg-secondary/30 px-5 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground lg:grid"
                         style={{ gridTemplateColumns: GRID_COLS }}
                     >
-                        <button className="flex items-center gap-1 text-left transition-colors hover:text-gray-700 dark:hover:text-gray-200" onClick={() => handleSort('name')}>
+                        <button className="flex items-center gap-1 text-left transition-colors hover:text-foreground" onClick={() => handleSort('name')}>
                             Name <SortIcon active={sortKey === 'name'} dir={sortKey === 'name' ? sortDir : 'asc'} />
                         </button>
-                        <button className="flex items-center gap-1 text-left transition-colors hover:text-gray-700 dark:hover:text-gray-200" onClick={() => handleSort('role')}>
+                        <button className="flex items-center gap-1 text-left transition-colors hover:text-foreground" onClick={() => handleSort('role')}>
                             Role <SortIcon active={sortKey === 'role'} dir={sortKey === 'role' ? sortDir : 'asc'} />
                         </button>
-                        <button className="flex items-center gap-1 text-left transition-colors hover:text-gray-700 dark:hover:text-gray-200" onClick={() => handleSort('status')}>
+                        <button className="flex items-center gap-1 text-left transition-colors hover:text-foreground" onClick={() => handleSort('status')}>
                             Status <SortIcon active={sortKey === 'status'} dir={sortKey === 'status' ? sortDir : 'asc'} />
                         </button>
-                        <button className="flex items-center gap-1 text-left transition-colors hover:text-gray-700 dark:hover:text-gray-200" onClick={() => handleSort('department')}>
+                        <button className="flex items-center gap-1 text-left transition-colors hover:text-foreground" onClick={() => handleSort('department')}>
                             Department <SortIcon active={sortKey === 'department'} dir={sortKey === 'department' ? sortDir : 'asc'} />
                         </button>
                         <div className="pr-1 text-right">Manage</div>
@@ -641,18 +646,18 @@ export default function TeamMembersPage() {
 
                     {filteredUsers.length === 0 ? (
                         <div className="px-6 py-16 text-center">
-                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                                <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary">
+                                <svg className="h-8 w-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
                                 </svg>
                             </div>
-                            <p className="font-medium text-gray-500 dark:text-gray-400">
+                            <p className="font-medium text-muted-foreground">
                                 {search ? `No results for "${search}"` : statusFilter !== 'ALL' ? `No ${statusFilter.toLowerCase()} users` : 'No team members yet'}
                             </p>
                             {search && <button onClick={() => setSearch('')} className="mt-2 text-sm text-primary hover:underline">Clear search</button>}
                         </div>
                     ) : (
-                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                        <div className="divide-y divide-border">
                             {filteredUsers.map(u => {
                                 const isSelf = user?.id === u.id;
                                 const phone = userPhone(u);
@@ -662,7 +667,7 @@ export default function TeamMembersPage() {
                                 return (
                                     <div
                                         key={u.id}
-                                        className={`p-4 transition-colors hover:bg-gray-50 sm:px-5 sm:py-4 dark:hover:bg-gray-800/50 ${processingIds.has(u.id) ? 'pointer-events-none opacity-60' : ''}`}
+                                        className={`p-4 transition-colors hover:bg-secondary/40 sm:px-5 sm:py-4 ${processingIds.has(u.id) ? 'pointer-events-none opacity-60' : ''}`}
                                     >
                                         {/* Desktop */}
                                         <div className="hidden items-center gap-4 lg:grid" style={{ gridTemplateColumns: GRID_COLS }}>
@@ -673,14 +678,14 @@ export default function TeamMembersPage() {
                                                     <div className="flex items-center gap-1.5">
                                                         <Link
                                                             href={`/admin/users/${u.id}`}
-                                                            className="truncate text-[15px] font-semibold leading-tight tracking-[-0.01em] text-gray-900 transition-colors hover:text-primary dark:text-white"
+                                                            className="truncate text-[15px] font-semibold leading-tight tracking-[-0.01em] text-foreground transition-colors hover:text-primary"
                                                             title={`Open ${u.name}'s profile`}
                                                         >
                                                             {u.name}
                                                         </Link>
                                                         {isSelf && <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">You</span>}
                                                     </div>
-                                                    <p className="truncate text-[13px] leading-snug text-gray-500 dark:text-gray-400">{u.email}</p>
+                                                    <p className="truncate text-[13px] leading-snug text-muted-foreground">{u.email}</p>
                                                     {phone && (
                                                         <p className={`truncate text-[13px] font-medium leading-snug tabular-nums ${TEXT_WHATSAPP}`}>
                                                             {formatPhone(phone)}
@@ -691,7 +696,7 @@ export default function TeamMembersPage() {
 
                                             <div className="flex min-w-0 items-center">{roleBadge(u.role)}</div>
                                             <div className="flex min-w-0 items-center">{statusBadge(u.status)}</div>
-                                            <div className="truncate text-[13px] text-gray-600 dark:text-gray-300">
+                                            <div className="truncate text-[13px] text-muted-foreground">
                                                 {getDeptName(u.departmentId)}
                                             </div>
 
@@ -700,7 +705,7 @@ export default function TeamMembersPage() {
                                                 {!isSelf ? (
                                                     <>
                                                         <select
-                                                            className="h-9 w-[140px] min-w-0 rounded-xl border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-900 shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                                                            className="h-9 w-[140px] min-w-0 rounded-xl border border-border bg-card px-3 text-[13px] font-medium text-foreground shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                                             value={u.role}
                                                             onChange={e => handleRoleChange(u, e.target.value)}
                                                             aria-label={`Role for ${u.name}`}
@@ -710,7 +715,7 @@ export default function TeamMembersPage() {
 
                                                         {isSuperAdmin && u.role !== 'SUPER_ADMIN' && (
                                                             <select
-                                                                className="h-9 w-[170px] min-w-0 rounded-xl border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-900 shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                                                                className="h-9 w-[170px] min-w-0 rounded-xl border border-border bg-card px-3 text-[13px] font-medium text-foreground shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                                                 value={u.departmentId || ''}
                                                                 onChange={e => handleDepartmentChange(u, e.target.value)}
                                                                 aria-label={`Department for ${u.name}`}
@@ -723,9 +728,7 @@ export default function TeamMembersPage() {
                                                         <button
                                                             onClick={() => handlePlannerChange(u, !planner)}
                                                             className={`${pillButton} w-[112px] ${planner
-                                                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300'
-                                                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                                                                }`}
+                                                                ? PILL_ON : PILL_OFF}`}
                                                             title={planner
                                                                 ? `Hide from ${labels.workLower} assignment lists`
                                                                 : `Show in ${labels.workLower} assignment lists`}
@@ -737,9 +740,7 @@ export default function TeamMembersPage() {
                                                             <button
                                                                 onClick={() => handlePrimaryApproverChange(u, !u.isPrimaryLeaveApprover)}
                                                                 className={`${iconButton} ${u.isPrimaryLeaveApprover
-                                                                    ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-yellow-500 dark:bg-slate-800 dark:hover:bg-slate-700'
-                                                                    }`}
+                                                                    ? PILL_APPROVER_ON : PILL_APPROVER_OFF}`}
                                                                 title={u.isPrimaryLeaveApprover ? 'Remove primary leave approver' : 'Make primary leave approver'}
                                                             >
                                                                 <svg className="h-4 w-4" fill={u.isPrimaryLeaveApprover ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -750,7 +751,7 @@ export default function TeamMembersPage() {
 
                                                         <button
                                                             onClick={() => openPasswordModal(u)}
-                                                            className={`${iconButton} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:hover:text-white`}
+                                                            className={`${iconButton} ${ICON_BUTTON}`}
                                                             title="Change password"
                                                         >
                                                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -761,21 +762,19 @@ export default function TeamMembersPage() {
                                                         <button
                                                             onClick={() => handleToggleStatus(u)}
                                                             className={`${pillButton} ${u.status === 'ACTIVE'
-                                                                ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400'
-                                                                : 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-950/30 dark:text-green-400'
-                                                                }`}
+                                                                ? PILL_SUSPEND : PILL_ACTIVATE}`}
                                                         >
                                                             {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
                                                         </button>
                                                     </>
                                                 ) : (
                                                     <div className="flex items-center gap-2">
-                                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                                        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-muted-foreground">
                                                             Current account
                                                         </span>
                                                         <button
                                                             onClick={() => openPasswordModal(u)}
-                                                            className={`${iconButton} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:hover:text-white`}
+                                                            className={`${iconButton} ${ICON_BUTTON}`}
                                                             title="Change password"
                                                         >
                                                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -793,20 +792,20 @@ export default function TeamMembersPage() {
                                                 <UserAvatar name={u.name} role={u.role} avatarUrl={u.avatarUrl} size="md" />
                                                 <div className="min-w-0 flex-1 space-y-0.5">
                                                     <div className="flex items-center gap-1.5">
-                                                        <span className="truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-gray-900 dark:text-white">{u.name}</span>
+                                                        <span className="truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-foreground">{u.name}</span>
                                                         {isSelf && <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary dark:bg-primary/20">You</span>}
                                                     </div>
-                                                    <p className="truncate text-[13px] leading-snug text-gray-500 dark:text-gray-400">{u.email}</p>
+                                                    <p className="truncate text-[13px] leading-snug text-muted-foreground">{u.email}</p>
                                                     {phone && (
                                                         <p className={`truncate text-[13px] font-medium leading-snug tabular-nums ${TEXT_WHATSAPP}`}>{formatPhone(phone)}</p>
                                                     )}
                                                     <div className="mt-1 flex items-center gap-1.5">
                                                         {roleBadge(u.role)}
                                                         {statusBadge(u.status)}
-                                                        <span className="text-[11px] text-gray-500 dark:text-gray-400">{getDeptName(u.departmentId)}</span>
+                                                        <span className="text-[11px] text-muted-foreground">{getDeptName(u.departmentId)}</span>
                                                     </div>
                                                 </div>
-                                                <svg className="h-4 w-4 shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <svg className="h-4 w-4 shrink-0 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                                                 </svg>
                                             </Link>
@@ -815,7 +814,7 @@ export default function TeamMembersPage() {
                                                 <div className="mt-2 flex flex-col gap-2">
                                                     <div className="flex items-center gap-1.5">
                                                         <select
-                                                            className="flex-1 rounded-xl border-0 bg-gray-100 px-3 py-2.5 text-[13px] font-medium text-gray-900 focus:ring-2 focus:ring-primary dark:bg-gray-800 dark:text-gray-100"
+                                                            className="flex-1 rounded-xl border-0 bg-secondary px-3 py-2.5 text-[13px] font-medium text-foreground focus:ring-2 focus:ring-primary"
                                                             value={u.role}
                                                             onChange={e => handleRoleChange(u, e.target.value)}
                                                             aria-label={`Role for ${u.name}`}
@@ -825,7 +824,7 @@ export default function TeamMembersPage() {
 
                                                         {isSuperAdmin && u.role !== 'SUPER_ADMIN' && (
                                                             <select
-                                                                className="flex-1 rounded-xl border-0 bg-gray-100 px-3 py-2.5 text-[13px] font-medium text-gray-900 focus:ring-2 focus:ring-primary dark:bg-gray-800 dark:text-gray-100"
+                                                                className="flex-1 rounded-xl border-0 bg-secondary px-3 py-2.5 text-[13px] font-medium text-foreground focus:ring-2 focus:ring-primary"
                                                                 value={u.departmentId || ''}
                                                                 onChange={e => handleDepartmentChange(u, e.target.value)}
                                                                 aria-label={`Department for ${u.name}`}
@@ -839,9 +838,7 @@ export default function TeamMembersPage() {
                                                     <button
                                                         onClick={() => handlePlannerChange(u, !planner)}
                                                         className={`w-full rounded-xl px-3 py-2.5 text-[12.5px] font-semibold transition-all active:scale-95 ${planner
-                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                                                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                                                            }`}
+                                                            ? PILL_ON : PILL_OFF}`}
                                                     >
                                                         {planner
                                                             ? `Can be assigned to ${labels.workPluralLower}`
@@ -853,9 +850,7 @@ export default function TeamMembersPage() {
                                                             <button
                                                                 onClick={() => handlePrimaryApproverChange(u, !u.isPrimaryLeaveApprover)}
                                                                 className={`flex flex-1 items-center justify-center rounded-xl p-2.5 transition-colors ${u.isPrimaryLeaveApprover
-                                                                    ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-yellow-500 dark:bg-gray-800 dark:hover:bg-gray-700'
-                                                                    }`}
+                                                                    ? PILL_APPROVER_ON : PILL_APPROVER_OFF}`}
                                                                 title={u.isPrimaryLeaveApprover ? 'Remove primary leave approver' : 'Make primary leave approver'}
                                                             >
                                                                 <svg className="h-4 w-4" fill={u.isPrimaryLeaveApprover ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -866,7 +861,7 @@ export default function TeamMembersPage() {
 
                                                         <button
                                                             onClick={() => openPasswordModal(u)}
-                                                            className="flex flex-1 items-center justify-center rounded-xl bg-gray-100 p-2.5 text-primary dark:bg-gray-800"
+                                                            className="flex flex-1 items-center justify-center rounded-xl bg-secondary p-2.5 text-primary"
                                                             title="Change password"
                                                         >
                                                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -877,9 +872,7 @@ export default function TeamMembersPage() {
                                                         <button
                                                             onClick={() => handleToggleStatus(u)}
                                                             className={`flex-[2] rounded-xl px-3 py-2.5 text-center text-[12.5px] font-semibold transition-all active:scale-95 ${u.status === 'ACTIVE'
-                                                                ? 'bg-red-50 text-red-600 dark:bg-red-900/20'
-                                                                : 'bg-green-50 text-green-600 dark:bg-green-900/20'
-                                                                }`}
+                                                                ? PILL_SUSPEND : PILL_ACTIVATE}`}
                                                         >
                                                             {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
                                                         </button>

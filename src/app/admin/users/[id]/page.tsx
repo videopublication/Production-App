@@ -760,8 +760,7 @@ export default function UserProfilePage() {
                                     aria-selected={tab === t.key}
                                     onClick={() => setTab(t.key)}
                                     className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-[14px] font-medium transition-all duration-200 ${tab === t.key
-                                        ? 'bg-[#1d1d1f] text-white dark:bg-white dark:text-black'
-                                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                                        ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                                         }`}
                                     style={{ WebkitTapHighlightColor: 'transparent' }}
                                 >

@@ -151,21 +151,41 @@ export default function ItemDetailsPage() {
                 const txnLogsArrays = await Promise.all(txnLogPromises);
                 const allTxnLogs = txnLogsArrays.flat();
 
-                // Filter transaction logs to only those relevant to THIS specific item
-                // Strategy:
-                //   - CHECKOUT logs: always include (they're transaction-wide, and we already know
-                //     these transactions contain this item). These don't mention individual items.
-                //   - RETURN/VERIFY/EDIT logs: filter by unique identifiers (barcode, ID) to
-                //     exclude logs for OTHER items in the same transaction.
-                //   - Use barcode/ID only — NOT item name (shared across variants like ZOOM-1 vs ZOOM-2)
-                const uniqueIds = [item.id, item.barcode].filter(Boolean).map(s => s.toLowerCase());
+                // Collect all known barcodes for this item (current barcode + any historical barcodes found in logs)
+                const knownBarcodes = new Set<string>();
+                if (item.barcode) knownBarcodes.add(item.barcode.toLowerCase());
+
+                // Scan equipment logs for old barcodes (e.g. Generated barcode: "OLD"→"NEW" or Bulk edit "..." (OLD): ...)
+                equipmentLogs.forEach(l => {
+                    const details = l.details || '';
+                    const arrowMatch = details.match(/"([^"]+)"\s*→\s*"([^"]+)"/);
+                    if (arrowMatch) {
+                        const b1 = arrowMatch[1].trim().toLowerCase();
+                        const b2 = arrowMatch[2].trim().toLowerCase();
+                        if (b1) knownBarcodes.add(b1);
+                        if (b2) knownBarcodes.add(b2);
+                    }
+                    const parenMatch = details.match(/\(([a-zA-Z0-9_-]+)\)/g);
+                    if (parenMatch) {
+                        parenMatch.forEach(p => {
+                            const code = p.slice(1, -1).trim().toLowerCase();
+                            if (code && code.length >= 3) knownBarcodes.add(code);
+                        });
+                    }
+                });
+
+                const barcodeRegexes = Array.from(knownBarcodes).map(code => {
+                    const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    return new RegExp(`(^|[^a-zA-Z0-9_-])${escaped}([^a-zA-Z0-9_-]|$)`, 'i');
+                });
+                const itemIdLower = item.id.toLowerCase();
+
                 const txnLogs = allTxnLogs.filter(log => {
-                    // CHECKOUT logs are per-transaction ("Checked out X items for Project")
-                    // Since we only fetched logs from transactions containing this item, include them
                     if (log.action === 'CHECKOUT') return true;
-                    // All other logs: only include if they specifically mention this item
                     const details = (log.details || '').toLowerCase();
-                    return uniqueIds.some(uid => details.includes(uid));
+                    if (details.includes(itemIdLower)) return true;
+                    if (barcodeRegexes.some(rx => rx.test(details))) return true;
+                    return false;
                 });
 
                 // Merge equipment-level + filtered transaction-level logs, deduplicate by ID, sort by date
@@ -175,7 +195,23 @@ export default function ItemDetailsPage() {
                 });
                 const mergedLogs = Array.from(allLogsMap.values())
                     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-                setItemLogs(mergedLogs);
+
+                // Suppress rapid duplicate logs (identical action and details within 30s)
+                const deduplicatedLogs: Log[] = [];
+                for (const log of mergedLogs) {
+                    const prev = deduplicatedLogs[deduplicatedLogs.length - 1];
+                    if (
+                        prev &&
+                        prev.action === log.action &&
+                        prev.details === log.details &&
+                        Math.abs(new Date(prev.timestamp).getTime() - new Date(log.timestamp).getTime()) < 30000
+                    ) {
+                        continue;
+                    }
+                    deduplicatedLogs.push(log);
+                }
+
+                setItemLogs(deduplicatedLogs);
 
                 // Find current shoot if item is checked out
                 if (item.status === 'CHECKED_OUT') {
@@ -689,20 +725,6 @@ export default function ItemDetailsPage() {
 
     return (
         <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
-            {/* Desktop-only Back row — the mobile app header already shows Back, and Print
-                QR now lives on the QR Code card below. Static, so it never overlaps content. */}
-            <div className="hidden md:flex -mx-4 items-center border-b border-border/40 px-4 pb-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-                <button
-                    onClick={() => router.back()}
-                    className="flex items-center gap-1.5 text-primary hover:text-primary/80 font-medium text-sm transition-colors"
-                >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                    </svg>
-                    <span>Inventory</span>
-                </button>
-            </div>
-
             {/* Header Section - Clean Mobile Layout */}
             <div className="space-y-4">
                 {/* Hero Section: Equipment Name + Status */}
@@ -1368,7 +1390,7 @@ export default function ItemDetailsPage() {
                                                 <p className="text-sm text-muted-foreground">
                                                     Since {new Date(activeTxn.timestampOut).toLocaleDateString()} •{' '}
                                                     <Link
-                                                        href={`/transactions/${activeTxn.id}`}
+                                                        href={`/transactions/${activeTxn.id}?returnTo=${encodeURIComponent(`/inventory/${item.id}`)}&returnLabel=${encodeURIComponent(`Back to ${item.name || 'Item'}`)}`}
                                                         className="font-medium text-primary underline-offset-2 hover:underline"
                                                     >
                                                         {activeTxn.id}
@@ -1388,7 +1410,12 @@ export default function ItemDetailsPage() {
                                             <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                             </svg>
-                                            <span className="text-sm font-semibold text-foreground">{currentShoot.title}</span>
+                                            <Link
+                                                href={`/shoots/${currentShoot.id}?returnTo=${encodeURIComponent(`/inventory/${item.id}`)}&returnLabel=${encodeURIComponent(`Back to ${item.name || 'Item'}`)}`}
+                                                className="text-sm font-semibold text-primary hover:underline truncate"
+                                            >
+                                                {currentShoot.title}
+                                            </Link>
                                             {currentShoot.shootNumber && (
                                                 <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">#{currentShoot.shootNumber}</span>
                                             )}
@@ -1431,7 +1458,7 @@ export default function ItemDetailsPage() {
                                             <span className="font-medium">Project:</span>
                                             {canOpenShoot ? (
                                                 <Link
-                                                    href={`/shoots/${activeTxn.shootId}`}
+                                                    href={`/shoots/${activeTxn.shootId}?returnTo=${encodeURIComponent(`/inventory/${item.id}`)}&returnLabel=${encodeURIComponent(`Back to ${item.name || 'Item'}`)}`}
                                                     className="font-medium text-primary underline-offset-2 hover:underline"
                                                 >
                                                     {activeTxn.project}
@@ -1574,7 +1601,18 @@ export default function ItemDetailsPage() {
                           <div className="max-h-[32rem] overflow-y-auto pr-1 -mr-1">
                             {itemLogs.slice(0, historyVisible).map((log, index) => {
                                 const logUser = users.find(u => u.id === log.userId);
-                                const relatedTxn = itemTransactions.find(t => t.id === log.entityId);
+                                // Robust transaction / shoot matching (only for shoot events or txn-level logs)
+                                const isInventoryAdminAction = (log.action === 'EDIT' || log.action === 'CREATE') && log.entityId !== itemTransactions.find(t => t.id === log.entityId)?.id && !itemTransactions.some(t => t.project && log.details?.includes(t.project));
+                                const relatedTxn = isInventoryAdminAction
+                                    ? null
+                                    : (itemTransactions.find(t => t.id === log.entityId) ||
+                                       itemTransactions.find(t => t.project && log.details?.includes(t.project)) ||
+                                       itemTransactions.find(t => {
+                                           const logTime = new Date(log.timestamp).getTime();
+                                           const outTime = new Date(t.timestampOut).getTime();
+                                           const inTime = t.timestampIn ? new Date(t.timestampIn).getTime() : Date.now() + 86400000;
+                                           return logTime >= (outTime - 60000) && logTime <= (inTime + 300000);
+                                       }));
                                 const isLast = index === Math.min(historyVisible, itemLogs.length) - 1;
 
                                 const getActionIcon = (action: string) => {
@@ -1619,9 +1657,23 @@ export default function ItemDetailsPage() {
                                                 </p>
                                             )}
                                             {relatedTxn?.project && (
-                                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded mt-1">
-                                                    🎬 {relatedTxn.project}
-                                                </span>
+                                                <div className="mt-1">
+                                                    {relatedTxn.shootId ? (
+                                                        <Link
+                                                            href={`/shoots/${relatedTxn.shootId}?returnTo=${encodeURIComponent(`/inventory/${item.id}`)}&returnLabel=${encodeURIComponent(`Back to ${item.name || 'Item'}`)}`}
+                                                            className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/5 hover:bg-primary/10 border border-primary/10 px-1.5 py-0.5 rounded transition-colors"
+                                                        >
+                                                            🎬 {relatedTxn.project}
+                                                        </Link>
+                                                    ) : (
+                                                        <Link
+                                                            href={`/transactions/${relatedTxn.id}?returnTo=${encodeURIComponent(`/inventory/${item.id}`)}&returnLabel=${encodeURIComponent(`Back to ${item.name || 'Item'}`)}`}
+                                                            className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/5 hover:bg-primary/10 border border-primary/10 px-1.5 py-0.5 rounded transition-colors"
+                                                        >
+                                                            🎬 {relatedTxn.project}
+                                                        </Link>
+                                                    )}
+                                                </div>
                                             )}
                                             <p className="text-[10px] text-muted-foreground/60 mt-1">
                                                 {logDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}

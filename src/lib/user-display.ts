@@ -80,11 +80,37 @@ export const ROLE_AVATAR: Record<string, string> = {
 
 export const roleAvatarClass = (role?: string | null) => ROLE_AVATAR[role || ''] || ROLE_AVATAR.CREW;
 
+/**
+ * Status tones built from the app's own semantic variables — `--success`,
+ * `--orange`, `--destructive` — rather than a separate Tailwind ramp. The text
+ * step is darkened for light backgrounds, where the raw system colour is too
+ * light to read (see TEXT_WHATSAPP for the same treatment).
+ */
 export const STATUS_BADGE: Record<string, string> = {
-    ACTIVE: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
-    PENDING: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
-    SUSPENDED: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+    ACTIVE: 'bg-success/12 text-[#248a3d] dark:text-[#34c759]',
+    PENDING: 'bg-[var(--orange)]/15 text-[#b36800] dark:text-[#ff9500]',
+    SUSPENDED: 'bg-destructive/12 text-destructive',
 };
+
+/** Filled tab in the status switcher, per state. */
+export const STATUS_TAB_ACTIVE: Record<string, string> = {
+    ALL: 'bg-card text-foreground shadow-sm',
+    ACTIVE: 'bg-success text-success-foreground shadow-sm',
+    PENDING: 'bg-[var(--orange)] text-[var(--orange-foreground)] shadow-sm',
+    SUSPENDED: 'bg-destructive text-destructive-foreground shadow-sm',
+};
+
+/**
+ * Row-level action styling. Kept here so the two user pages share one source
+ * of truth and no colour literal lives in a page file.
+ */
+export const PILL_ON = 'bg-success/12 text-[#248a3d] hover:bg-success/20 dark:text-[#34c759]';
+export const PILL_OFF = 'bg-secondary text-muted-foreground hover:bg-muted';
+export const PILL_SUSPEND = 'bg-destructive/10 text-destructive hover:bg-destructive/20';
+export const PILL_ACTIVATE = 'bg-success/12 text-[#248a3d] hover:bg-success/20 dark:text-[#34c759]';
+export const PILL_APPROVER_ON = 'bg-warning/25 text-[#8a6d00] hover:bg-warning/40 dark:text-[var(--warning)]';
+export const PILL_APPROVER_OFF = 'bg-secondary text-muted-foreground hover:bg-muted hover:text-[#8a6d00]';
+export const ICON_BUTTON = 'bg-secondary text-muted-foreground hover:bg-muted hover:text-foreground';
 
 export const statusBadgeClass = (status?: string | null) => STATUS_BADGE[status || ''] || STATUS_BADGE.PENDING;
 

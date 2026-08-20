@@ -14,6 +14,7 @@ import { createGoogleCalendarEvent, getGoogleProviderToken, updateGoogleCalendar
 import { useToast } from '@/lib/toast-context';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
+import { jiraStatusToAppStatus } from '@/lib/jira-utils';
 
 interface ShootFormProps {
     initialData?: Partial<Shoot>;
@@ -73,21 +74,15 @@ export const ShootForm: React.FC<ShootFormProps> = ({
 
         setIsFetchingJira(true);
         try {
-            // Raw fetch rather than supabase.functions.invoke(): the client attaches the
-            // session token, which 401s when the session is stale or missing. The function
-            // is deployed with --no-verify-jwt to allow that, which also means the endpoint
-            // is callable by anyone on the internet with our Jira credentials behind it.
-            //
-            // Pinned to the project where fetch-ticket-details is actually deployed, NOT
-            // NEXT_PUBLIC_SUPABASE_URL. Jira is one shared external integration, so every
-            // environment calls this one function; following the env var made beta and local
-            // point at projects with no such function and the fetch 404'd.
-            const jiraFunctionsBase = process.env.NEXT_PUBLIC_JIRA_FUNCTIONS_URL
-                || 'https://uysumhukcopbnpmyxabw.supabase.co';
-            const response = await fetch(`${jiraFunctionsBase}/functions/v1/fetch-ticket-details`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticketId: formData.jiraTicketId.trim() })
+            // Our own route, on this origin. A relative path needs no per-environment
+            // configuration, so local, beta and production are correct by construction —
+            // the previous version had to pin a Supabase project URL because following
+            // NEXT_PUBLIC_SUPABASE_URL pointed beta and local at projects with no such
+            // function. Jira credentials and the Jira host now live server-side in
+            // lib/jira.ts, behind the session check in the route.
+            const ticketKey = encodeURIComponent(formData.jiraTicketId.trim().toUpperCase());
+            const response = await fetch(`/api/jira/ticket/${ticketKey}`, {
+                headers: { Accept: 'application/json' }
             });
 
             if (!response.ok) {
@@ -130,6 +125,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                 pocContact: data.pocContact || prev.pocContact,
                 startTime: parseJiraDate(data.startTime) || prev.startTime,
                 endTime: parseJiraDate(data.endTime) || prev.endTime,
+                status: data.status ? jiraStatusToAppStatus(data.status) : prev.status,
             }));
 
             // Merge matched crew with existing selection, unique only
@@ -446,18 +442,24 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">
                                     Planning Status
                                 </label>
-                                <div className="grid grid-cols-2 gap-1 rounded-2xl bg-[#f5f5f7] dark:bg-gray-800 p-1">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-2xl bg-[#f5f5f7] dark:bg-gray-800 p-1.5">
                                     {[
+                                        { value: 'OPEN' as const, label: 'Open' },
+                                        { value: 'WAITING_FOR_REQUESTER' as const, label: 'Waiting' },
+                                        { value: 'PENDING_PRODUCTION_SETUP' as const, label: 'Pending Setup' },
+                                        { value: 'READY_FOR_SHOOT' as const, label: 'Ready' },
+                                        { value: 'SHOOT_IN_PROGRESS' as const, label: 'In Progress' },
+                                        { value: 'ON_HOLD' as const, label: 'On Hold' },
+                                        { value: 'CLOSED' as const, label: 'Closed' },
                                         { value: 'DRAFT' as const, label: 'Draft' },
-                                        { value: 'CONFIRMED' as const, label: 'Confirmed' },
                                     ].map(option => (
                                         <button
                                             key={option.value}
                                             type="button"
                                             onClick={() => setFormData({ ...formData, status: option.value })}
-                                            className={`h-11 rounded-xl text-sm font-bold transition-colors ${formData.status === option.value
-                                                ? 'bg-white text-primary shadow-sm dark:bg-[#1c1c1e]'
-                                                : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
+                                            className={`h-9 rounded-xl text-xs font-bold transition-all ${formData.status === option.value
+                                                ? 'bg-white text-primary shadow-xs dark:bg-[#1c1c1e] dark:text-primary ring-1 ring-black/5 dark:ring-white/10'
+                                                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
                                                 }`}
                                         >
                                             {option.label}
@@ -467,7 +469,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                     {formData.status === 'DRAFT'
                                         ? `Draft ${labels.workPluralLower} stay internal and do not notify ${labels.teamPluralLower}.`
-                                        : `Confirmed ${labels.workPluralLower} can notify assigned ${labels.teamPluralLower}.`}
+                                        : `Status updates sync with Jira and ${labels.teamPluralLower} scheduling.`}
                                 </p>
                             </div>
 

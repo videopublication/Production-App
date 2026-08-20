@@ -690,7 +690,23 @@ class StorageService {
         })) as Log[];
     }
 
+    private _recentLogs = new Map<string, number>();
+
     async addLog(log: Log): Promise<void> {
+        // Prevent rapid-click / duplicate spam within 5 seconds for the same action, user, entity, and message
+        const key = `${log.userId || ''}:${log.entityId || ''}:${log.action}:${log.details || ''}`;
+        const now = Date.now();
+        const last = this._recentLogs.get(key) || 0;
+        if (now - last < 5000) {
+            return; // Debounce duplicate log
+        }
+        this._recentLogs.set(key, now);
+        if (this._recentLogs.size > 200) {
+            for (const [k, t] of this._recentLogs.entries()) {
+                if (now - t > 10000) this._recentLogs.delete(k);
+            }
+        }
+
         const dbLog = {
             id: log.id,
             action: log.action,
@@ -801,7 +817,7 @@ class StorageService {
             .order('start_time', { ascending: true });
 
         if (departmentId) {
-            query = query.eq('department_id', departmentId);
+            query = query.or(`department_id.eq.${departmentId},department_id.is.null`);
         }
 
         const { data, error } = await query;
@@ -833,6 +849,41 @@ class StorageService {
     }
 
     async saveShoot(shoot: Shoot): Promise<void> {
+        let shootNumber = shoot.shootNumber;
+        if (!shootNumber) {
+            // Check if this shoot already exists in the database with an assigned number
+            if (shoot.id) {
+                try {
+                    const { data: existing } = await supabase
+                        .from('shoots')
+                        .select('shoot_number')
+                        .eq('id', shoot.id)
+                        .maybeSingle();
+                    if (existing?.shoot_number) {
+                        shootNumber = existing.shoot_number;
+                    }
+                } catch (err) {
+                    console.warn('Could not check existing shoot_number:', err);
+                }
+            }
+
+            // If still no shoot_number (brand new shoot), generate next sequential ID
+            if (!shootNumber) {
+                try {
+                    const { data: maxShoot } = await supabase
+                        .from('shoots')
+                        .select('shoot_number')
+                        .not('shoot_number', 'is', null)
+                        .order('shoot_number', { ascending: false })
+                        .limit(1);
+                    const currentMax = maxShoot?.[0]?.shoot_number || 753;
+                    shootNumber = currentMax + 1;
+                } catch (err) {
+                    console.warn('Could not determine next shoot_number, using fallback', err);
+                }
+            }
+        }
+
         const dbShoot: Record<string, unknown> = {
             id: shoot.id,
             title: shoot.title,
@@ -848,7 +899,8 @@ class StorageService {
             google_event_id: shoot.googleEventId || null, // Save to DB, ensure null if undefined
             jira_ticket_id: shoot.jiraTicketId || null,
             department_id: shoot.departmentId,
-            expenses: shoot.expenses || []
+            expenses: shoot.expenses || [],
+            ...(shootNumber ? { shoot_number: shootNumber } : {})
         };
 
         if (shoot.cancellationReason !== undefined) {
@@ -869,6 +921,10 @@ class StorageService {
         const dbUpdates: any = { ...updates };
         delete dbUpdates.id;
 
+        if (updates.shootNumber !== undefined) {
+            dbUpdates.shoot_number = updates.shootNumber;
+            delete dbUpdates.shootNumber;
+        }
         if (updates.startTime !== undefined) {
             dbUpdates.start_time = updates.startTime;
             delete dbUpdates.startTime;

@@ -50,3 +50,6 @@ next-env.d.ts
 
 # whatsapp gateway session auth
 scripts/whatsapp-gateway/auth_info
+
+# scratch files
+scratch/

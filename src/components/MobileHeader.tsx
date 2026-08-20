@@ -73,7 +73,17 @@ export const MobileHeader = () => {
                             (pathname.startsWith('/admin/users/') && pathname !== '/admin/users')
                         ) && (
                                 <button
-                                    onClick={() => router.back()}
+                                    onClick={() => {
+                                        if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                                            router.back();
+                                        } else {
+                                            if (pathname.startsWith('/inventory/')) router.push('/inventory');
+                                            else if (pathname.startsWith('/shoots/')) router.push('/shoots');
+                                            else if (pathname.startsWith('/transactions/')) router.push('/transactions');
+                                            else if (pathname.startsWith('/admin/users/')) router.push('/admin/users');
+                                            else router.push('/dashboard');
+                                        }
+                                    }}
                                     className="flex items-center text-primary active:opacity-50 transition-opacity -ml-2"
                                 >
                                     <ChevronLeft className="w-8 h-8 -mr-1" strokeWidth={2.5} />

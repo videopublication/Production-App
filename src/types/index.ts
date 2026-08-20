@@ -225,7 +225,17 @@ export interface Notification {
     departmentId?: string;
 }
 
-export type ShootStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+export type ShootStatus =
+    | 'DRAFT'
+    | 'OPEN'
+    | 'WAITING_FOR_REQUESTER'
+    | 'PENDING_PRODUCTION_SETUP'
+    | 'READY_FOR_SHOOT'
+    | 'CONFIRMED'
+    | 'SHOOT_IN_PROGRESS'
+    | 'ON_HOLD'
+    | 'CLOSED'
+    | 'CANCELLED';
 
 export interface HumanResourceRequirement {
     roleName: string;
@@ -257,6 +267,7 @@ export interface Shoot {
     jiraTicketId?: string;
     departmentId?: string;
     expenses?: ShootExpense[];
+    createdAt?: string;
 }
 
 export interface Assignment {

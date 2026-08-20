@@ -29,10 +29,51 @@ export default function TransactionsPage() {
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(true);
 
-    // Filters & Search
-    const [searchQuery, setSearchQuery] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [filterStatus, setFilterStatus] = useState<'ALL' | 'OPEN' | 'CLOSED'>('OPEN');
+    // Filters & Search with Session Persistence
+    const [searchQuery, setSearchQuery] = useState(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                return sessionStorage.getItem('transactions_search_query') || '';
+            } catch (e) {
+                return '';
+            }
+        }
+        return '';
+    });
+    const [debouncedSearch, setDebouncedSearch] = useState(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                return sessionStorage.getItem('transactions_search_query') || '';
+            } catch (e) {
+                return '';
+            }
+        }
+        return '';
+    });
+    const [filterStatus, setFilterStatus] = useState<'ALL' | 'OPEN' | 'CLOSED'>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                const saved = sessionStorage.getItem('transactions_filter_status');
+                if (saved === 'ALL' || saved === 'OPEN' || saved === 'CLOSED') {
+                    return saved;
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+        return 'OPEN';
+    });
+
+    const handleStatusChange = (newStatus: 'ALL' | 'OPEN' | 'CLOSED') => {
+        setFilterStatus(newStatus);
+        try {
+            sessionStorage.setItem('transactions_filter_status', newStatus);
+            sessionStorage.removeItem('transactions_scroll_y');
+            sessionStorage.removeItem('transactions_loaded_page');
+        } catch (e) {
+            // ignore
+        }
+    };
 
     // Auxiliary Data
     const { equipment, users, isLoading: isInventoryLoading, refresh: refreshInventory } = useInventory();
@@ -42,6 +83,33 @@ export default function TransactionsPage() {
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
 
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [flashTxnId, setFlashTxnId] = useState('');
+
+    // Restore flash highlight on return
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const flash = sessionStorage.getItem('transactionsFlash');
+        if (flash) {
+            sessionStorage.removeItem('transactionsFlash');
+            setFlashTxnId(flash);
+        }
+        const onPop = () => {
+            const f = sessionStorage.getItem('transactionsFlash');
+            if (f) {
+                sessionStorage.removeItem('transactionsFlash');
+                setFlashTxnId(f);
+            }
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, []);
+
+    // Clear flash highlight after a moment
+    useEffect(() => {
+        if (!flashTxnId) return;
+        const t = setTimeout(() => setFlashTxnId(''), 2500);
+        return () => clearTimeout(t);
+    }, [flashTxnId]);
 
     // WhatsApp Direct Dispatch Confirmation Modal State
     const [dispatchModalState, setDispatchModalState] = useState<{
@@ -55,6 +123,11 @@ export default function TransactionsPage() {
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(searchQuery);
+            try {
+                sessionStorage.setItem('transactions_search_query', searchQuery);
+            } catch (e) {
+                // ignore
+            }
         }, 500);
         return () => clearTimeout(timer);
     }, [searchQuery]);
@@ -62,7 +135,6 @@ export default function TransactionsPage() {
     // Reset and Load on Filter Change
     useEffect(() => {
         setPage(1);
-        setTransactions([]);
         setHasMore(true);
         loadData(1, true);
     }, [debouncedSearch, filterStatus, activeDepartmentId]);
@@ -80,8 +152,7 @@ export default function TransactionsPage() {
         }
 
         loadStats();
-        // loadData is triggered by the dependency change above on mount too
-    }, [user, router, authLoading, activeDepartmentId]);
+    }, [user?.id, user?.role, router, authLoading, activeDepartmentId]);
 
     const loadStats = async () => {
         try {
@@ -93,7 +164,10 @@ export default function TransactionsPage() {
     };
 
     const loadData = async (pageNum: number, isReset: boolean = false) => {
-        setLoading(true);
+        // Only show spinner if no items exist on screen
+        if (transactions.length === 0) {
+            setLoading(true);
+        }
         try {
             const limit = 20;
 
@@ -127,6 +201,16 @@ export default function TransactionsPage() {
             } else {
                 setTransactions(prev => [...prev, ...newTxns]);
             }
+
+            // Restore saved scroll position if returning from transaction details
+            if (typeof window !== 'undefined') {
+                const savedScrollY = sessionStorage.getItem('transactions_scroll_y');
+                if (savedScrollY) {
+                    setTimeout(() => {
+                        window.scrollTo({ top: Number(savedScrollY), behavior: 'instant' });
+                    }, 60);
+                }
+            }
         } catch (error) {
             console.error('Error loading transactions:', error);
         } finally {
@@ -152,7 +236,7 @@ export default function TransactionsPage() {
         ]);
     };
 
-    if (authLoading) {
+    if (authLoading && !user) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -194,20 +278,32 @@ export default function TransactionsPage() {
     // Render Logic
     return (
         <PullToRefresh onRefresh={handleRefresh}>
-            <div className="space-y-3 sm:space-y-5 animate-fade-in pb-12">
-                {/* Stats at top - Compact on mobile */}
-                <div className="grid grid-cols-4 gap-2 sm:gap-4">
-                    <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+            <div className="space-y-3 sm:space-y-5 animate-fade-in pb-12 pt-3 sm:pt-4 px-0.5">
+                {/* Stats at top - Clickable to filter */}
+                <div className="grid grid-cols-4 gap-2 sm:gap-4 p-1">
+                    <div
+                        onClick={() => handleStatusChange('ALL')}
+                        className={`p-2 sm:p-4 rounded-xl sm:rounded-2xl cursor-pointer transition-all ${filterStatus === 'ALL' ? 'bg-primary/20 ring-2 ring-primary border-primary' : 'bg-gradient-to-br from-primary/10 to-primary/5 hover:bg-primary/15 border border-primary/20'}`}
+                        title="View All Transactions"
+                    >
                         <p className="text-[10px] sm:text-sm font-medium text-primary">Total</p>
                         <p className="text-lg sm:text-2xl font-bold">{stats.total}</p>
                     </div>
-                    <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20">
+                    <div
+                        onClick={() => handleStatusChange('OPEN')}
+                        className={`p-2 sm:p-4 rounded-xl sm:rounded-2xl cursor-pointer transition-all ${filterStatus === 'OPEN' ? 'bg-green-500/20 ring-2 ring-green-500 border-green-500' : 'bg-gradient-to-br from-green-500/10 to-green-600/5 hover:bg-green-500/15 border border-green-500/20'}`}
+                        title="View Active Transactions"
+                    >
                         <p className="text-[10px] sm:text-sm font-medium text-green-600">Active</p>
                         <p className="text-lg sm:text-2xl font-bold">
                             {stats.active}
                         </p>
                     </div>
-                    <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-gray-500/10 to-gray-600/5 border border-gray-500/20">
+                    <div
+                        onClick={() => handleStatusChange('CLOSED')}
+                        className={`p-2 sm:p-4 rounded-xl sm:rounded-2xl cursor-pointer transition-all ${filterStatus === 'CLOSED' ? 'bg-gray-500/20 ring-2 ring-gray-500 border-gray-500' : 'bg-gradient-to-br from-gray-500/10 to-gray-600/5 hover:bg-gray-500/15 border border-gray-500/20'}`}
+                        title="View Closed Transactions"
+                    >
                         <p className="text-[10px] sm:text-sm font-medium text-gray-600">Closed</p>
                         <p className="text-lg sm:text-2xl font-bold">
                             {stats.closed}
@@ -236,7 +332,7 @@ export default function TransactionsPage() {
                         <Button
                             variant={filterStatus === 'ALL' ? 'primary' : 'outline'}
                             size="sm"
-                            onClick={() => setFilterStatus('ALL')}
+                            onClick={() => handleStatusChange('ALL')}
                             className="flex-1 sm:flex-none h-10 sm:h-11 text-xs sm:text-sm"
                         >
                             All
@@ -244,7 +340,7 @@ export default function TransactionsPage() {
                         <Button
                             variant={filterStatus === 'OPEN' ? 'primary' : 'outline'}
                             size="sm"
-                            onClick={() => setFilterStatus('OPEN')}
+                            onClick={() => handleStatusChange('OPEN')}
                             className="flex-1 sm:flex-none h-10 sm:h-11 text-xs sm:text-sm"
                         >
                             Active
@@ -252,7 +348,7 @@ export default function TransactionsPage() {
                         <Button
                             variant={filterStatus === 'CLOSED' ? 'primary' : 'outline'}
                             size="sm"
-                            onClick={() => setFilterStatus('CLOSED')}
+                            onClick={() => handleStatusChange('CLOSED')}
                             className="flex-1 sm:flex-none h-10 sm:h-11 text-xs sm:text-sm"
                         >
                             Closed
@@ -280,8 +376,19 @@ export default function TransactionsPage() {
                             {transactions.map((txn) => (
                                 <div
                                     key={txn.id}
-                                    className="p-4 rounded-xl border border-border bg-white dark:bg-[#1c1c1e] shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
-                                    onClick={() => router.push(`/transactions/${txn.id}`)}
+                                    className={`p-4 rounded-xl border transition-all duration-700 cursor-pointer group relative overflow-hidden ${
+                                        txn.id === flashTxnId
+                                            ? 'border-primary bg-primary/[0.08] dark:bg-primary/[0.14] ring-2 ring-primary/40 shadow-md scale-[1.005]'
+                                            : 'border-border bg-white dark:bg-[#1c1c1e] shadow-sm hover:shadow-md hover:border-primary/40'
+                                    }`}
+                                    onClick={() => {
+                                        try {
+                                            sessionStorage.setItem('transactions_scroll_y', String(window.scrollY));
+                                            sessionStorage.setItem('transactions_loaded_page', String(page));
+                                            sessionStorage.setItem('transactionsFlash', txn.id);
+                                        } catch (e) {}
+                                        router.push(`/transactions/${txn.id}`);
+                                    }}
                                 >
                                     {/* Top Row: ID Badge & Status */}
                                     <div className="flex items-center justify-between mb-2">

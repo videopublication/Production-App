@@ -514,20 +514,31 @@ export default function VerificationPage() {
                 : null;
             const nextCondition: Condition = cleanVerify ? 'OK' : issueCondition;
 
-            // 1. Update Equipment Status
-            await storage.updateEquipment(id, {
-                status,
-                condition: nextCondition,
-                assignedTo: null as unknown as string,
-                lastActivity: new Date().toISOString(),
-                metadata: withActiveIssue(item.metadata, activeIssue)
-            });
-
-            // 2. Find and Update Transaction
+            // 1. Find the specific transaction that needs this return verified
             const allTransactions = await storage.getTransactions(undefined, undefined, undefined, undefined, undefined, undefined, effectiveDeptId);
-            const relatedTransaction = allTransactions.find(
-                t => t.status === 'OPEN' && t.items.includes(id)
-            );
+            const relatedTransaction = allTransactions.slice().reverse().find(
+                t => t.items.includes(id) && (!t.postReturnConditions || t.postReturnConditions[id] === undefined)
+            ) || allTransactions.find(t => t.status === 'OPEN' && t.items.includes(id));
+
+            // Check if item is already checked out in a newer transaction
+            const otherActiveTxn = allTransactions.find(t => t.status === 'OPEN' && t.id !== relatedTransaction?.id && t.items.includes(id));
+            const isCurrentlyCheckedOut = item.status === 'CHECKED_OUT' || !!otherActiveTxn;
+
+            // 2. Update Equipment Status (DO NOT reset status to AVAILABLE if item is in active checkout!)
+            if (!isCurrentlyCheckedOut) {
+                await storage.updateEquipment(id, {
+                    status,
+                    condition: nextCondition,
+                    assignedTo: null as unknown as string,
+                    lastActivity: new Date().toISOString(),
+                    metadata: withActiveIssue(item.metadata, activeIssue)
+                });
+            } else {
+                await storage.updateEquipment(id, {
+                    condition: nextCondition,
+                    metadata: withActiveIssue(item.metadata, activeIssue)
+                });
+            }
 
             if (user) {
                 const projectText = relatedTransaction ? ` for project "${relatedTransaction.project || 'Unspecified'}"` : '';

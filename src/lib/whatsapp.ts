@@ -94,6 +94,71 @@ export const generateShootWhatsAppPayload = (
     return { message, mentions };
 };
 
+export const generateBulkShootsWhatsAppPayload = (
+    shoots: Shoot[],
+    allAssignments: Assignment[],
+    users: User[],
+    labels: DepartmentLabels = getDepartmentLabels(null)
+) => {
+    let message = `Namaskaram,\n\n📋 *UPCOMING ${labels.workPlural.toUpperCase()} SCHEDULE* (${shoots.length} ${labels.workPluralLower})\n\n`;
+    const allMentions: string[] = [];
+
+    shoots.forEach((shoot, idx) => {
+        const shootAssignments = allAssignments.filter(a => a.shootId === shoot.id);
+        const startDate = shoot.startTime ? parseISO(shoot.startTime) : null;
+        const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
+
+        let dateString = 'TBD';
+        if (startDate) {
+            if (endDate && startDate.toDateString() !== endDate.toDateString()) {
+                dateString = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
+            } else {
+                dateString = format(startDate, 'EEE, MMM d, yyyy');
+            }
+        }
+        const timeString = startDate ? `${format(startDate, 'h:mm a')}${endDate ? ` - ${format(endDate, 'h:mm a')}` : ''}` : 'TBD';
+
+        message += `*${idx + 1}. ${shoot.title.toUpperCase()}*`;
+        if (shoot.shootNumber) message += ` (#${shoot.shootNumber})`;
+        if (shoot.jiraTicketId) message += ` [${shoot.jiraTicketId}]`;
+        message += `\n`;
+        message += `  📅 *Date/Time:* ${dateString} • ${timeString}\n`;
+        if (shoot.location) message += `  📍 *Location:* ${shoot.location}\n`;
+        if (shoot.pocName) message += `  👤 *POC:* ${shoot.pocName}${shoot.pocContact ? ` (${shoot.pocContact})` : ''}\n`;
+
+        // Unique crew
+        const seenUserIds = new Set<string>();
+        const crewNames: string[] = [];
+        shootAssignments.forEach(assignment => {
+            if (!seenUserIds.has(assignment.userId)) {
+                seenUserIds.add(assignment.userId);
+                const u = users.find(user => user.id === assignment.userId);
+                if (u) {
+                    const cleanPhone = (u.phone || '').replace(/[^\d]/g, '');
+                    if (cleanPhone && cleanPhone.length >= 10) {
+                        const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+                        const jid = `${formattedPhone}@s.whatsapp.net`;
+                        if (!allMentions.includes(jid)) {
+                            allMentions.push(jid);
+                        }
+                        crewNames.push(`@${formattedPhone} (${u.name})`);
+                    } else {
+                        crewNames.push(u.name);
+                    }
+                }
+            }
+        });
+
+        if (crewNames.length > 0) {
+            message += `  👥 *${labels.teamPlural}:* ${crewNames.join(', ')}\n`;
+        }
+        message += `\n`;
+    });
+
+    message += `Pranam 🙏`;
+    return { message, mentions: allMentions };
+};
+
 export const openWhatsApp = (message: string) => {
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
 };

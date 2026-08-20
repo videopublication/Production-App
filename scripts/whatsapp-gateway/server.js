@@ -366,37 +366,61 @@ app.post(['/logout', '/disconnect'], async (req, res) => {
     }
 });
 
+let cachedGroups = null;
+let lastGroupsFetchTime = 0;
+const GROUPS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
+// Helper function to fetch groups with timeout
+async function fetchGroupsWithTimeout(timeoutMs = 8000) {
+    if (!sock) return null;
+    return Promise.race([
+        sock.groupFetchAllParticipating(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Group fetch timeout')), timeoutMs))
+    ]);
+}
+
 // List Joined WhatsApp Groups API
 app.get(['/groups', '/group/list'], async (req, res) => {
     try {
-        if (connectionStatus !== 'connected' || !sock) {
-            return res.status(503).json({ error: 'WhatsApp Gateway not connected' });
+        const now = Date.now();
+        // Serve from cache if fresh
+        if (cachedGroups && (now - lastGroupsFetchTime < GROUPS_CACHE_TTL_MS)) {
+            return res.json({ success: true, groups: cachedGroups, cached: true });
         }
 
-        let groups;
-        try {
-            groups = await sock.groupFetchAllParticipating();
-        } catch (fetchErr) {
-            if (fetchErr.message && (fetchErr.message.includes('Closed') || fetchErr.message.includes('closed'))) {
-                console.warn('[WhatsApp Gateway] Group fetch encountered closed connection. Reconnecting...');
-                connectionStatus = 'disconnected';
-                await connectToWhatsApp();
-                if (sock) groups = await sock.groupFetchAllParticipating();
-            } else {
-                throw fetchErr;
+        if (connectionStatus === 'connected' && sock) {
+            try {
+                const groups = await fetchGroupsWithTimeout(8000);
+                if (groups) {
+                    cachedGroups = Object.values(groups).map((g) => ({
+                        id: g.id,
+                        subject: g.subject,
+                        participantsCount: g.participants?.length || 0,
+                        creation: g.creation
+                    }));
+                    lastGroupsFetchTime = now;
+                    return res.json({ success: true, groups: cachedGroups });
+                }
+            } catch (fetchErr) {
+                console.warn('[WhatsApp Gateway] Live group fetch error/timeout:', fetchErr.message);
+                if (cachedGroups) {
+                    console.log('[WhatsApp Gateway] Serving fallback cached groups.');
+                    return res.json({ success: true, groups: cachedGroups, fallback: true });
+                }
             }
         }
 
-        const groupList = Object.values(groups || {}).map((g) => ({
-            id: g.id,
-            subject: g.subject,
-            participantsCount: g.participants?.length || 0,
-            creation: g.creation
-        }));
+        // If not connected but have cache
+        if (cachedGroups) {
+            return res.json({ success: true, groups: cachedGroups, fallback: true });
+        }
 
-        return res.json({ success: true, groups: groupList });
+        return res.json({ success: true, groups: [], note: 'Connecting to WhatsApp...' });
     } catch (err) {
-        console.error('[WhatsApp Gateway] Failed to fetch groups:', err);
+        console.error('[WhatsApp Gateway] Error in /groups endpoint:', err.message);
+        if (cachedGroups) {
+            return res.json({ success: true, groups: cachedGroups, fallback: true });
+        }
         return res.status(500).json({ error: err.message || 'Failed to fetch groups' });
     }
 });
@@ -406,10 +430,6 @@ app.post(['/send-group-message', '/message/sendText/vp-app-1'], async (req, res)
     try {
         if (BOT_SECRET && req.headers['x-bot-secret'] !== BOT_SECRET) {
             return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        if (connectionStatus !== 'connected' || !sock) {
-            return res.status(503).json({ error: 'WhatsApp Gateway not connected to WhatsApp' });
         }
 
         const { groupJid, number, message, text, mentions } = req.body;
@@ -440,23 +460,35 @@ app.post(['/send-group-message', '/message/sendText/vp-app-1'], async (req, res)
         }
 
         let sent = false;
-        try {
-            await sock.sendMessage(targetJid, { text: msgText, ...options });
-            sent = true;
-        } catch (sendErr) {
-            console.warn('[WhatsApp Gateway] Send attempt failed, checking socket reconnect:', sendErr.message);
-            if (sendErr.message && (sendErr.message.includes('Closed') || sendErr.message.includes('closed'))) {
-                connectionStatus = 'disconnected';
-                await connectToWhatsApp();
+        let lastError = null;
+
+        // Try sending with up to 3 attempts and auto-reconnect if socket is settling
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                if (connectionStatus !== 'connected' || !sock) {
+                    console.log(`[WhatsApp Gateway] Send attempt ${attempt}: Socket not connected, waiting for connection...`);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+
                 if (sock) {
                     await sock.sendMessage(targetJid, { text: msgText, ...options });
                     sent = true;
+                    console.log(`[WhatsApp Gateway] Dispatched message on attempt ${attempt} to target JID: ${targetJid}`);
+                    break;
+                }
+            } catch (err) {
+                lastError = err;
+                console.warn(`[WhatsApp Gateway] Send attempt ${attempt} failed:`, err.message);
+                if (attempt < 3) {
+                    await new Promise(r => setTimeout(r, 1500));
                 }
             }
-            if (!sent) throw sendErr;
         }
 
-        console.log(`[WhatsApp Gateway] Dispatched message to target JID: ${targetJid}`);
+        if (!sent) {
+            throw lastError || new Error('Failed to dispatch message after 3 attempts');
+        }
+
         return res.json({ success: true, targetJid });
     } catch (err) {
         console.error('[WhatsApp Gateway] Failed to send message:', err);

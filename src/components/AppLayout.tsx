@@ -40,7 +40,7 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
             {/* Mobile Header */}
             {!isPublicPage && <MobileHeader />}
 
-            <main ref={mainRef} className={`app-main-scroll flex-1 px-4 py-4 sm:p-6 lg:p-8 ${user && !isPublicPage ? 'md:mt-[44px] md:pb-6' : ''} w-full mx-auto overflow-x-hidden`}>
+            <main ref={mainRef} className={`app-main-scroll flex-1 px-4 py-4 sm:p-6 lg:p-8 ${user && !isPublicPage ? 'md:mt-[44px] md:pb-6' : ''} w-full mx-auto overflow-x-clip`}>
                 {children}
             </main>
 

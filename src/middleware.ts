@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
     const path = request.nextUrl.pathname
 
     // Public paths we always allow without auth
-    const isPublicPath = path === '/' || path === '/login' || path === '/auth/callback' || path === '/inactive' || path === '/select-department' || path === '/api/departments' || path.startsWith('/_next') || path.startsWith('/static') || path === '/favicon.ico'
+    const isPublicPath = path === '/' || path === '/login' || path === '/auth/callback' || path === '/inactive' || path === '/select-department' || path === '/api/departments' || path.startsWith('/api/jira/') || path.startsWith('/api/webhooks/') || path.startsWith('/_next') || path.startsWith('/static') || path === '/favicon.ico'
 
     // If no user and trying to access protected route
     if (!user && !isPublicPath) {

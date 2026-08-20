@@ -221,19 +221,26 @@ function InventoryPageContent() {
     // Calculate items that need cleanup
     // 1. Available but have assignee
     // 2. Checked out but not in any OPEN transaction
+    // 3. In OPEN transaction but NOT marked Checked Out
     const cleanupData = useMemo(() => {
-        const activeTransactionItemIds = new Set(
-            transactions
-                .filter(t => t.status === 'OPEN')
-                .flatMap(t => t.items)
-        );
+        const activeTransactionItemMap = new Map<string, { userId?: string }>();
+        transactions
+            .filter(t => t.status === 'OPEN')
+            .forEach(t => {
+                t.items?.forEach(itemId => {
+                    activeTransactionItemMap.set(itemId, { userId: t.userId });
+                });
+            });
 
         const staleAssignments = items.filter(i => i.status === 'AVAILABLE' && i.assignedTo);
         const ghostCheckouts = items.filter(i =>
-            i.status === 'CHECKED_OUT' && !activeTransactionItemIds.has(i.id)
+            i.status === 'CHECKED_OUT' && !activeTransactionItemMap.has(i.id)
+        );
+        const unmarkedCheckouts = items.filter(i =>
+            activeTransactionItemMap.has(i.id) && i.status !== 'CHECKED_OUT'
         );
 
-        return { staleAssignments, ghostCheckouts };
+        return { staleAssignments, ghostCheckouts, unmarkedCheckouts, activeTransactionItemMap };
     }, [items, transactions]);
 
     const formatCleanupItem = (item: Equipment) => {
@@ -262,7 +269,21 @@ function InventoryPageContent() {
                 updates: {
                     status: 'AVAILABLE',
                     assignedTo: null as unknown as string,
-                    location: 'Storage' // Default back to storage or keep existing if known? Safest is usually Storage or previous.
+                    location: 'Storage'
+                }
+            })
+        ));
+    };
+
+    // Fix items that are in open transactions but not marked checked out
+    const cleanupUnmarkedCheckouts = async (itemsToFix: Equipment[], activeMap: Map<string, { userId?: string }>) => {
+        await Promise.all(itemsToFix.map(item =>
+            updateEquipment({
+                id: item.id,
+                updates: {
+                    status: 'CHECKED_OUT',
+                    assignedTo: activeMap.get(item.id)?.userId || (null as unknown as string),
+                    lastActivity: new Date().toISOString()
                 }
             })
         ));
@@ -271,8 +292,8 @@ function InventoryPageContent() {
     const handleCleanupAssignments = async () => {
         if (isActionLoading) return;
 
-        const { staleAssignments, ghostCheckouts } = cleanupData;
-        const totalIssues = staleAssignments.length + ghostCheckouts.length;
+        const { staleAssignments, ghostCheckouts, unmarkedCheckouts, activeTransactionItemMap } = cleanupData;
+        const totalIssues = staleAssignments.length + ghostCheckouts.length + unmarkedCheckouts.length;
 
         if (totalIssues === 0) {
             showToast('No data inconsistencies found', 'info');
@@ -280,6 +301,10 @@ function InventoryPageContent() {
         }
 
         const messageParts = [`Found ${totalIssues} issue${totalIssues === 1 ? '' : 's'}:`];
+
+        if (unmarkedCheckouts.length) {
+            messageParts.push(formatCleanupSection('Checked-out items not marked in inventory', unmarkedCheckouts));
+        }
 
         if (staleAssignments.length) {
             messageParts.push(formatCleanupSection('Available items with stale assignees', staleAssignments));
@@ -289,13 +314,11 @@ function InventoryPageContent() {
             messageParts.push(formatCleanupSection('Checked-out items without an active transaction', ghostCheckouts));
         }
 
-        messageParts.push('Fix All will clear stale assignees and set checked-out orphan items back to Available.');
+        messageParts.push('Fix All will reconcile item statuses with active transactions and clear stale assignees.');
 
         const isConfirmed = await confirm({
             title: 'Fix Data Inconsistencies?',
-            message: messageParts.join('\n\n') || `Found ${totalIssues} issues:\n` +
-                (staleAssignments.length ? `• ${staleAssignments.length} available items with stale assignees\n` : '') +
-                (ghostCheckouts.length ? `• ${ghostCheckouts.length} items marked 'Checked Out' but not in any active transaction` : ''),
+            message: messageParts.join('\n\n'),
             confirmLabel: 'Fix All',
             variant: 'danger'
         });
@@ -304,6 +327,7 @@ function InventoryPageContent() {
 
         setIsActionLoading(true);
         try {
+            if (unmarkedCheckouts.length > 0) await cleanupUnmarkedCheckouts(unmarkedCheckouts, activeTransactionItemMap);
             if (staleAssignments.length > 0) await cleanupAssignments(staleAssignments);
             if (ghostCheckouts.length > 0) await cleanupGhostCheckouts(ghostCheckouts);
 
@@ -1596,12 +1620,14 @@ function InventoryPageContent() {
                                                         const orig = items.find(i => i.id === id);
                                                         if (orig) {
                                                             const changed: string[] = [];
-                                                            if (d.name !== undefined) changed.push(`name→"${d.name}"`);
-                                                            if (d.category !== undefined) changed.push(`category→"${d.category}"`);
-                                                            if (d.barcode !== undefined) changed.push(`barcode→"${d.barcode}"`);
-                                                            if (d.serialNumber !== undefined) changed.push(`serial→"${d.serialNumber || ''}"`);
-                                                            if (d.metadata?.model !== undefined) changed.push(`model→"${d.metadata.model || ''}"`);
-                                                            if (changed.length) await logEquipmentEdit(orig, `Bulk edit "${orig.name}" (${orig.barcode}): ${changed.join(', ')}`);
+                                                            if (d.name !== undefined && d.name.trim() !== orig.name) changed.push(`name: "${orig.name}" → "${d.name.trim()}"`);
+                                                            if (d.category !== undefined && d.category !== orig.category) changed.push(`category: "${orig.category}" → "${d.category}"`);
+                                                            if (d.barcode !== undefined && d.barcode !== orig.barcode) changed.push(`barcode: "${orig.barcode}" → "${d.barcode}"`);
+                                                            if (d.serialNumber !== undefined && (d.serialNumber || '') !== (orig.serialNumber || '')) changed.push(`serial: "${orig.serialNumber || ''}" → "${d.serialNumber || ''}"`);
+                                                            const origModel = orig.metadata?.model || '';
+                                                            const newModel = d.metadata?.model || '';
+                                                            if (d.metadata?.model !== undefined && newModel !== origModel) changed.push(`model: "${origModel}" → "${newModel}"`);
+                                                            if (changed.length > 0) await logEquipmentEdit(orig, `Bulk edit "${orig.name}" (${orig.barcode}): ${changed.join(', ')}`);
                                                         }
                                                     } catch (error) {
                                                         console.error(`Update failed for ${id}:`, error);
