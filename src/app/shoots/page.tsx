@@ -146,17 +146,37 @@ export default function ShootList() {
     ];
 
     const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
-        shootNumber: 85,
-        title: 360,
-        jiraTicket: 125,
-        date: 260,
-        location: 240,
-        crew: 135,
-        status: 165,
-        actions: 100,
-        poc: 160,
-        createdAt: 120,
+        shootNumber: 105,
+        title: 250,
+        jiraTicket: 115,
+        date: 190,
+        location: 200,
+        crew: 120,
+        status: 140,
+        actions: 95,
+        poc: 140,
+        createdAt: 115,
         expenses: 115,
+    };
+
+    const getDefaultColumnWidths = (customAvailableWidth?: number): Record<ColumnKey, number> => {
+        const base: Record<ColumnKey, number> = { ...DEFAULT_COLUMN_WIDTHS };
+
+        if (typeof window !== 'undefined') {
+            const screenW = window.innerWidth;
+            const isSidebarCollapsed = localStorage.getItem('sidebar_is_collapsed') === 'true' || screenW < 1360;
+            const sidebarW = isSidebarCollapsed ? 72 : 260;
+            const availableWidth = customAvailableWidth || Math.max(900, screenW - sidebarW - 48);
+            const defaultTotal = 105 + 250 + 115 + 190 + 200 + 120 + 140 + 95; // 1215
+
+            if (availableWidth > defaultTotal) {
+                const diff = availableWidth - defaultTotal;
+                base.title = Math.round(base.title + diff * 0.38);
+                base.location = Math.round(base.location + diff * 0.32);
+                base.date = Math.round(base.date + diff * 0.30);
+            }
+        }
+        return base;
     };
 
     // Column Order State
@@ -178,37 +198,54 @@ export default function ShootList() {
 
     // Column Visibility State
     const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(() => {
+        const DEFAULT_VISIBLE: ColumnKey[] = ['shootNumber', 'title', 'jiraTicket', 'date', 'location', 'crew', 'status', 'actions'];
         if (typeof window !== 'undefined') {
             try {
-                const saved = localStorage.getItem('shoots_visible_columns');
-                if (saved) return JSON.parse(saved);
+                const saved = localStorage.getItem('shoots_visible_columns_v3');
+                if (saved) {
+                    const parsed: ColumnKey[] = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length >= 6) return parsed;
+                }
             } catch {}
         }
-        return ['shootNumber', 'title', 'jiraTicket', 'date', 'location', 'crew', 'status', 'actions'];
+        return DEFAULT_VISIBLE;
     });
 
     // Bulk Shoot Selection State
     const [selectedShootIds, setSelectedShootIds] = useState<string[]>([]);
 
+    // Flag to know if user has customized column widths manually
+    const [hasUserCustomWidths, setHasUserCustomWidths] = useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return !!localStorage.getItem('shoots_table_col_widths_v7');
+        }
+        return false;
+    });
+
     // Column Widths State (Excel-Style Resizable with enforced sensible minimums)
     const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
         if (typeof window !== 'undefined') {
             try {
-                const saved = localStorage.getItem('shoots_table_col_widths_v5');
+                const saved = localStorage.getItem('shoots_table_col_widths_v7');
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    const merged: Record<string, number> = { ...DEFAULT_COLUMN_WIDTHS };
-                    for (const key of Object.keys(DEFAULT_COLUMN_WIDTHS) as ColumnKey[]) {
-                        if (parsed[key]) {
-                            merged[key] = Math.max(parsed[key], DEFAULT_COLUMN_WIDTHS[key] * 0.75);
-                        }
-                    }
+                    const merged = { ...getDefaultColumnWidths(), ...parsed };
                     return merged as Record<ColumnKey, number>;
                 }
             } catch {}
         }
-        return DEFAULT_COLUMN_WIDTHS;
+        return getDefaultColumnWidths();
     });
+
+    // Auto-fit columns to available screen width on resize when user has not manually customized
+    useEffect(() => {
+        if (hasUserCustomWidths) return;
+        const handleResize = () => {
+            setColWidths(getDefaultColumnWidths());
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [hasUserCustomWidths]);
 
     // Crew Column Display Mode ('count' | 'full')
     const [crewDisplayMode, setCrewDisplayMode] = useState<'count' | 'full'>(() => {
@@ -230,10 +267,10 @@ export default function ShootList() {
             if (next === 'full') {
                 setColWidths(curr => {
                     const currentWidth = curr.crew || DEFAULT_COLUMN_WIDTHS.crew;
-                    if (currentWidth < 220) {
+                    if (currentWidth < 200) {
                         const updated = { ...curr, crew: 240 };
                         try {
-                            localStorage.setItem('shoots_table_col_widths_v5', JSON.stringify(updated));
+                            localStorage.setItem('shoots_table_col_widths_v7', JSON.stringify(updated));
                         } catch {}
                         return updated;
                     }
@@ -243,7 +280,7 @@ export default function ShootList() {
                 setColWidths(curr => {
                     const updated = { ...curr, crew: DEFAULT_COLUMN_WIDTHS.crew };
                     try {
-                        localStorage.setItem('shoots_table_col_widths_v5', JSON.stringify(updated));
+                        localStorage.setItem('shoots_table_col_widths_v7', JSON.stringify(updated));
                     } catch {}
                     return updated;
                 });
@@ -254,27 +291,90 @@ export default function ShootList() {
 
     const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
     const columnMenuRef = React.useRef<HTMLDivElement>(null);
+    const headerRef = React.useRef<HTMLDivElement>(null);
 
     // Column Resizing State
     const [resizingCol, setResizingCol] = useState<ColumnKey | null>(null);
     const resizeStartX = React.useRef(0);
     const resizeStartWidth = React.useRef(0);
 
+    const getColumnStyle = (colKey: ColumnKey): React.CSSProperties => {
+        if (hasUserCustomWidths) {
+            const width = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+            return {
+                width: `${width}px`,
+                minWidth: `${width}px`,
+                maxWidth: `${width}px`,
+                flexShrink: 0,
+            };
+        }
+
+        // Fluid 100% Fit Mode: Harmonious, proportional, generous right columns, zero cut-off
+        switch (colKey) {
+            case 'shootNumber':
+                return { width: '105px', minWidth: '100px', flexShrink: 0 };
+            case 'jiraTicket':
+                return { width: '115px', minWidth: '105px', flexShrink: 0 };
+            case 'crew':
+                return crewDisplayMode === 'full'
+                    ? { width: '240px', minWidth: '200px', flexShrink: 0 }
+                    : { width: '120px', minWidth: '110px', flexShrink: 0 };
+            case 'status':
+                return { width: '140px', minWidth: '130px', flexShrink: 0 };
+            case 'actions':
+                return { width: '95px', minWidth: '90px', flexShrink: 0 };
+            case 'poc':
+                return { width: '140px', minWidth: '125px', flexShrink: 0 };
+            case 'createdAt':
+                return { width: '115px', minWidth: '105px', flexShrink: 0 };
+            case 'expenses':
+                return { width: '115px', minWidth: '105px', flexShrink: 0 };
+            case 'title':
+                return { flex: '1.3 1 220px', minWidth: '180px' };
+            case 'location':
+                return { flex: '1.0 1 190px', minWidth: '160px' };
+            case 'date':
+                return { flex: '0.9 1 180px', minWidth: '160px' };
+            default:
+                return { flex: '1 1 120px', minWidth: '100px' };
+        }
+    };
+
     const handleMouseDownResize = (colKey: ColumnKey, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+
+        if (!hasUserCustomWidths && headerRef.current) {
+            const cells = headerRef.current.querySelectorAll<HTMLElement>('[data-col-key]');
+            const initialWidths: Record<string, number> = {};
+            cells.forEach(cell => {
+                const key = cell.getAttribute('data-col-key');
+                if (key) {
+                    initialWidths[key] = Math.round(cell.getBoundingClientRect().width);
+                }
+            });
+            setColWidths(prev => ({ ...prev, ...initialWidths }));
+            resizeStartWidth.current = initialWidths[colKey] || colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+        } else {
+            resizeStartWidth.current = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+        }
+
         setResizingCol(colKey);
+        setHasUserCustomWidths(true);
         resizeStartX.current = e.clientX;
-        resizeStartWidth.current = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
+            moveEvent.preventDefault();
             const delta = moveEvent.clientX - resizeStartX.current;
-            const minW = colKey === 'crew' ? 120 : colKey === 'status' ? 140 : colKey === 'actions' ? 85 : colKey === 'shootNumber' ? 65 : 80;
-            const newWidth = Math.max(minW, resizeStartWidth.current + delta);
+            const minW = colKey === 'crew' ? 75 : colKey === 'status' ? 100 : colKey === 'actions' ? 65 : colKey === 'shootNumber' ? 55 : 60;
+            const newWidth = Math.max(minW, Math.round(resizeStartWidth.current + delta));
             setColWidths(prev => {
                 const updated = { ...prev, [colKey]: newWidth };
                 try {
-                    localStorage.setItem('shoots_table_col_widths_v5', JSON.stringify(updated));
+                    localStorage.setItem('shoots_table_col_widths_v7', JSON.stringify(updated));
                 } catch {}
                 return updated;
             });
@@ -282,6 +382,8 @@ export default function ShootList() {
 
         const handleMouseUp = () => {
             setResizingCol(null);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
@@ -361,7 +463,7 @@ export default function ShootList() {
                 ? (prev.length > 1 ? prev.filter(c => c !== colId) : prev)
                 : [...prev, colId];
             try {
-                localStorage.setItem('shoots_visible_columns', JSON.stringify(next));
+                localStorage.setItem('shoots_visible_columns_v3', JSON.stringify(next));
             } catch {}
             return next;
         });
@@ -371,10 +473,15 @@ export default function ShootList() {
         const defaultVisible: ColumnKey[] = ['shootNumber', 'title', 'jiraTicket', 'date', 'location', 'crew', 'status', 'actions'];
         setVisibleColumns(defaultVisible);
         setColumnOrder(DEFAULT_COLUMN_ORDER);
-        setColWidths(DEFAULT_COLUMN_WIDTHS);
+        setHasUserCustomWidths(false);
+        setColWidths(getDefaultColumnWidths());
         try {
+            localStorage.removeItem('shoots_visible_columns_v3');
             localStorage.removeItem('shoots_visible_columns');
             localStorage.removeItem('shoots_column_order');
+            localStorage.removeItem('shoots_table_col_widths_v7');
+            localStorage.removeItem('shoots_table_col_widths_v6');
+            localStorage.removeItem('shoots_table_col_widths_v5');
             localStorage.removeItem('shoots_table_col_widths');
         } catch {}
     };
@@ -1882,11 +1989,10 @@ export default function ShootList() {
                     /* List View (Unified Single Scroll Container with Sticky Header, Resizable & Reorderable Columns) */
                     <div className="rounded-2xl shadow-xs bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 flex-1 min-h-0 flex flex-col overflow-hidden">
                         <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
-                            <div className="w-max min-w-full">
+                            <div className="w-full min-w-full">
                                 {/* Table Header (Sticky with Drag to Reorder & Resize) */}
-                                <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-center w-max min-w-full text-[11px] font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs">
+                                <div ref={headerRef} className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-center w-full min-w-full text-[11px] font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs">
                                 {orderedVisibleColumns.map((colKey, colIdx) => {
-                                    const width = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
                                     const isLast = colIdx === orderedVisibleColumns.length - 1;
                                     const isDragOver = dragOverCol === colKey;
                                     const isDragging = draggedCol === colKey;
@@ -1894,13 +2000,14 @@ export default function ShootList() {
                                     return (
                                         <div
                                             key={colKey}
-                                            style={{ width, minWidth: width, flexShrink: 0 }}
+                                            data-col-key={colKey}
+                                            style={getColumnStyle(colKey)}
                                             draggable={!resizingCol}
                                             onDragStart={(e) => handleHeaderDragStart(colKey, e)}
                                             onDragOver={(e) => handleHeaderDragOver(colKey, e)}
                                             onDrop={(e) => handleHeaderDrop(colKey, e)}
                                             onDragEnd={handleHeaderDragEnd}
-                                            className={`relative flex items-center px-3.5 py-2.5 group/header cursor-grab active:cursor-grabbing transition-colors ${
+                                            className={`relative flex items-center px-2.5 py-2.5 group/header cursor-grab active:cursor-grabbing transition-colors ${
                                                 !isLast ? 'border-r border-gray-200 dark:border-gray-800' : ''
                                             } ${isDragOver ? 'bg-primary/20 ring-2 ring-primary ring-inset' : ''} ${
                                                 isDragging ? 'opacity-30' : ''
@@ -2095,9 +2202,11 @@ export default function ShootList() {
                                                 )}
 
                                                 {colKey === 'actions' && (
-                                                    <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400">
-                                                        Actions
-                                                    </span>
+                                                    <div className="flex items-center justify-center w-full min-w-0">
+                                                        <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                                                            Actions
+                                                        </span>
+                                                    </div>
                                                 )}
                                             </div>
 
@@ -2105,11 +2214,11 @@ export default function ShootList() {
                                             <div
                                                 onMouseDown={(e) => handleMouseDownResize(colKey, e)}
                                                 onClick={(e) => e.stopPropagation()}
-                                                className="absolute -right-1 top-0 bottom-0 w-2.5 cursor-col-resize select-none flex items-center justify-center group/resizer z-20"
+                                                className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize select-none flex items-center justify-center group/resizer z-30 touch-none"
                                                 title="Drag to resize column width"
                                             >
                                                 <div className={`w-[2px] h-full transition-colors ${
-                                                    resizingCol === colKey ? 'bg-primary' : 'group-hover/resizer:bg-primary'
+                                                    resizingCol === colKey ? 'bg-primary' : 'bg-transparent group-hover/resizer:bg-primary/70'
                                                 }`} />
                                             </div>
                                         </div>
@@ -2125,9 +2234,9 @@ export default function ShootList() {
                                     const isSelected = selectedShootIds.includes(shoot.id);
 
                                     return (
-                                        <div key={shoot.id} className="group min-w-full">
+                                        <div key={shoot.id} className="group w-full min-w-full">
                                     <div
-                                        className={`flex items-center w-max min-w-full transition-colors hover:bg-blue-50/30 dark:hover:bg-blue-950/20 ${
+                                        className={`flex items-center w-full min-w-full transition-colors hover:bg-blue-50/30 dark:hover:bg-blue-950/20 ${
                                             isSelected
                                                 ? 'bg-primary/[0.06] dark:bg-primary/[0.12]'
                                                 : index % 2 === 1 ? 'bg-gray-50/40 dark:bg-white/[0.01]' : 'bg-white dark:bg-transparent'
@@ -2138,14 +2247,13 @@ export default function ShootList() {
                                         }`}
                                     >
                                         {orderedVisibleColumns.map((colKey, colIdx) => {
-                                            const width = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
                                             const isLast = colIdx === orderedVisibleColumns.length - 1;
 
                                             return (
                                                 <div
                                                     key={colKey}
-                                                    style={{ width, minWidth: width, flexShrink: 0 }}
-                                                    className={`px-3.5 py-2 flex items-center min-h-[38px] min-w-0 ${
+                                                    style={getColumnStyle(colKey)}
+                                                    className={`px-2.5 py-2 flex items-center min-h-[38px] min-w-0 ${
                                                         !isLast ? 'border-r border-gray-100 dark:border-gray-800/60' : ''
                                                     }`}
                                                 >
@@ -2366,7 +2474,7 @@ export default function ShootList() {
 
                                                     {/* 11. Actions & WhatsApp */}
                                                     {colKey === 'actions' && (
-                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                        <div className="flex items-center justify-center gap-2 w-full shrink-0">
                                                             {/* WhatsApp Dispatch Button */}
                                                             <button
                                                                 type="button"
@@ -2392,14 +2500,14 @@ export default function ShootList() {
                                                                         departmentId: shoot.departmentId
                                                                     });
                                                                 }}
-                                                                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                                                                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
                                                                     crewCount === 0
                                                                         ? 'text-gray-300 dark:text-gray-600 hover:text-amber-500 hover:bg-amber-500/10'
-                                                                        : 'text-gray-400 hover:text-[#25D366] hover:bg-[#25D366]/10'
+                                                                        : 'text-gray-500 dark:text-gray-400 hover:text-[#25D366] hover:bg-[#25D366]/15 hover:scale-110 active:scale-95'
                                                                 }`}
                                                                 title={crewCount === 0 ? 'Please add crew first' : 'Send WhatsApp Call Sheet to Group'}
                                                             >
-                                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" className="shrink-0">
                                                                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                                                                 </svg>
                                                             </button>
@@ -2432,14 +2540,14 @@ export default function ShootList() {
                                                                         showToast('Copied to clipboard', 'info');
                                                                     }
                                                                 }}
-                                                                className={`p-1 rounded transition-colors cursor-pointer ${
+                                                                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
                                                                     crewCount === 0
                                                                         ? 'text-gray-300 dark:text-gray-600 hover:text-amber-500 hover:bg-amber-500/10'
-                                                                        : 'text-gray-400 hover:text-primary hover:bg-primary/10'
+                                                                        : 'text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-primary/15 hover:scale-110 active:scale-95'
                                                                 }`}
                                                                 title={crewCount === 0 ? 'Please add crew first' : 'Copy WhatsApp Message to Clipboard'}
                                                             >
-                                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                                                 </svg>
                                                             </button>
