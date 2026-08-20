@@ -1,11 +1,9 @@
 import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
- * Session checks for route handlers. Reads the Supabase session from cookies, so
- * a route using these is only reachable by a signed-in user of this app — the
- * thing an externally-hosted function with `--no-verify-jwt` cannot offer.
+ * Session checks for route handlers. Reads the Supabase session from cookies or Bearer headers.
  */
 
 export interface ApiActor {
@@ -18,8 +16,8 @@ export interface ApiActor {
 const sessionClient = async () => {
     const cookieStore = await cookies();
     return createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
         {
             cookies: {
                 getAll() {
@@ -42,15 +40,48 @@ const sessionClient = async () => {
 /** Any signed-in, non-suspended user. */
 export const requireUser = async (): Promise<{ actor: ApiActor } | { error: string; status: number }> => {
     const supabase = await sessionClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) return { error: 'Unauthorized', status: 401 };
+    let { data: { user } } = await supabase.auth.getUser();
 
-    // Role and status come from the database, never from client-supplied claims.
-    const { data: profile } = await supabaseAdmin
-        .from('users')
-        .select('role, status, department_id')
-        .eq('id', user.id)
-        .single();
+    // Fallback: Check Authorization header if cookie session is missing
+    if (!user) {
+        try {
+            const headerList = await headers();
+            const authHeader = headerList.get('authorization');
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.replace('Bearer ', '').trim();
+                const { data: jwtData, error: jwtError } = await supabase.auth.getUser(token);
+                if (!jwtError && jwtData?.user) {
+                    user = jwtData.user;
+                }
+            }
+        } catch {}
+    }
+
+    if (!user) return { error: 'Unauthorized', status: 401 };
+
+    // Role and status come from the database
+    let profile: any = null;
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+            const { data } = await supabaseAdmin
+                .from('users')
+                .select('role, status, department_id')
+                .eq('id', user.id)
+                .maybeSingle();
+            profile = data;
+        } catch {}
+    }
+
+    if (!profile) {
+        try {
+            const { data } = await supabase
+                .from('users')
+                .select('role, status, department_id')
+                .eq('id', user.id)
+                .maybeSingle();
+            profile = data;
+        } catch {}
+    }
 
     if (!profile) return { error: 'Profile not found', status: 403 };
     if (profile.status === 'SUSPENDED') return { error: 'Account suspended', status: 403 };
