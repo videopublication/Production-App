@@ -671,8 +671,8 @@ export default function ShootList() {
                 (shoot.shootNumber && shoot.shootNumber.toString().includes(query));
 
             // Status filter (supports multiple active statuses)
-            const isStatusFiltered = statusFilter.length > 0 && !statusFilter.includes('ALL');
-            const matchesStatus = !isStatusFiltered || statusFilter.includes(shoot.status as StatusFilter);
+            const isAllStatusesSelected = statusFilter.includes('ALL') || statusFilter.length === ALL_INDIVIDUAL_STATUSES.length;
+            const matchesStatus = isAllStatusesSelected ? true : statusFilter.includes(shoot.status as StatusFilter);
 
             // Time filter
             let matchesTime = true;
@@ -694,19 +694,23 @@ export default function ShootList() {
             }
 
             // Crew Filter (supports multi-crew selection & unassigned)
-            const isCrewFiltered = crewFilter.length > 0 && !crewFilter.includes('ALL');
+            const isAllCrewSelected = crewFilter.includes('ALL') || (users.length > 0 && crewFilter.length >= users.length);
             let matchesCrew = true;
-            if (isCrewFiltered) {
-                const hasUnassigned = crewFilter.includes('UNASSIGNED');
-                const userFilterIds = crewFilter.filter(id => id !== 'UNASSIGNED');
-                
-                const shootCrew = assignments.filter(a => a.shootId === shoot.id);
-                const isShootUnassigned = shootCrew.length === 0;
-                
-                const matchesUser = userFilterIds.length > 0 && shootCrew.some(a => userFilterIds.includes(a.userId));
-                const matchesUnassigned = hasUnassigned && isShootUnassigned;
-                
-                matchesCrew = matchesUser || matchesUnassigned;
+            if (!isAllCrewSelected) {
+                if (crewFilter.length === 0) {
+                    matchesCrew = false;
+                } else {
+                    const hasUnassigned = crewFilter.includes('UNASSIGNED');
+                    const userFilterIds = crewFilter.filter(id => id !== 'UNASSIGNED');
+                    
+                    const shootCrew = assignments.filter(a => a.shootId === shoot.id);
+                    const isShootUnassigned = shootCrew.length === 0;
+                    
+                    const matchesUser = userFilterIds.length > 0 && shootCrew.some(a => userFilterIds.includes(a.userId));
+                    const matchesUnassigned = hasUnassigned && isShootUnassigned;
+                    
+                    matchesCrew = matchesUser || matchesUnassigned;
+                }
             }
 
             // Category Filter
@@ -909,50 +913,92 @@ export default function ShootList() {
         return counts;
     }, [shoots]);
 
-    const isStatusFiltered = useMemo(() => {
-        return statusFilter.length > 0 && !statusFilter.includes('ALL');
+    const ALL_INDIVIDUAL_STATUSES: StatusFilter[] = [
+        'OPEN',
+        'WAITING_FOR_REQUESTER',
+        'PENDING_PRODUCTION_SETUP',
+        'READY_FOR_SHOOT',
+        'CONFIRMED',
+        'SHOOT_IN_PROGRESS',
+        'ON_HOLD',
+        'CLOSED',
+        'CANCELLED',
+        'DRAFT'
+    ];
+
+    const isAllStatusesSelected = useMemo(() => {
+        return statusFilter.includes('ALL') || statusFilter.length === ALL_INDIVIDUAL_STATUSES.length;
     }, [statusFilter]);
+
+    const isStatusFiltered = useMemo(() => {
+        return !isAllStatusesSelected;
+    }, [isAllStatusesSelected]);
+
+    const selectAllStatuses = () => setStatusFilter(['ALL']);
+    const deselectAllStatuses = () => setStatusFilter([]);
 
     const toggleStatusFilter = (status: StatusFilter) => {
         if (status === 'ALL') {
-            setStatusFilter(['ALL']);
+            if (isAllStatusesSelected) {
+                setStatusFilter([]);
+            } else {
+                setStatusFilter(['ALL']);
+            }
             return;
         }
         setStatusFilter(prev => {
-            const cleanPrev = prev.filter(s => s !== 'ALL');
-            const exists = cleanPrev.includes(status);
+            const isAll = prev.includes('ALL') || prev.length === ALL_INDIVIDUAL_STATUSES.length;
+            if (isAll) {
+                return ALL_INDIVIDUAL_STATUSES.filter(s => s !== status);
+            }
+            const exists = prev.includes(status);
             let next: StatusFilter[];
             if (exists) {
-                next = cleanPrev.filter(s => s !== status);
+                next = prev.filter(s => s !== status);
             } else {
-                next = [...cleanPrev, status];
+                next = [...prev, status];
             }
-            if (next.length === 0 || next.length === ALL_STATUS_OPTIONS.filter(o => o.value !== 'ALL').length) {
+            if (next.length === ALL_INDIVIDUAL_STATUSES.length) {
                 return ['ALL'];
             }
             return next;
         });
     };
 
+    const isAllCrewSelected = useMemo(() => {
+        return crewFilter.includes('ALL') || (users.length > 0 && crewFilter.length >= users.length);
+    }, [crewFilter, users]);
+
     const isCrewFiltered = useMemo(() => {
-        return crewFilter.length > 0 && !crewFilter.includes('ALL');
-    }, [crewFilter]);
+        return !isAllCrewSelected;
+    }, [isAllCrewSelected]);
+
+    const selectAllCrew = () => setCrewFilter(['ALL']);
+    const deselectAllCrew = () => setCrewFilter([]);
 
     const toggleCrewFilter = (crewId: string) => {
         if (crewId === 'ALL') {
-            setCrewFilter(['ALL']);
+            if (isAllCrewSelected) {
+                setCrewFilter([]);
+            } else {
+                setCrewFilter(['ALL']);
+            }
             return;
         }
         setCrewFilter(prev => {
-            const cleanPrev = prev.filter(id => id !== 'ALL');
-            const exists = cleanPrev.includes(crewId);
+            const isAll = prev.includes('ALL');
+            if (isAll) {
+                const allUserIds = users.map(u => u.id);
+                return allUserIds.filter(id => id !== crewId);
+            }
+            const exists = prev.includes(crewId);
             let next: string[];
             if (exists) {
-                next = cleanPrev.filter(id => id !== crewId);
+                next = prev.filter(id => id !== crewId);
             } else {
-                next = [...cleanPrev, crewId];
+                next = [...prev, crewId];
             }
-            if (next.length === 0) {
+            if (users.length > 0 && next.length >= users.length) {
                 return ['ALL'];
             }
             return next;
@@ -2767,16 +2813,36 @@ export default function ShootList() {
                                     )}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {isStatusFiltered ? (
+                                    {isAllStatusesSelected ? (
                                         <button
                                             type="button"
-                                            onClick={() => setStatusFilter(['ALL'])}
+                                            onClick={deselectAllStatuses}
                                             className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
                                         >
-                                            Reset Filter
+                                            Deselect All
                                         </button>
                                     ) : (
-                                        <span className="text-[10px] text-gray-400">Select multiple</span>
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={selectAllStatuses}
+                                                className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                                            >
+                                                Select All
+                                            </button>
+                                            {statusFilter.length > 0 && (
+                                                <>
+                                                    <span className="text-gray-300 dark:text-gray-700">•</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={deselectAllStatuses}
+                                                        className="text-[11px] font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -2787,8 +2853,8 @@ export default function ShootList() {
                                     const count = statusCounts[opt.value] || 0;
                                     const isAllOption = opt.value === 'ALL';
                                     const isChecked = isAllOption
-                                        ? !isStatusFiltered || statusFilter.includes('ALL')
-                                        : isStatusFiltered && statusFilter.includes(opt.value);
+                                        ? isAllStatusesSelected
+                                        : isAllStatusesSelected || statusFilter.includes(opt.value);
 
                                     return (
                                         <div
@@ -2796,7 +2862,9 @@ export default function ShootList() {
                                             onClick={() => toggleStatusFilter(opt.value)}
                                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer select-none ${
                                                 isChecked
-                                                    ? 'bg-primary/10 text-primary font-bold'
+                                                    ? isAllOption
+                                                        ? 'bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white font-bold'
+                                                        : 'bg-primary/10 text-primary font-bold'
                                                     : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                                             }`}
                                         >
@@ -2826,7 +2894,7 @@ export default function ShootList() {
                             {/* Footer */}
                             <div className="pt-2 mt-1.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
                                 <span className="text-[10px] text-gray-400">
-                                    {isStatusFiltered ? `${statusFilter.length} status${statusFilter.length > 1 ? 'es' : ''} selected` : 'All statuses'}
+                                    {isAllStatusesSelected ? 'All statuses selected' : `${statusFilter.length} status${statusFilter.length === 1 ? '' : 'es'} selected`}
                                 </span>
                                 <button
                                     type="button"
@@ -2895,15 +2963,39 @@ export default function ShootList() {
                                         </span>
                                     )}
                                 </div>
-                                {isCrewFiltered && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setCrewFilter(['ALL'])}
-                                        className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                                    >
-                                        Reset Filter
-                                    </button>
-                                )}
+                                <div className="flex items-center gap-2">
+                                    {isAllCrewSelected ? (
+                                        <button
+                                            type="button"
+                                            onClick={deselectAllCrew}
+                                            className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                                        >
+                                            Deselect All
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={selectAllCrew}
+                                                className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                                            >
+                                                Select All
+                                            </button>
+                                            {crewFilter.length > 0 && (
+                                                <>
+                                                    <span className="text-gray-300 dark:text-gray-700">•</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={deselectAllCrew}
+                                                        className="text-[11px] font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Search Box inside Crew Popover */}
@@ -2927,15 +3019,15 @@ export default function ShootList() {
                                 <div
                                     onClick={() => toggleCrewFilter('ALL')}
                                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer select-none ${
-                                        !isCrewFiltered || crewFilter.includes('ALL')
-                                            ? 'bg-primary/10 text-primary font-bold'
+                                        isAllCrewSelected
+                                            ? 'bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white font-bold'
                                             : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                                     }`}
                                 >
                                     <div className="flex items-center gap-2.5 min-w-0">
                                         <input
                                             type="checkbox"
-                                            checked={!isCrewFiltered || crewFilter.includes('ALL')}
+                                            checked={isAllCrewSelected}
                                             onChange={() => {}}
                                             className="w-3.5 h-3.5 rounded text-primary focus:ring-primary/40 cursor-pointer accent-primary pointer-events-none"
                                         />
@@ -2947,7 +3039,7 @@ export default function ShootList() {
                                 <div
                                     onClick={() => toggleCrewFilter('UNASSIGNED')}
                                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer select-none ${
-                                        isCrewFiltered && crewFilter.includes('UNASSIGNED')
+                                        crewFilter.includes('UNASSIGNED')
                                             ? 'bg-primary/10 text-primary font-bold'
                                             : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                                     }`}
@@ -2955,7 +3047,7 @@ export default function ShootList() {
                                     <div className="flex items-center gap-2.5 min-w-0">
                                         <input
                                             type="checkbox"
-                                            checked={isCrewFiltered && crewFilter.includes('UNASSIGNED')}
+                                            checked={crewFilter.includes('UNASSIGNED')}
                                             onChange={() => {}}
                                             className="w-3.5 h-3.5 rounded text-primary focus:ring-primary/40 cursor-pointer accent-primary pointer-events-none"
                                         />
@@ -2968,7 +3060,7 @@ export default function ShootList() {
                                 {users
                                     .filter(u => !crewSearchQuery || u.name.toLowerCase().includes(crewSearchQuery.toLowerCase()))
                                     .map(u => {
-                                        const isChecked = isCrewFiltered && crewFilter.includes(u.id);
+                                        const isChecked = isAllCrewSelected || crewFilter.includes(u.id);
                                         return (
                                             <div
                                                 key={u.id}
@@ -2997,7 +3089,7 @@ export default function ShootList() {
                             {/* Footer */}
                             <div className="pt-2 mt-1.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
                                 <span className="text-[10px] text-gray-400">
-                                    {isCrewFiltered ? `${crewFilter.length} member${crewFilter.length > 1 ? 's' : ''} selected` : 'All crew'}
+                                    {isAllCrewSelected ? 'All crew selected' : `${crewFilter.length} member${crewFilter.length === 1 ? '' : 's'} selected`}
                                 </span>
                                 <button
                                     type="button"
