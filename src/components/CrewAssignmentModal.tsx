@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { User, Shoot, Assignment, Leave } from '@/types';
 import { Button } from '@/components/Button';
 import {
@@ -144,39 +145,22 @@ export interface ShootDay {
 
 export function CrewAssignmentModal({
     isOpen,
-    onClose,
-    shoot,
-    users,
-    allAssignments,
-    allShoots,
-    allLeaves,
-    initialSelectedIds,
-    initialRoles = {},
-    initialScopes = {},
-    initialCustomHours = {},
-    initialInchargeId,
-    labels = { teamPlural: 'Crew', teamPluralLower: 'crew', leadLabel: 'Incharge', workSingular: 'Shoot' },
-    onSave,
+    ...props
 }: CrewAssignmentModalProps) {
-    if (!isOpen) return null;
+    const [mounted, setMounted] = useState(false);
 
-    return (
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!isOpen || !mounted) return null;
+
+    return createPortal(
         <CrewAssignmentModalInner
             isOpen={isOpen}
-            onClose={onClose}
-            shoot={shoot}
-            users={users}
-            allAssignments={allAssignments}
-            allShoots={allShoots}
-            allLeaves={allLeaves}
-            initialSelectedIds={initialSelectedIds}
-            initialRoles={initialRoles}
-            initialScopes={initialScopes}
-            initialCustomHours={initialCustomHours}
-            initialInchargeId={initialInchargeId}
-            labels={labels}
-            onSave={onSave}
-        />
+            {...props}
+        />,
+        document.body
     );
 }
 
@@ -831,9 +815,9 @@ function CrewAssignmentModalInner({
         <div
             id="crew-assignment-modal-backdrop"
             onClick={handleBackdropClick}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-6 md:p-8"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 md:p-6"
         >
-            <div className="w-full max-w-6xl h-[90vh] max-h-[860px] rounded-2xl bg-white dark:bg-[#121214] border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col">
+            <div className="w-full max-w-6xl h-[92vh] max-h-[880px] rounded-2xl bg-white dark:bg-[#121214] border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col">
                 
                 {/* 1. Header Bar */}
                 <div className="px-6 py-4 border-b border-gray-150 dark:border-zinc-800 bg-gray-50/80 dark:bg-zinc-900/70 shrink-0">
@@ -965,8 +949,8 @@ function CrewAssignmentModalInner({
                 </div>
 
                 {/* 3. Single Unified Full-Width Table */}
-                <div className="flex-1 overflow-y-auto min-h-0 bg-white dark:bg-[#121214] scrollbar-thin">
-                    <table className="w-full text-left border-collapse">
+                <div className="flex-1 overflow-auto min-h-0 bg-white dark:bg-[#121214] scrollbar-thin">
+                    <table className="w-full min-w-[720px] text-left border-collapse">
                         <thead className="sticky top-0 z-10 bg-gray-50/95 dark:bg-zinc-900/95 backdrop-blur-xs border-b border-gray-200 dark:border-zinc-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             <tr>
                                 <th className="w-12 px-4 py-3 text-center">#</th>
@@ -1544,7 +1528,7 @@ function CrewAssignmentModalInner({
 
             {/* 5. Cross-Shoot Swap Modal */}
             {swapModalData && (
-                <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-3 sm:p-4 select-none">
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-3 sm:p-4 select-none">
                     <div className="w-full max-w-xl rounded-2xl bg-white dark:bg-[#18181b] border border-gray-200 dark:border-zinc-700 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
                         {/* Header */}
                         <div className="p-3.5 border-b border-gray-150 dark:border-zinc-800 flex items-center justify-between bg-gray-50 dark:bg-zinc-900/60">

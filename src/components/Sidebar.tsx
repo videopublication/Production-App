@@ -50,7 +50,7 @@ export const Sidebar = () => {
     return (
         // Desktop only - hidden on mobile (bottom tabs used instead)
         <aside className={`
-            hidden md:flex fixed top-0 left-0 h-screen bg-card dark:bg-[#2c2c2e] z-40 transition-all duration-300 ease-out flex-col border-r border-border dark:border-[#3a3a3c]
+            hidden md:flex fixed top-0 left-0 h-screen bg-card dark:bg-[#2c2c2e] z-30 transition-all duration-300 ease-out flex-col border-r border-border dark:border-[#3a3a3c]
             ${isCollapsed ? 'w-[72px]' : 'w-[260px]'}
         `}>
             {/* Logo */}

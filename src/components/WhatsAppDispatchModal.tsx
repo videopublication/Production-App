@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/Button';
 import { useToast } from '@/lib/toast-context';
 import { Send, X, ExternalLink, MessageSquareText } from 'lucide-react';
@@ -17,7 +18,19 @@ interface WhatsAppDispatchModalProps {
     onSuccess?: () => void;
 }
 
-export const WhatsAppDispatchModal: React.FC<WhatsAppDispatchModalProps> = ({
+export const WhatsAppDispatchModal: React.FC<WhatsAppDispatchModalProps> = (props) => {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!props.isOpen || !mounted) return null;
+
+    return createPortal(<WhatsAppDispatchModalInner {...props} />, document.body);
+};
+
+const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
     isOpen,
     onClose,
     title = 'Dispatch WhatsApp Notification',
@@ -130,7 +143,7 @@ export const WhatsAppDispatchModal: React.FC<WhatsAppDispatchModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="w-full max-w-lg bg-card border border-border/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 
                 {/* Header */}
