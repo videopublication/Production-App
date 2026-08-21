@@ -20,6 +20,9 @@ import { getRoleLabel } from '@/lib/roles';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
 import { jiraBrowseUrl } from '@/lib/config';
+import { Shoot, ShootExpense, ShootStatus } from '@/types';
+import { getShootTotalExpense, generateShootsCSV, downloadCSV } from '@/lib/finance-utils';
+import { JiraIcon } from '@/components/icons/JiraIcon';
 
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'OPEN' | 'WAITING_FOR_REQUESTER' | 'PENDING_PRODUCTION_SETUP' | 'READY_FOR_SHOOT' | 'CONFIRMED' | 'SHOOT_IN_PROGRESS' | 'ON_HOLD' | 'CLOSED' | 'CANCELLED' | 'DRAFT';
@@ -27,11 +30,34 @@ type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST' | 'CUSTOM';
 type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber' | 'expenses' | 'jiraTicket' | 'createdAt' | 'poc';
 export type ColumnKey = 'shootNumber' | 'title' | 'jiraTicket' | 'date' | 'location' | 'crew' | 'status' | 'actions' | 'poc' | 'createdAt' | 'expenses';
 
-import { Shoot, ShootExpense, ShootStatus } from '@/types';
-import { getShootTotalExpense, generateShootsCSV, downloadCSV } from '@/lib/finance-utils';
-import { JiraIcon } from '@/components/icons/JiraIcon';
-
 type SortDirection = 'asc' | 'desc';
+
+export const ALL_INDIVIDUAL_STATUSES: StatusFilter[] = [
+    'OPEN',
+    'WAITING_FOR_REQUESTER',
+    'PENDING_PRODUCTION_SETUP',
+    'READY_FOR_SHOOT',
+    'CONFIRMED',
+    'SHOOT_IN_PROGRESS',
+    'ON_HOLD',
+    'CLOSED',
+    'CANCELLED',
+    'DRAFT'
+];
+
+export const ALL_STATUS_OPTIONS: { value: StatusFilter; label: string; bg: string; text: string; border: string }[] = [
+    { value: 'ALL', label: 'All Statuses', bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
+    { value: 'OPEN', label: 'Open', bg: '#e0f2fe', text: '#0369a1', border: '#7dd3fc' },
+    { value: 'WAITING_FOR_REQUESTER', label: 'Waiting for Requester', bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' },
+    { value: 'PENDING_PRODUCTION_SETUP', label: 'Pending Setup', bg: '#ffedd5', text: '#c2410c', border: '#fdba74' },
+    { value: 'READY_FOR_SHOOT', label: 'Ready for Shoot', bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
+    { value: 'CONFIRMED', label: 'Confirmed', bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
+    { value: 'SHOOT_IN_PROGRESS', label: 'In Progress', bg: '#dcfce7', text: '#15803d', border: '#86efac' },
+    { value: 'ON_HOLD', label: 'On Hold', bg: '#fef3c7', text: '#b45309', border: '#fcd34d' },
+    { value: 'CLOSED', label: 'Closed', bg: '#f3e8ff', text: '#7e22ce', border: '#d8b4fe' },
+    { value: 'CANCELLED', label: 'Cancelled', bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
+    { value: 'DRAFT', label: 'Draft', bg: '#f3f4f6', text: '#4b5563', border: '#d1d5db' },
+];
 
 export default function ShootList() {
     const { user } = useAuth();
@@ -891,20 +917,6 @@ export default function ShootList() {
         }
     };
 
-    const ALL_STATUS_OPTIONS: { value: StatusFilter; label: string; bg: string; text: string; border: string }[] = [
-        { value: 'ALL', label: 'All Statuses', bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
-        { value: 'OPEN', label: 'Open', bg: '#e0f2fe', text: '#0369a1', border: '#7dd3fc' },
-        { value: 'WAITING_FOR_REQUESTER', label: 'Waiting for Requester', bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' },
-        { value: 'PENDING_PRODUCTION_SETUP', label: 'Pending Setup', bg: '#ffedd5', text: '#c2410c', border: '#fdba74' },
-        { value: 'READY_FOR_SHOOT', label: 'Ready for Shoot', bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
-        { value: 'CONFIRMED', label: 'Confirmed', bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd' },
-        { value: 'SHOOT_IN_PROGRESS', label: 'In Progress', bg: '#dcfce7', text: '#15803d', border: '#86efac' },
-        { value: 'ON_HOLD', label: 'On Hold', bg: '#fef3c7', text: '#b45309', border: '#fcd34d' },
-        { value: 'CLOSED', label: 'Closed', bg: '#f3e8ff', text: '#7e22ce', border: '#d8b4fe' },
-        { value: 'CANCELLED', label: 'Cancelled', bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
-        { value: 'DRAFT', label: 'Draft', bg: '#f3f4f6', text: '#4b5563', border: '#d1d5db' },
-    ];
-
     const statusCounts = useMemo(() => {
         const counts: Record<string, number> = { ALL: shoots.length };
         shoots.forEach(s => {
@@ -912,19 +924,6 @@ export default function ShootList() {
         });
         return counts;
     }, [shoots]);
-
-    const ALL_INDIVIDUAL_STATUSES: StatusFilter[] = [
-        'OPEN',
-        'WAITING_FOR_REQUESTER',
-        'PENDING_PRODUCTION_SETUP',
-        'READY_FOR_SHOOT',
-        'CONFIRMED',
-        'SHOOT_IN_PROGRESS',
-        'ON_HOLD',
-        'CLOSED',
-        'CANCELLED',
-        'DRAFT'
-    ];
 
     const isAllStatusesSelected = useMemo(() => {
         return statusFilter.includes('ALL') || statusFilter.length === ALL_INDIVIDUAL_STATUSES.length;
