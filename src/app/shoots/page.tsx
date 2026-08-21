@@ -28,11 +28,11 @@ type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'OPEN' | 'WAITING_FOR_REQUESTER' | 'PENDING_PRODUCTION_SETUP' | 'READY_FOR_SHOOT' | 'CONFIRMED' | 'SHOOT_IN_PROGRESS' | 'ON_HOLD' | 'CLOSED' | 'CANCELLED' | 'DRAFT';
 type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST' | 'CUSTOM';
 type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber' | 'expenses' | 'jiraTicket' | 'createdAt' | 'poc';
-export type ColumnKey = 'shootNumber' | 'title' | 'jiraTicket' | 'date' | 'location' | 'crew' | 'status' | 'actions' | 'poc' | 'createdAt' | 'expenses';
+type ColumnKey = 'shootNumber' | 'title' | 'jiraTicket' | 'date' | 'location' | 'crew' | 'status' | 'actions' | 'poc' | 'createdAt' | 'expenses';
 
 type SortDirection = 'asc' | 'desc';
 
-export const ALL_INDIVIDUAL_STATUSES: StatusFilter[] = [
+const ALL_INDIVIDUAL_STATUSES: StatusFilter[] = [
     'OPEN',
     'WAITING_FOR_REQUESTER',
     'PENDING_PRODUCTION_SETUP',
@@ -45,7 +45,7 @@ export const ALL_INDIVIDUAL_STATUSES: StatusFilter[] = [
     'DRAFT'
 ];
 
-export const ALL_STATUS_OPTIONS: { value: StatusFilter; label: string; bg: string; text: string; border: string }[] = [
+const ALL_STATUS_OPTIONS: { value: StatusFilter; label: string; bg: string; text: string; border: string }[] = [
     { value: 'ALL', label: 'All Statuses', bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
     { value: 'OPEN', label: 'Open', bg: '#e0f2fe', text: '#0369a1', border: '#7dd3fc' },
     { value: 'WAITING_FOR_REQUESTER', label: 'Waiting for Requester', bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' },
