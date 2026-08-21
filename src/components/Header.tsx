@@ -147,7 +147,7 @@ export const Header = () => {
 
     return (
         // Desktop only - mobile uses MobileHeader component
-        <header className={`h-[44px] fixed top-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#f5f5f7] px-4 hidden md:flex items-center justify-between transition-all duration-300 ${isCollapsed ? 'left-[72px]' : 'left-[260px]'
+        <header className={`h-[44px] fixed top-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#f5f5f7] px-4 hidden md:flex items-center justify-between transition-[left] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[left] ${isCollapsed ? 'left-[72px]' : 'left-[260px]'
             } pl-6 dark:bg-[#2c2c2e]/80 dark:border-[#3a3a3c]`}>
             {/* Page title / Breadcrumb navigation area */}
             <div className="flex-1 flex items-center">

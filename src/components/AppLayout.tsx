@@ -29,7 +29,7 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
     }, [pathname]);
 
     return (
-        <div className={`app-content-shell flex-1 flex flex-col min-h-screen min-w-0 transition-all duration-300 ${user && !isPublicPage
+        <div className={`app-content-shell flex-1 flex flex-col min-h-screen min-w-0 transition-[padding-left] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[padding-left] ${user && !isPublicPage
             ? isCollapsed
                 ? 'md:pl-[72px]'
                 : 'md:pl-[260px]'
