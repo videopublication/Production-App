@@ -1,4 +1,5 @@
-import { ShootStatus } from '@/types';
+import { ShootStatus, User } from '@/types';
+import { JiraComment } from '@/lib/jira';
 
 /**
  * Normalizes any Jira status string (from Jira Server / Data Center) to our app ShootStatus.
@@ -67,3 +68,112 @@ export const getShootStatusStyle = (status: string) => {
             return { bg: '#f3f4f6', text: '#374151', border: '#d1d5db', label: status };
     }
 };
+
+/**
+ * Builds the standard Cameramen notification text for Jira.
+ */
+export function buildCameramenCommentBody(assignedUsers: User[], deptTitle = 'Video Publications'): string {
+    const formattedDept = deptTitle === 'Video Publication' ? 'Video Publications' : deptTitle;
+
+    if (assignedUsers.length === 0) {
+        return `Namaskaram\n\nPlease note: Cameramen assignments for this shoot are currently being updated.\n\nPranam\n${formattedDept}`;
+    }
+
+    const crewText = assignedUsers
+        .map(u => u.phone ? `${u.name}-${u.phone}` : u.name)
+        .join(', ');
+
+    return `Namaskaram\n\nPlease find the cameramen for this shoot & their contact numbers below\n${crewText}\n\nPranam\n${formattedDept}`;
+}
+
+/**
+ * Checks if a comment body matches the automated Cameramen notification.
+ */
+export function isCameramenComment(body?: string): boolean {
+    if (!body) return false;
+    const lower = body.toLowerCase();
+    return lower.includes('cameramen for this shoot') ||
+           (lower.includes('namaskaram') && lower.includes('cameramen')) ||
+           lower.includes('cameramen assignments for this shoot');
+}
+
+/**
+ * Syncs the cameramen comment to Jira:
+ * - If an existing cameramen comment exists, it EDITS it (PUT) in place.
+ * - If no comment exists and crew is assigned, it CREATES it (POST).
+ * - Avoids posting duplicate comments again and again when crew members are added/removed.
+ */
+export async function syncJiraCameramenComment({
+    ticketKey,
+    assignedUsers,
+    deptTitle = 'Video Publications',
+    authorName = 'System',
+    existingComments
+}: {
+    ticketKey: string;
+    assignedUsers: User[];
+    deptTitle?: string;
+    authorName?: string;
+    existingComments?: JiraComment[];
+}): Promise<{ success: boolean; action: 'created' | 'updated' | 'none'; commentId?: string }> {
+    if (!ticketKey) return { success: false, action: 'none' };
+
+    try {
+        const commentBody = buildCameramenCommentBody(assignedUsers, deptTitle);
+
+        // 1. Get existing comments to find if one already exists
+        let commentsList = existingComments;
+        if (!commentsList) {
+            const res = await fetch(`/api/jira/ticket/${encodeURIComponent(ticketKey)}/comments`, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                commentsList = data.comments || [];
+            }
+        }
+
+        const existingCameramenComment = (commentsList || []).find(c => isCameramenComment(c.body));
+
+        if (existingCameramenComment) {
+            // Strip any [Production App • ...] prefix for body comparison
+            const currentCleanBody = existingCameramenComment.body.replace(/^\[Production App • [^\]]+\]\s*/i, '').trim();
+            const targetCleanBody = commentBody.trim();
+
+            // If already identical, skip redundant network call
+            if (currentCleanBody === targetCleanBody) {
+                return { success: true, action: 'none', commentId: existingCameramenComment.id };
+            }
+
+            // Edit the existing comment in Jira
+            const putRes = await fetch(`/api/jira/ticket/${encodeURIComponent(ticketKey)}/comments/${encodeURIComponent(existingCameramenComment.id)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comment: commentBody })
+            });
+
+            if (putRes.ok) {
+                return { success: true, action: 'updated', commentId: existingCameramenComment.id };
+            }
+        } else if (assignedUsers.length > 0) {
+            // Post new comment ONLY if none existed and at least 1 user is assigned
+            const postRes = await fetch(`/api/jira/ticket/${encodeURIComponent(ticketKey)}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    body: commentBody,
+                    isInternal: false,
+                    authorName
+                })
+            });
+
+            if (postRes.ok) {
+                const data = await postRes.json();
+                return { success: true, action: 'created', commentId: data.id };
+            }
+        }
+
+        return { success: true, action: 'none' };
+    } catch (err) {
+        console.error('[syncJiraCameramenComment error]:', err);
+        return { success: false, action: 'none' };
+    }
+}

@@ -16,6 +16,7 @@ import { sendPushNotification } from '@/lib/push-notifications';
 import { getRoleLabel } from '@/lib/roles';
 import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
+import { syncJiraCameramenComment } from '@/lib/jira-utils';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
@@ -267,32 +268,17 @@ export default function EditShootPage() {
                     body: JSON.stringify({ ticketKey: shoot.jiraTicketId, status: updatedShoot.status })
                 }).catch(err => console.debug('[Jira Status Sync]:', err));
 
-                if (updatedShoot.status === 'READY_FOR_SHOOT' || updatedShoot.status === 'CONFIRMED') {
+                if (updatedShoot.status === 'READY_FOR_SHOOT' || updatedShoot.status === 'CONFIRMED' || updatedShoot.status === 'SHOOT_IN_PROGRESS') {
                     const assignedUsers = crewIds
                         .map(uid => allUsers.find(u => u.id === uid))
                         .filter((u): u is typeof allUsers[0] => Boolean(u));
 
-                    if (assignedUsers.length > 0) {
-                        const crewText = assignedUsers
-                            .map(u => u.phone ? `${u.name}-${u.phone}` : u.name)
-                            .join(', ');
-
-                        const deptTitle = pageDepartment?.name
-                            ? (pageDepartment.name === 'Video Publication' ? 'Video Publications' : pageDepartment.name)
-                            : 'Video Publications';
-
-                        const autoCommentBody = `Namaskaram\n\nPlease find the cameramen for this shoot & their contact numbers below\n${crewText}\n\nPranam\n${deptTitle}`;
-
-                        fetch(`/api/jira/ticket/${encodeURIComponent(shoot.jiraTicketId)}/comments`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                body: autoCommentBody,
-                                isInternal: false,
-                                authorName: user?.name || 'System'
-                            })
-                        }).catch(err => console.error('[Jira Auto Comment Error]:', err));
-                    }
+                    syncJiraCameramenComment({
+                        ticketKey: shoot.jiraTicketId,
+                        assignedUsers,
+                        deptTitle: pageDepartment?.name,
+                        authorName: user?.name || 'System'
+                    }).catch(err => console.error('[Jira Auto Comment Error]:', err));
                 }
             }
 

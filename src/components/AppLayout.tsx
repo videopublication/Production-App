@@ -31,8 +31,8 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
     return (
         <div className={`app-content-shell flex-1 flex flex-col min-h-screen min-w-0 transition-[padding-left] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[padding-left] ${user && !isPublicPage
             ? isCollapsed
-                ? 'md:pl-[72px]'
-                : 'md:pl-[260px]'
+                ? 'md:pl-[62px] 2xl:pl-[70px]'
+                : 'md:pl-[228px] 2xl:pl-[255px]'
             : ''
             }`}>
             {/* Desktop Header */}
@@ -40,7 +40,7 @@ const MainContent = ({ children, isPublicPage }: { children: React.ReactNode; is
             {/* Mobile Header */}
             {!isPublicPage && <MobileHeader />}
 
-            <main ref={mainRef} className={`app-main-scroll flex-1 px-4 py-4 sm:p-6 lg:p-8 ${user && !isPublicPage ? 'md:mt-[44px] md:pb-6' : ''} w-full mx-auto overflow-x-clip`}>
+            <main ref={mainRef} className={`app-main-scroll flex-1 px-2.5 sm:px-3.5 lg:px-4 2xl:px-6 pt-2 pb-2 ${user && !isPublicPage ? 'md:mt-[44px]' : ''} w-full mx-auto overflow-x-clip`}>
                 {children}
             </main>
 

@@ -7,13 +7,12 @@ import { useAuth } from '@/lib/auth';
 import { Shoot, ShootStatus, User, Assignment, Log, PlannerDraftAssignment, Leave } from '@/types';
 import { formatWhatsAppMessage, openWhatsApp, generateShootWhatsAppPayload } from '@/lib/whatsapp';
 import { WhatsAppDispatchModal } from '@/components/WhatsAppDispatchModal';
-import { isSameDay } from 'date-fns';
+import { isSameDay, isSameMonth, isSameYear, format, parseISO } from 'date-fns';
 import { Button } from '@/components/Button';
 import { APP_CONFIG } from '@/lib/config';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
-import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal, ChevronDown, ExternalLink, Calendar, MapPin, User as UserIcon, FileText, Globe, Layers, MessageSquare, Clock, Send, RefreshCw, Check, X, Pencil, Search, AlertTriangle, CheckCircle, Info, ShieldCheck, Filter, Wrench, Package, Star, Sparkles, UserCheck, Lock, Pin, PinOff, ArrowUpDown, Share2, Bold, Italic, List, Link2, Quote, History } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal, ChevronDown, ExternalLink, Calendar, MapPin, User as UserIcon, FileText, Globe, Layers, MessageSquare, Clock, Send, RefreshCw, Check, X, Pencil, Search, AlertTriangle, CheckCircle, Info, ShieldCheck, Filter, Wrench, Package, Star, Sparkles, UserCheck, Lock, Pin, PinOff, ArrowUpDown, Share2, Bold, Italic, List, Link2, Quote, History, Phone } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/lib/toast-context';
 
@@ -31,7 +30,7 @@ import { useDepartment } from '@/lib/department-context';
 import { getDepartmentLabels } from '@/lib/department-labels';
 import { JiraTicket, JiraComment, JiraHistoryItem } from '@/lib/jira';
 import { JiraIcon } from '@/components/icons/JiraIcon';
-import { jiraStatusToAppStatus } from '@/lib/jira-utils';
+import { jiraStatusToAppStatus, syncJiraCameramenComment } from '@/lib/jira-utils';
 import { CrewAssignmentModal } from '@/components/CrewAssignmentModal';
 
 const STATUS_OPTIONS: { key: ShootStatus; label: string; bg: string; text: string; border: string; description: string }[] = [
@@ -505,7 +504,7 @@ export default function ShootDetailsPage() {
         };
     };
 
-    const syncFieldToJira = async (ticketId: string, updates: { description?: string; location?: string; venue?: string; startTime?: string; endTime?: string; title?: string }) => {
+    const syncFieldToJira = async (ticketId: string, updates: { description?: string; location?: string; venue?: string; startTime?: string; endTime?: string; title?: string; pocName?: string; pocContact?: string }) => {
         try {
             const res = await fetch(`/api/jira/ticket/${encodeURIComponent(ticketId)}`, {
                 method: 'PATCH',
@@ -531,6 +530,7 @@ export default function ShootDetailsPage() {
 
     // In-Place Crew Assignment Modal State
     const [isCrewModalOpen, setIsCrewModalOpen] = useState(false);
+    const [pendingStatusAfterCrew, setPendingStatusAfterCrew] = useState<ShootStatus | null>(null);
     const [selectedCrewIds, setSelectedCrewIds] = useState<string[]>([]);
     const [selectedCrewRoles, setSelectedCrewRoles] = useState<Record<string, string>>({});
     const [selectedInchargeId, setSelectedInchargeId] = useState<string>('');
@@ -846,6 +846,9 @@ export default function ShootDetailsPage() {
                 updates.pocName = formPocName.trim();
                 updates.pocContact = formPocContact.trim();
                 logDetail = `Updated Point of Contact`;
+                if (shoot.jiraTicketId) {
+                    syncFieldToJira(shoot.jiraTicketId, { pocName: formPocName.trim(), pocContact: formPocContact.trim() });
+                }
             } else if (section === 'description') {
                 updates.description = formDescription.trim();
                 logDetail = `Updated notes & requirements`;
@@ -997,8 +1000,9 @@ export default function ShootDetailsPage() {
     };
 
     // Open Crew Assignment Modal
-    const openCrewModal = () => {
+    const openCrewModal = (pendingStatus?: ShootStatus) => {
         if (!shoot || !canEdit) return;
+        setPendingStatusAfterCrew(pendingStatus || null);
         const currentCrewIds = assignments.map(a => a.userId);
         const incharge = assignments.find(a => a.role === 'Incharge')?.userId || '';
         const rolesMap: Record<string, string> = {};
@@ -1253,13 +1257,29 @@ export default function ShootDetailsPage() {
             await queryClient.invalidateQueries({ queryKey: ['assignments'] });
             await queryClient.invalidateQueries({ queryKey: ['shoots'] });
             showToast(`Removed ${userName}`, 'info');
+
+            // Auto-edit Jira Cameramen comment in place if shoot is in Ready/Confirmed/In Progress
+            if (shoot.jiraTicketId && (shoot.status === 'READY_FOR_SHOOT' || shoot.status === 'CONFIRMED' || shoot.status === 'SHOOT_IN_PROGRESS')) {
+                const remainingUserIds = assignments.filter(a => a.id !== assignmentId).map(a => a.userId);
+                const remainingUsers = remainingUserIds
+                    .map(userId => users.find(u => u.id === userId))
+                    .filter((u): u is User => Boolean(u));
+
+                syncJiraCameramenComment({
+                    ticketKey: shoot.jiraTicketId,
+                    assignedUsers: remainingUsers,
+                    deptTitle: pageDepartment?.name,
+                    authorName: user?.name || 'System',
+                    existingComments: jiraComments
+                }).then(() => fetchJiraComments()).catch(err => console.debug('[Jira Comment Edit Sync Error]:', err));
+            }
         } catch (e) {
             console.error('Failed to remove crew member:', e);
             showToast('Failed to remove crew member', 'error');
         }
     };
 
-    const handleUpdateStatus = async (newStatus: ShootStatus) => {
+    const handleUpdateStatus = async (newStatus: ShootStatus, overrideAssignedUserIds?: string[]) => {
         if (!shoot) return;
         if (newStatus === 'CANCELLED') {
             setIsCancelModalOpen(true);
@@ -1267,11 +1287,15 @@ export default function ShootDetailsPage() {
         }
         if (shoot.status === newStatus) return;
 
+        const effectiveCrewCount = overrideAssignedUserIds !== undefined
+            ? overrideAssignedUserIds.length
+            : assignments.length;
+
         // Guard Rule: Cannot set status to Ready for Shoot without assigned cameramen / crew
         if (newStatus === 'READY_FOR_SHOOT' || newStatus === 'CONFIRMED') {
-            if (assignments.length === 0) {
-                showToast('Please assign cameramen / crew before setting status to Ready for Shoot.', 'error');
-                openCrewModal();
+            if (effectiveCrewCount === 0) {
+                showToast('Please assign cameramen / crew before setting status to Ready for Shoot.', 'info');
+                openCrewModal(newStatus);
                 return;
             }
         }
@@ -1294,37 +1318,26 @@ export default function ShootDetailsPage() {
                     body: JSON.stringify({ ticketKey: shoot.jiraTicketId, status: newStatus })
                 }).catch(err => console.debug('[Jira Status Sync]:', err));
 
-                // Automation: If status is changed to READY_FOR_SHOOT or CONFIRMED, automatically post public crew notification comment to Jira
+                // Automation: If status is changed to READY_FOR_SHOOT or CONFIRMED, automatically post/edit public crew notification comment in Jira
                 if (newStatus === 'READY_FOR_SHOOT' || newStatus === 'CONFIRMED') {
-                    const assignedUsers = assignments
-                        .map(a => users.find(u => u.id === a.userId))
+                    const effectiveUserIds = overrideAssignedUserIds !== undefined
+                        ? overrideAssignedUserIds
+                        : assignments.map(a => a.userId);
+
+                    const assignedUsers = effectiveUserIds
+                        .map(userId => users.find(u => u.id === userId))
                         .filter((u): u is User => Boolean(u));
 
                     if (assignedUsers.length > 0) {
-                        const crewText = assignedUsers
-                            .map(u => u.phone ? `${u.name}-${u.phone}` : u.name)
-                            .join(', ');
-
-                        const deptTitle = pageDepartment?.name
-                            ? (pageDepartment.name === 'Video Publication' ? 'Video Publications' : pageDepartment.name)
-                            : 'Video Publications';
-
-                        const autoCommentBody = `Namaskaram\n\nPlease find the cameramen for this shoot & their contact numbers below\n${crewText}\n\nPranam\n${deptTitle}`;
-
                         try {
-                            const commentRes = await fetch(`/api/jira/ticket/${encodeURIComponent(shoot.jiraTicketId)}/comments`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    body: autoCommentBody,
-                                    isInternal: false,
-                                    authorName: user?.name || 'System'
-                                })
+                            await syncJiraCameramenComment({
+                                ticketKey: shoot.jiraTicketId,
+                                assignedUsers,
+                                deptTitle: pageDepartment?.name,
+                                authorName: user?.name || 'System',
+                                existingComments: jiraComments
                             });
-
-                            if (commentRes.ok) {
-                                fetchJiraComments();
-                            }
+                            fetchJiraComments();
                         } catch (commentErr) {
                             console.error('[Jira Auto Comment Error]:', commentErr);
                         }
@@ -1346,7 +1359,7 @@ export default function ShootDetailsPage() {
             }
 
             if (newStatus === 'READY_FOR_SHOOT' || newStatus === 'CONFIRMED') {
-                showToast('Status updated & cameramen notified to Jira!', 'success');
+                showToast('Status updated to Ready for Shoot & cameramen notified to Jira!', 'success');
             } else {
                 showToast(`Status updated to ${newStatus.replace(/_/g, ' ')}`, 'success');
             }
@@ -1636,105 +1649,61 @@ export default function ShootDetailsPage() {
     const currentStatusStyle = getStatusStyle(shoot.status);
 
     return (
-        <div className="max-w-[1600px] mx-auto w-full space-y-5 animate-fade-in pb-12 p-3 sm:p-5">
+        <div className="max-w-[1600px] mx-auto w-full space-y-3.5 sm:space-y-4 animate-fade-in pb-12 p-2.5 sm:p-4">
             {/* Unified Hero Header & Quick Specs Card */}
-            <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-xs relative z-20">
+            <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-xs relative z-20 overflow-hidden">
                 {/* Main Header Row: Title & Action Toolbar */}
-                <div className="p-5 sm:p-6 border-b border-gray-100 dark:border-gray-800">
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                        {/* Left: Metadata & Title */}
-                        <div className="space-y-2 min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2.5 text-sm">
-                                {shoot.shootNumber && (
-                                    <span className="font-mono text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2.5 py-0.5 rounded-md shrink-0">
-                                        #{shoot.shootNumber}
-                                    </span>
-                                )}
-
-                                <span
-                                    style={{
-                                        backgroundColor: currentStatusStyle.bg,
-                                        color: currentStatusStyle.text,
-                                        border: `1px solid ${currentStatusStyle.border}`,
-                                    }}
-                                    className="text-xs font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shrink-0 inline-flex items-center justify-center whitespace-nowrap"
-                                >
-                                    {currentStatusStyle.label || shoot.status.replace(/_/g, ' ')}
+                <div className="p-3.5 sm:p-4 border-b border-gray-100 dark:border-gray-800 space-y-2.5">
+                    {/* Top Row: Metadata Badges (Left) & Actions (Right) */}
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                        {/* Left: Metadata badges */}
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                            {shoot.shootNumber && (
+                                <span className="font-mono font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 px-2 py-0.5 rounded-md shrink-0">
+                                    #{shoot.shootNumber}
                                 </span>
-
-                                {shoot.googleEventId && (
-                                    <a
-                                        href={`https://calendar.google.com/calendar/event?eid=${shoot.googleEventId}&ctz=Asia/Kolkata`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2.5 py-0.5 rounded-md transition-colors border border-primary/20 shrink-0"
-                                        title="View in Google Calendar"
-                                    >
-                                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" aria-hidden="true">
-                                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z" />
-                                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                                        </svg>
-                                        <span>Calendar Synced</span>
-                                    </a>
-                                )}
-
-                                <span className="text-gray-400 dark:text-gray-500">•</span>
-
-                                <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                                    Added by <strong className="font-semibold text-gray-800 dark:text-gray-200">{getUserName(shoot.createdBy)}</strong>
-                                </span>
-                            </div>
-
-                            {/* Editable Shoot Title */}
-                            {editingSection === 'title' ? (
-                                <div className="flex items-center gap-2 mt-1">
-                                    <input
-                                        type="text"
-                                        value={formTitle}
-                                        onChange={(e) => setFormTitle(e.target.value)}
-                                        className="flex-1 text-lg sm:text-2xl font-bold rounded-xl border border-primary/50 bg-white dark:bg-zinc-800 px-3 py-1.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40 shadow-xs"
-                                        placeholder="Shoot Title"
-                                        autoFocus
-                                    />
-                                    <button
-                                        onClick={() => saveEditSection('title')}
-                                        disabled={isSavingField}
-                                        className="p-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-colors shrink-0 shadow-xs cursor-pointer"
-                                        title="Save Title"
-                                    >
-                                        {isSavingField ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                                    </button>
-                                    <button
-                                        onClick={cancelEditSection}
-                                        disabled={isSavingField}
-                                        className="p-2 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer"
-                                        title="Cancel"
-                                    >
-                                        <X size={16} />
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-2.5 group/title">
-                                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight break-words">
-                                        {shoot.title}
-                                    </h1>
-                                    {canEdit && (
-                                        <button
-                                            onClick={() => startEditSection('title')}
-                                            className="opacity-0 group-hover/title:opacity-100 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all shrink-0 cursor-pointer"
-                                            title="Edit Title"
-                                        >
-                                            <Pencil size={15} />
-                                        </button>
-                                    )}
-                                </div>
                             )}
+
+                            {shoot.jiraTicketId && (
+                                <a
+                                    href={`https://${APP_CONFIG.jiraDomain}/browse/${shoot.jiraTicketId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-mono font-semibold transition-all shadow-2xs bg-[#0052CC]/10 hover:bg-[#0052CC]/20 text-[#0052CC] dark:text-[#4c9aff] border border-[#0052CC]/20 text-xs shrink-0"
+                                    title={`Open ${shoot.jiraTicketId} in Jira`}
+                                >
+                                    <JiraIcon className="w-3.5 h-3.5 shrink-0" />
+                                    <span>{shoot.jiraTicketId}</span>
+                                </a>
+                            )}
+
+                            {shoot.googleEventId && (
+                                <a
+                                    href={`https://calendar.google.com/calendar/event?eid=${shoot.googleEventId}&ctz=Asia/Kolkata`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-md transition-colors border border-primary/20 shrink-0"
+                                    title="View in Google Calendar"
+                                >
+                                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" aria-hidden="true">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z" />
+                                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                    </svg>
+                                    <span>Calendar Synced</span>
+                                </a>
+                            )}
+
+                            <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
+
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                Added by <strong className="font-semibold text-gray-800 dark:text-gray-200">{getUserName(shoot.createdBy)}</strong>
+                            </span>
                         </div>
 
-                        {/* Right: Sleek Action Toolbar */}
-                        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0">
+                        {/* Right: Sleek Compact Action Toolbar */}
+                        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
                             {/* WhatsApp */}
                             <button
                                 onClick={() => {
@@ -1744,14 +1713,14 @@ export default function ShootDetailsPage() {
                                     }
                                     setIsWhatsAppModalOpen(true);
                                 }}
-                                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-semibold transition-all shadow-xs active:scale-95 text-white text-xs sm:text-sm whitespace-nowrap cursor-pointer ${
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-white text-xs whitespace-nowrap cursor-pointer ${
                                     assignmentsForMessage.length === 0
                                         ? 'bg-gray-400 dark:bg-gray-600 hover:bg-gray-500'
-                                        : 'bg-[#25D366] hover:bg-[#22bf5b] hover:shadow-green-500/20'
+                                        : 'bg-[#25D366] hover:bg-[#22bf5b]'
                                 }`}
                                 title={assignmentsForMessage.length === 0 ? 'Please add crew first' : 'Share Call Sheet via WhatsApp'}
                             >
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" className="shrink-0">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" className="shrink-0">
                                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                                 </svg>
                                 <span>WhatsApp</span>
@@ -1769,7 +1738,7 @@ export default function ShootDetailsPage() {
                                     const message = formatWhatsAppMessage(shoot, assignmentsForMessage, users, labels);
                                     try {
                                         await navigator.clipboard.writeText(message);
-                                        btn.innerHTML = `<svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> <span>Copied</span>`;
+                                        btn.innerHTML = `<svg class="w-3.5 h-3.5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg> <span>Copied</span>`;
                                         btn.classList.add('bg-green-50', 'dark:bg-green-900/20', 'border-green-300', 'text-green-700', 'dark:text-green-300');
                                         setTimeout(() => {
                                             btn.innerHTML = originalContent;
@@ -1779,42 +1748,28 @@ export default function ShootDetailsPage() {
                                         console.error('Failed to copy', err);
                                     }
                                 }}
-                                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-medium transition-all shadow-xs bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 text-xs sm:text-sm whitespace-nowrap cursor-pointer ${
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-medium transition-all shadow-2xs bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 text-xs whitespace-nowrap cursor-pointer ${
                                     assignmentsForMessage.length === 0
                                         ? 'text-gray-400 dark:text-gray-500 hover:text-amber-500'
                                         : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800'
                                 }`}
                                 title={assignmentsForMessage.length === 0 ? 'Please add crew first' : 'Copy Call Sheet'}
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
                                 <span>Copy Info</span>
                             </button>
-
-                            {/* Jira Link */}
-                            {shoot.jiraTicketId && (
-                                <a
-                                    href={`https://${APP_CONFIG.jiraDomain}/browse/${shoot.jiraTicketId}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl font-mono font-semibold transition-all shadow-xs bg-[#0052CC]/10 hover:bg-[#0052CC]/20 text-[#0052CC] dark:text-[#4c9aff] border border-[#0052CC]/20 text-xs sm:text-sm whitespace-nowrap"
-                                    title={`Open ${shoot.jiraTicketId} in Jira`}
-                                >
-                                    <JiraIcon className="w-4 h-4 shrink-0" />
-                                    <span>{shoot.jiraTicketId}</span>
-                                </a>
-                            )}
 
                             {canEdit && (
                                 <>
                                     {/* In-Place Quick Edit Button */}
                                     <button
                                         onClick={openQuickEditModal}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-medium transition-all shadow-xs bg-white dark:bg-zinc-800/80 hover:bg-gray-50 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm whitespace-nowrap cursor-pointer"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-medium transition-all shadow-2xs bg-white dark:bg-zinc-800/80 hover:bg-gray-50 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-200 text-xs whitespace-nowrap cursor-pointer"
                                         title="Quick Edit Shoot Details"
                                     >
-                                        <Edit className="w-4 h-4 text-gray-500" />
+                                        <Edit className="w-3.5 h-3.5 text-gray-500" />
                                         <span>Edit</span>
                                     </button>
 
@@ -1829,22 +1784,22 @@ export default function ShootDetailsPage() {
                                                 color: currentStatusStyle.text,
                                                 borderColor: currentStatusStyle.border,
                                             }}
-                                            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap border transition-all shadow-2xs hover:opacity-90 active:scale-95 cursor-pointer"
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap border transition-all shadow-2xs hover:opacity-90 active:scale-95 cursor-pointer"
                                             title="Change shoot status"
                                         >
                                             {isUpdatingStatus ? (
-                                                <Loader2 size={14} className="animate-spin" />
+                                                <Loader2 size={13} className="animate-spin" />
                                             ) : (
                                                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: currentStatusStyle.text }} />
                                             )}
                                             <span>{currentStatusStyle.label || shoot.status.replace(/_/g, ' ')}</span>
-                                            <ChevronDown size={14} className={`transition-transform duration-200 opacity-70 ${isActionStatusMenuOpen ? 'rotate-180' : ''}`} />
+                                            <ChevronDown size={13} className={`transition-transform duration-200 opacity-70 ${isActionStatusMenuOpen ? 'rotate-180' : ''}`} />
                                         </button>
 
                                         {isActionStatusMenuOpen && (
-                                            <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden z-50 p-2 animate-in fade-in zoom-in-95 duration-150">
-                                                <div className="px-2.5 py-1.5 mb-1 border-b border-gray-100 dark:border-gray-800">
-                                                    <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Change Status</span>
+                                            <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden z-50 p-1.5 animate-in fade-in zoom-in-95 duration-150">
+                                                <div className="px-2.5 py-1 mb-1 border-b border-gray-100 dark:border-gray-800">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Change Status</span>
                                                 </div>
                                                 <div className="space-y-0.5">
                                                     {STATUS_OPTIONS.map((opt) => {
@@ -1857,19 +1812,17 @@ export default function ShootDetailsPage() {
                                                                     setIsActionStatusMenuOpen(false);
                                                                     handleUpdateStatus(opt.key);
                                                                 }}
-                                                                className={`w-full text-left px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center justify-between transition-colors cursor-pointer ${
+                                                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
                                                                     isActive
                                                                         ? 'bg-primary/10 text-primary font-bold'
                                                                         : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200'
                                                                 }`}
                                                             >
-                                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: opt.text }} />
-                                                                    <div className="truncate">
-                                                                        <p className="font-semibold truncate text-xs sm:text-sm">{opt.label}</p>
-                                                                    </div>
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: opt.text }} />
+                                                                    <p className="font-semibold truncate text-xs">{opt.label}</p>
                                                                 </div>
-                                                                {isActive && <CheckCircle2 size={14} className="text-primary shrink-0 ml-1" />}
+                                                                {isActive && <CheckCircle2 size={13} className="text-primary shrink-0 ml-1" />}
                                                             </button>
                                                         );
                                                     })}
@@ -1881,268 +1834,330 @@ export default function ShootDetailsPage() {
                             )}
                         </div>
                     </div>
-                </div>
 
-                {/* Integrated 4-Tile Specs Bar with In-Place Editing */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 dark:divide-gray-800 bg-gray-50/50 dark:bg-zinc-900/40 rounded-b-2xl overflow-hidden">
-                    {/* 1. Schedule Tile */}
-                    <div className="p-4 sm:p-5 flex items-start gap-3.5 relative group/tile">
-                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
-                            <Calendar size={20} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-1 mb-0.5">
-                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Schedule</span>
-                                {canEdit && editingSection !== 'schedule' && (
+                    {/* Title Section */}
+                    <div>
+                        {editingSection === 'title' ? (
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={formTitle}
+                                    onChange={(e) => setFormTitle(e.target.value)}
+                                    className="flex-1 text-base sm:text-xl font-bold rounded-xl border border-primary/50 bg-white dark:bg-zinc-800 px-3 py-1.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40 shadow-xs"
+                                    placeholder="Shoot Title"
+                                    autoFocus
+                                />
+                                <button
+                                    onClick={() => saveEditSection('title')}
+                                    disabled={isSavingField}
+                                    className="p-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shrink-0 shadow-xs cursor-pointer"
+                                    title="Save Title"
+                                >
+                                    {isSavingField ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                                </button>
+                                <button
+                                    onClick={cancelEditSection}
+                                    disabled={isSavingField}
+                                    className="p-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer"
+                                    title="Cancel"
+                                >
+                                    <X size={15} />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 group/title">
+                                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight break-words">
+                                    {shoot.title}
+                                </h1>
+                                {canEdit && (
                                     <button
-                                        onClick={() => startEditSection('schedule')}
-                                        className="opacity-0 group-hover/tile:opacity-100 p-1 rounded-md hover:bg-gray-200 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
-                                        title="Edit Schedule Date & Time"
+                                        onClick={() => startEditSection('title')}
+                                        className="opacity-0 group-hover/title:opacity-100 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all shrink-0 cursor-pointer"
+                                        title="Edit Title"
                                     >
-                                        <Pencil size={12} />
+                                        <Pencil size={13} />
                                     </button>
                                 )}
                             </div>
+                        )}
+                    </div>
+                </div>
 
-                            {editingSection === 'schedule' ? (
-                                <div className="space-y-2 mt-1 animate-in fade-in duration-150">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Start Date & Time</label>
-                                        <div className="grid grid-cols-2 gap-1.5">
-                                            <input
-                                                type="date"
-                                                value={formStartDate}
-                                                onChange={(e) => setFormStartDate(e.target.value)}
-                                                className="text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white"
-                                            />
-                                            <input
-                                                type="time"
-                                                value={formStartTime}
-                                                onChange={(e) => setFormStartTime(e.target.value)}
-                                                className="text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase">End Date & Time</label>
-                                        <div className="grid grid-cols-2 gap-1.5">
-                                            <input
-                                                type="date"
-                                                value={formEndDate}
-                                                onChange={(e) => setFormEndDate(e.target.value)}
-                                                className="text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white"
-                                            />
-                                            <input
-                                                type="time"
-                                                value={formEndTime}
-                                                onChange={(e) => setFormEndTime(e.target.value)}
-                                                className="text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 pt-1">
+                {/* 4-Tile Quick Info Grid (Card layout, high density, no truncation) */}
+                <div className="p-3 sm:p-3.5 bg-gray-50/70 dark:bg-zinc-900/50 rounded-b-2xl border-t border-gray-100 dark:border-gray-800/60">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                        {/* 1. Schedule Tile */}
+                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 relative group/tile hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all shadow-2xs">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <Calendar size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Schedule</span>
+                                    {canEdit && editingSection !== 'schedule' && (
                                         <button
-                                            onClick={() => saveEditSection('schedule')}
-                                            disabled={isSavingField}
-                                            className="px-2.5 py-1 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
+                                            onClick={() => startEditSection('schedule')}
+                                            className="opacity-0 group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
+                                            title="Edit Schedule Date & Time"
                                         >
-                                            {isSavingField ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                                            Save
+                                            <Pencil size={11} />
                                         </button>
-                                        <button
-                                            onClick={cancelEditSection}
-                                            disabled={isSavingField}
-                                            className="px-2 py-1 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
+                                    )}
                                 </div>
-                            ) : (
-                                <>
-                                    <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-white leading-tight">
-                                        {(() => {
+
+                                {editingSection === 'schedule' ? (
+                                    <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
+                                        <div className="space-y-0.5">
+                                            <label className="text-[9px] font-bold text-gray-500 uppercase">Start Date & Time</label>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                <input
+                                                    type="date"
+                                                    value={formStartDate}
+                                                    onChange={(e) => setFormStartDate(e.target.value)}
+                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                                />
+                                                <input
+                                                    type="time"
+                                                    value={formStartTime}
+                                                    onChange={(e) => setFormStartTime(e.target.value)}
+                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <label className="text-[9px] font-bold text-gray-500 uppercase">End Date & Time</label>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                <input
+                                                    type="date"
+                                                    value={formEndDate}
+                                                    onChange={(e) => setFormEndDate(e.target.value)}
+                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                                />
+                                                <input
+                                                    type="time"
+                                                    value={formEndTime}
+                                                    onChange={(e) => setFormEndTime(e.target.value)}
+                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 pt-0.5">
+                                            <button
+                                                onClick={() => saveEditSection('schedule')}
+                                                disabled={isSavingField}
+                                                className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
+                                            >
+                                                {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                                                Save
+                                            </button>
+                                            <button
+                                                onClick={cancelEditSection}
+                                                disabled={isSavingField}
+                                                className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight" title={(() => {
                                             if (!shoot.startTime) return 'Date Not Set';
                                             const startDate = parseISO(shoot.startTime);
                                             const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
                                             if (endDate && !isSameDay(startDate, endDate)) {
-                                                return `${format(startDate, 'MMM d')} – ${format(endDate, 'MMM d, yyyy')}`;
+                                                return `${format(startDate, 'MMM d, yyyy')} – ${format(endDate, 'MMM d, yyyy')}`;
                                             }
                                             return format(startDate, 'MMM d, yyyy');
-                                        })()}
-                                    </p>
-                                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
-                                        {(() => {
-                                            if (!shoot.startTime) return 'Time not set';
-                                            const start = format(parseISO(shoot.startTime), 'h:mm a');
-                                            const end = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : '';
-                                            return end ? `${start} – ${end}` : start;
-                                        })()}
-                                    </p>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 2. Location Tile */}
-                    <div className="p-4 sm:p-5 flex items-start gap-3.5 relative group/tile">
-                        <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
-                            <MapPin size={20} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-1 mb-0.5">
-                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Location</span>
-                                {canEdit && editingSection !== 'location' && (
-                                    <button
-                                        onClick={() => startEditSection('location')}
-                                        className="opacity-0 group-hover/tile:opacity-100 p-1 rounded-md hover:bg-gray-200 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
-                                        title="Edit Location"
-                                    >
-                                        <Pencil size={12} />
-                                    </button>
+                                        })()}>
+                                            {(() => {
+                                                if (!shoot.startTime) return 'Date Not Set';
+                                                const startDate = parseISO(shoot.startTime);
+                                                const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
+                                                if (endDate && !isSameDay(startDate, endDate)) {
+                                                    if (isSameMonth(startDate, endDate) && isSameYear(startDate, endDate)) {
+                                                        return `${format(startDate, 'MMM d')} – ${format(endDate, 'd, yyyy')}`;
+                                                    }
+                                                    if (isSameYear(startDate, endDate)) {
+                                                        return `${format(startDate, 'MMM d')} – ${format(endDate, 'MMM d, yyyy')}`;
+                                                    }
+                                                    return `${format(startDate, 'MMM d, yyyy')} – ${format(endDate, 'MMM d, yyyy')}`;
+                                                }
+                                                return format(startDate, 'MMM d, yyyy');
+                                            })()}
+                                        </p>
+                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                                            {(() => {
+                                                if (!shoot.startTime) return 'Time not set';
+                                                const start = format(parseISO(shoot.startTime), 'h:mm a');
+                                                const end = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : '';
+                                                return end ? `${start} – ${end}` : start;
+                                            })()}
+                                        </p>
+                                    </>
                                 )}
                             </div>
+                        </div>
 
-                            {editingSection === 'location' ? (
-                                <div className="space-y-2 mt-1 animate-in fade-in duration-150">
-                                    <div>
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
-                                            Event Location
-                                        </label>
-                                        <select
-                                            value={formEventLocation}
-                                            onChange={(e) => setFormEventLocation(e.target.value)}
-                                            className="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white cursor-pointer"
+                        {/* 2. Location Tile */}
+                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 relative group/tile hover:border-purple-400/50 dark:hover:border-purple-500/40 transition-all shadow-2xs">
+                            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <MapPin size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Location</span>
+                                    {canEdit && editingSection !== 'location' && (
+                                        <button
+                                            onClick={() => startEditSection('location')}
+                                            className="opacity-0 group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
+                                            title="Edit Location"
                                         >
-                                            {EVENT_LOCATION_OPTIONS.map((opt) => (
-                                                <option key={opt} value={opt}>{opt}</option>
-                                            ))}
-                                        </select>
+                                            <Pencil size={11} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {editingSection === 'location' ? (
+                                    <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
+                                                Event Location
+                                            </label>
+                                            <select
+                                                value={formEventLocation}
+                                                onChange={(e) => setFormEventLocation(e.target.value)}
+                                                className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white cursor-pointer"
+                                            >
+                                                {EVENT_LOCATION_OPTIONS.map((opt) => (
+                                                    <option key={opt} value={opt}>{opt}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
+                                                Event Venue
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formEventVenue}
+                                                onChange={(e) => setFormEventVenue(e.target.value)}
+                                                placeholder="e.g. Adiyogi, Spanda Hall..."
+                                                className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-1 pt-0.5">
+                                            <button
+                                                onClick={() => saveEditSection('location')}
+                                                disabled={isSavingField}
+                                                className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
+                                            >
+                                                {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                                                Save
+                                            </button>
+                                            <button
+                                                onClick={cancelEditSection}
+                                                disabled={isSavingField}
+                                                className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
-                                            Event Venue
-                                        </label>
+                                ) : (
+                                    <>
+                                        <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={shoot.location || 'Location TBD'}>
+                                            {shoot.location ? shoot.location.split('•')[0].trim() : 'Location TBD'}
+                                        </p>
+                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate" title={shoot.location && shoot.location.includes('•') ? shoot.location.split('•').slice(1).join('•').trim() : (jiraDetails?.eventVenue || jiraDetails?.indoorOutdoor || 'Venue TBD')}>
+                                            {shoot.location && shoot.location.includes('•') ? shoot.location.split('•').slice(1).join('•').trim() : (jiraDetails?.eventVenue || jiraDetails?.indoorOutdoor || 'Venue TBD')}
+                                            {jiraDetails?.indoorOutdoor && !shoot.location?.includes(jiraDetails.indoorOutdoor) ? ` • ${jiraDetails.indoorOutdoor}` : ''}
+                                        </p>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 3. Point of Contact Tile */}
+                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 relative group/tile hover:border-emerald-400/50 dark:hover:border-emerald-500/40 transition-all shadow-2xs">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <UserIcon size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Point of Contact</span>
+                                    {canEdit && editingSection !== 'poc' && (
+                                        <button
+                                            onClick={() => startEditSection('poc')}
+                                            className="opacity-0 group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
+                                            title="Edit Point of Contact"
+                                        >
+                                            <Pencil size={11} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {editingSection === 'poc' ? (
+                                    <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
                                         <input
                                             type="text"
-                                            value={formEventVenue}
-                                            onChange={(e) => setFormEventVenue(e.target.value)}
-                                            placeholder="e.g. Adiyogi, Spanda Hall, Dhyanalinga..."
-                                            className="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white"
+                                            value={formPocName}
+                                            onChange={(e) => setFormPocName(e.target.value)}
+                                            placeholder="POC Name"
+                                            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
                                         />
+                                        <input
+                                            type="text"
+                                            value={formPocContact}
+                                            onChange={(e) => setFormPocContact(e.target.value)}
+                                            placeholder="POC Contact Number"
+                                            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                        />
+                                        <div className="flex items-center gap-1 pt-0.5">
+                                            <button
+                                                onClick={() => saveEditSection('poc')}
+                                                disabled={isSavingField}
+                                                className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
+                                            >
+                                                {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                                                Save
+                                            </button>
+                                            <button
+                                                onClick={cancelEditSection}
+                                                disabled={isSavingField}
+                                                className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 pt-0.5">
-                                        <button
-                                            onClick={() => saveEditSection('location')}
-                                            disabled={isSavingField}
-                                            className="px-2.5 py-1 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
-                                        >
-                                            {isSavingField ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                                            Save
-                                        </button>
-                                        <button
-                                            onClick={cancelEditSection}
-                                            disabled={isSavingField}
-                                            className="px-2 py-1 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
-                                    <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-white leading-tight truncate" title={shoot.location || 'Location TBD'}>
-                                        {shoot.location ? shoot.location.split('•')[0].trim() : 'Location TBD'}
-                                    </p>
-                                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium truncate">
-                                        {shoot.location && shoot.location.includes('•') ? shoot.location.split('•').slice(1).join('•').trim() : (jiraDetails?.eventVenue || jiraDetails?.indoorOutdoor || 'Venue TBD')}
-                                        {jiraDetails?.indoorOutdoor && !shoot.location?.includes(jiraDetails.indoorOutdoor) ? ` • ${jiraDetails.indoorOutdoor}` : ''}
-                                    </p>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 3. Point of Contact Tile */}
-                    <div className="p-4 sm:p-5 flex items-start gap-3.5 relative group/tile">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                            <UserIcon size={20} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-1 mb-0.5">
-                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Point of Contact</span>
-                                {canEdit && editingSection !== 'poc' && (
-                                    <button
-                                        onClick={() => startEditSection('poc')}
-                                        className="opacity-0 group-hover/tile:opacity-100 p-1 rounded-md hover:bg-gray-200 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
-                                        title="Edit Point of Contact"
-                                    >
-                                        <Pencil size={12} />
-                                    </button>
+                                ) : (
+                                    <>
+                                        <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={shoot.pocName || jiraDetails?.pocName || 'No POC'}>
+                                            {shoot.pocName || jiraDetails?.pocName || 'No POC'}
+                                        </p>
+                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title={shoot.pocContact || jiraDetails?.pocContact || '-'}>
+                                            {shoot.pocContact || jiraDetails?.pocContact || '-'}
+                                        </p>
+                                    </>
                                 )}
                             </div>
-
-                            {editingSection === 'poc' ? (
-                                <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
-                                    <input
-                                        type="text"
-                                        value={formPocName}
-                                        onChange={(e) => setFormPocName(e.target.value)}
-                                        placeholder="POC Name"
-                                        className="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={formPocContact}
-                                        onChange={(e) => setFormPocContact(e.target.value)}
-                                        placeholder="Phone or Email"
-                                        className="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1.5 text-gray-900 dark:text-white"
-                                    />
-                                    <div className="flex items-center gap-1.5 pt-0.5">
-                                        <button
-                                            onClick={() => saveEditSection('poc')}
-                                            disabled={isSavingField}
-                                            className="px-2.5 py-1 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
-                                        >
-                                            {isSavingField ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                                            Save
-                                        </button>
-                                        <button
-                                            onClick={cancelEditSection}
-                                            disabled={isSavingField}
-                                            className="px-2 py-1 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
-                                    <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-white leading-tight truncate" title={shoot.pocName || jiraDetails?.reporter || 'No POC'}>
-                                        {shoot.pocName || jiraDetails?.reporter || 'No POC'}
-                                    </p>
-                                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 font-mono truncate" title={shoot.pocContact || jiraDetails?.reporterEmail || ''}>
-                                        {shoot.pocContact || jiraDetails?.reporterEmail || (jiraDetails?.assignee ? `Assignee: ${jiraDetails.assignee}` : '-')}
-                                    </p>
-                                </>
-                            )}
                         </div>
-                    </div>
 
-                    {/* 4. Production Specs Tile */}
-                    <div className="p-4 sm:p-5 flex items-start gap-3.5">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-                            <Layers size={20} />
-                        </div>
-                        <div className="min-w-0">
-                            <span className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block mb-0.5">Production Specs</span>
-                            <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-white leading-tight truncate">
-                                {jiraDetails?.language || 'English'}
-                                {jiraDetails?.liveTranslation && jiraDetails.liveTranslation !== 'No Translation' && jiraDetails.liveTranslation !== 'No Live Translation' ? ` • Translation` : ''}
-                            </p>
-                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium truncate">
-                                {jiraDetails?.audienceSize ? `Audience: ${jiraDetails.audienceSize}` : 'Standard Video Coverage'}
-                            </p>
+                        {/* 4. Reporter Details Tile */}
+                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 hover:border-indigo-400/50 dark:hover:border-indigo-500/40 transition-all shadow-2xs">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <UserCheck size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block mb-0.5">Reporter Details</span>
+                                <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={jiraDetails?.reporter || 'Not Available'}>
+                                    {jiraDetails?.reporter || 'Not Available'}
+                                </p>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={jiraDetails?.reporterEmail || (jiraDetails?.assignee ? `Assignee: ${jiraDetails.assignee}` : '') || '-'}>
+                                    {jiraDetails?.reporterEmail || (jiraDetails?.assignee ? `Assignee: ${jiraDetails.assignee}` : '-')}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2150,22 +2165,22 @@ export default function ShootDetailsPage() {
 
             {/* Cancelled Banner */}
             {shoot.status === 'CANCELLED' && shoot.cancellationReason && (
-                <div className="rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-4 text-sm">
-                    <p className="font-bold uppercase tracking-wide text-red-700 dark:text-red-300 text-xs">Cancellation Reason</p>
-                    <p className="mt-1 text-red-900 dark:text-red-100 whitespace-pre-wrap">{shoot.cancellationReason}</p>
+                <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-3 text-xs sm:text-sm">
+                    <p className="font-bold uppercase tracking-wide text-red-700 dark:text-red-300 text-[10px]">Cancellation Reason</p>
+                    <p className="mt-0.5 text-red-900 dark:text-red-100 whitespace-pre-wrap">{shoot.cancellationReason}</p>
                 </div>
             )}
 
-            {/* 2-Column Responsive Layout: Left (People & Expenses) + Right (Checkouts, Meta & Activity) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                {/* Left Column (7 cols): Crew & Expenses */}
-                <div className="lg:col-span-7 space-y-5">
+            {/* 2-Column Responsive Layout: Left (Brief, Crew & Activity) + Right (Transactions & Expenses) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-start">
+                {/* Left Column (7 cols): Brief, Crew & Activity */}
+                <div className="lg:col-span-7 space-y-3.5 sm:space-y-4">
                     {/* Requester Notes & Requirements (Editable In-Place) */}
-                    <div className="rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs relative group/notes">
-                        <div className="flex items-center justify-between mb-2">
+                    <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs relative group/notes border-l-4 border-l-primary/70">
+                        <div className="flex items-center justify-between mb-1.5">
                             <div className="flex items-center gap-2">
-                                <MessageSquare size={16} className="text-primary" />
-                                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                <MessageSquare size={15} className="text-primary" />
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                     Requester Notes & Requirements
                                 </span>
                             </div>
@@ -2175,7 +2190,7 @@ export default function ShootDetailsPage() {
                                     className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all flex items-center gap-1 text-xs font-medium cursor-pointer"
                                     title="Edit Notes"
                                 >
-                                    <Pencil size={13} />
+                                    <Pencil size={11} />
                                     <span>Edit</span>
                                 </button>
                             )}
@@ -2188,35 +2203,35 @@ export default function ShootDetailsPage() {
                                     onChange={(e) => setFormDescription(e.target.value)}
                                     rows={4}
                                     placeholder="Enter shoot notes, requirements, or client brief..."
-                                    className="w-full text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-zinc-900/50 p-3 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary resize-y"
+                                    className="w-full text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-zinc-900/50 p-2.5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary resize-y"
                                     autoFocus
                                 />
                                 <div className="flex items-center gap-2 justify-end">
                                     <button
                                         onClick={cancelEditSection}
                                         disabled={isSavingField}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 cursor-pointer"
+                                        className="px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 cursor-pointer"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         onClick={() => saveEditSection('description')}
                                         disabled={isSavingField}
-                                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 shadow-xs cursor-pointer"
+                                        className="px-3 py-1 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 shadow-xs cursor-pointer"
                                     >
-                                        {isSavingField ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                                        {isSavingField ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                                         Save Notes
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-sm sm:text-base leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                            <p className="text-xs sm:text-[13px] leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
                                 {(() => {
                                     const text = (jiraDetails?.description !== undefined ? jiraDetails.description : shoot.description)?.trim() || '';
                                     const isPlaceholder = !text || text.startsWith('Jira Request') || text.startsWith('Auto-synced from Jira');
                                     if (!text || isPlaceholder) {
                                         return (
-                                            <span className="text-gray-400 italic text-xs sm:text-sm">No requester notes provided for this shoot. Click Edit to add details.</span>
+                                            <span className="text-gray-400 italic text-xs">No requester notes provided for this shoot. Click Edit to add details.</span>
                                         );
                                     }
                                     return text;
@@ -2225,51 +2240,51 @@ export default function ShootDetailsPage() {
                         )}
                     </div>
 
-                    {/* Crew Assignments (Clean 2-Column Grid with Comfortable Sizes & In-Place Add/Remove) */}
-                    <div className="rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-4">
+                    {/* Crew Assignments (Clean Grid with Comfortable Sizes & In-Place Add/Remove) */}
+                    <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                                <Users size={18} className="text-primary" />
-                                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
+                            <div className="flex items-center gap-2">
+                                <Users size={16} className="text-primary" />
+                                <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">
                                     {shoot.status === 'DRAFT' ? `Tentative ${labels.teamPlural}` : `${labels.teamPlural} Assignments`}
                                 </h2>
-                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary">
                                     {assignments.length}
                                 </span>
                             </div>
 
                             {canEdit && (
                                 <button
-                                    onClick={openCrewModal}
-                                    className="text-xs sm:text-sm font-semibold text-primary hover:text-primary/80 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/15 transition-colors cursor-pointer"
+                                    onClick={() => openCrewModal()}
+                                    className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/15 transition-colors cursor-pointer"
                                 >
-                                    <Plus size={15} />
+                                    <Plus size={13} />
                                     <span>Assign {labels.teamPlural}</span>
                                 </button>
                             )}
                         </div>
 
                         {assignments.length === 0 ? (
-                            <div className="text-center py-8 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-dashed border-gray-200 dark:border-gray-800">
-                                <Users size={28} className="mx-auto text-gray-400 mb-2" />
-                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No {labels.teamPluralLower} assigned yet</p>
-                                <p className="text-xs text-gray-400 mt-1 mb-3">
+                            <div className="text-center py-5 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-dashed border-gray-200 dark:border-gray-800">
+                                <Users size={22} className="mx-auto text-gray-400 mb-1" />
+                                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">No {labels.teamPluralLower} assigned yet</p>
+                                <p className="text-[11px] text-gray-400 mt-0.5 mb-2">
                                     {shoot.status === 'DRAFT'
                                         ? `Add tentative ${labels.teamPluralLower} before publishing this ${labels.workLower}`
                                         : `Assign members to organize this ${labels.workLower}`}
                                 </p>
                                 {canEdit && (
                                     <button
-                                        onClick={openCrewModal}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors cursor-pointer shadow-xs"
+                                        onClick={() => openCrewModal()}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors cursor-pointer shadow-2xs"
                                     >
-                                        <Plus size={14} />
+                                        <Plus size={12} />
                                         Assign {labels.teamPlural}
                                     </button>
                                 )}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div className={assignments.length === 1 ? 'grid grid-cols-1' : 'grid grid-cols-1 md:grid-cols-2 gap-2'}>
                                 {assignments.map((assignment) => {
                                     const assignedUser = users.find(u => u.id === assignment.userId);
                                     if (!assignedUser) return null;
@@ -2279,36 +2294,42 @@ export default function ShootDetailsPage() {
                                     return (
                                         <div
                                             key={assignment.id}
-                                            className="flex items-center justify-between p-3 px-3.5 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80 hover:border-primary/40 transition-colors group"
+                                            className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80 hover:border-primary/40 transition-colors group gap-2"
                                         >
-                                            <div className="flex items-center gap-3 min-w-0">
+                                            <div className="flex items-center gap-2.5 min-w-0">
                                                 <div className="relative shrink-0">
                                                     <div
-                                                        className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold ${
+                                                        className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
                                                             isIncharge
                                                                 ? 'bg-amber-500 text-white shadow-xs'
                                                                 : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                                                         }`}
                                                     >
-                                                        {assignedUser.name.charAt(0)}
+                                                        {assignedUser.name.charAt(0).toUpperCase()}
                                                     </div>
                                                     {isIncharge && (
-                                                        <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-[8px] text-amber-950 font-bold" title="Lead Incharge">★</span>
+                                                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-[8px] text-amber-950 font-bold" title="Lead Incharge">★</span>
                                                     )}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="font-semibold text-xs sm:text-sm text-gray-900 dark:text-white truncate">
+                                                    <p className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white" title={assignedUser.name}>
                                                         {assignedUser.name}
                                                     </p>
-                                                    <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                                                        {getRoleLabel(assignedUser.role) || 'Crew'} {assignedUser.phone ? `• ${assignedUser.phone}` : ''}
+                                                    <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                                        <span>{getRoleLabel(assignedUser.role) || 'Crew'}</span>
+                                                        {assignedUser.phone && (
+                                                            <>
+                                                                <span>•</span>
+                                                                <span className="font-mono">{assignedUser.phone}</span>
+                                                            </>
+                                                        )}
                                                     </p>
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                            <div className="flex items-center gap-1 shrink-0 ml-1">
                                                 <span
-                                                    className={`text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 shrink-0 ${roleInfo.bg}`}
+                                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 shrink-0 ${roleInfo.bg}`}
                                                 >
                                                     <span>{roleInfo.icon}</span>
                                                     <span>{roleInfo.label}</span>
@@ -2317,10 +2338,10 @@ export default function ShootDetailsPage() {
                                                 {canEdit && (
                                                     <button
                                                         onClick={() => handleRemoveSingleCrew(assignment.id, assignedUser.name)}
-                                                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all cursor-pointer"
+                                                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all cursor-pointer"
                                                         title={`Remove ${assignedUser.name}`}
                                                     >
-                                                        <Trash2 size={14} />
+                                                        <Trash2 size={12} />
                                                     </button>
                                                 )}
                                             </div>
@@ -2332,32 +2353,32 @@ export default function ShootDetailsPage() {
                     </div>
 
                     {/* Unified Activity & Discussions Hub (Main Stream - Left Column) */}
-                    <div className="rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-4">
+                    <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3.5">
                         {/* Hub Header */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 pb-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 pb-2.5">
                             <div className="flex items-center gap-2">
                                 <div className="w-5 h-5 flex items-center justify-center text-blue-600">
                                     <JiraIcon className="w-4 h-4" />
                                 </div>
-                                <h3 className="text-sm font-bold tracking-tight text-gray-900 dark:text-white">
+                                <h3 className="text-xs sm:text-sm font-bold tracking-tight text-gray-900 dark:text-white">
                                     Activity & Discussions
                                 </h3>
                                 {pinnedCommentIds.length > 0 && activityTab === 'COMMENTS' && (
-                                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/50">
-                                        <Pin size={10} className="fill-amber-500" />
+                                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/50">
+                                        <Pin size={9} className="fill-amber-500" />
                                         {pinnedCommentIds.length} Pinned
                                     </span>
                                 )}
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                                 {/* Sort Order Toggle */}
                                 <button
                                     onClick={() => setCommentSortOrder(prev => prev === 'NEWEST_FIRST' ? 'OLDEST_FIRST' : 'NEWEST_FIRST')}
-                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                                     title="Toggle sort order"
                                 >
-                                    <ArrowUpDown size={13} />
+                                    <ArrowUpDown size={12} />
                                     <span>{commentSortOrder === 'NEWEST_FIRST' ? 'Newest' : 'Oldest'}</span>
                                 </button>
 
@@ -2365,19 +2386,19 @@ export default function ShootDetailsPage() {
                                 <button
                                     onClick={() => { fetchJiraComments(); fetchJiraHistory(); }}
                                     disabled={isLoadingComments || isLoadingHistory}
-                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                                    className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
                                     title="Refresh Activity & Comments"
                                 >
-                                    <RefreshCw size={14} className={isLoadingComments || isLoadingHistory ? 'animate-spin' : ''} />
+                                    <RefreshCw size={13} className={isLoadingComments || isLoadingHistory ? 'animate-spin' : ''} />
                                 </button>
                             </div>
                         </div>
 
-                        {/* Activity Tabs */}
-                        <div className="flex items-center gap-1 bg-gray-100/70 dark:bg-zinc-800/60 p-1 rounded-xl text-xs font-semibold">
+                        {/* Activity Tabs (Single-line, no text wrapping) */}
+                        <div className="flex items-center gap-1 bg-gray-100/70 dark:bg-zinc-800/60 p-1 rounded-xl text-xs font-semibold overflow-x-auto scrollbar-none">
                             <button
                                 onClick={() => setActivityTab('COMMENTS')}
-                                className={`flex-1 py-1.5 px-3 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                                className={`flex-1 py-1.5 px-2.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap text-xs ${
                                     activityTab === 'COMMENTS'
                                         ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs font-bold'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
@@ -2393,7 +2414,7 @@ export default function ShootDetailsPage() {
                             {shoot.jiraTicketId && (
                                 <button
                                     onClick={() => setActivityTab('JIRA_HISTORY')}
-                                    className={`flex-1 py-1.5 px-3 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                                    className={`flex-1 py-1.5 px-2.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap text-xs ${
                                         activityTab === 'JIRA_HISTORY'
                                             ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs font-bold'
                                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
@@ -2411,7 +2432,7 @@ export default function ShootDetailsPage() {
 
                             <button
                                 onClick={() => setActivityTab('APP_LOGS')}
-                                className={`flex-1 py-1.5 px-3 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                                className={`flex-1 py-1.5 px-2.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap text-xs ${
                                     activityTab === 'APP_LOGS'
                                         ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs font-bold'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
@@ -2426,7 +2447,7 @@ export default function ShootDetailsPage() {
 
                             <button
                                 onClick={() => setActivityTab('ALL')}
-                                className={`flex-1 py-1.5 px-3 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                                className={`py-1.5 px-3 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap text-xs ${
                                     activityTab === 'ALL'
                                         ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs font-bold'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
@@ -2549,31 +2570,40 @@ export default function ShootDetailsPage() {
                                                         isPinned ? 'p-3 rounded-xl bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 my-1' : ''
                                                     }`}
                                                 >
-                                                    <div className="flex items-center justify-between gap-1">
-                                                        <div className="flex items-center gap-2 min-w-0">
+                                                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                                                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap text-xs sm:text-sm">
                                                             <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold flex items-center justify-center text-[11px] shrink-0">
                                                                 {comment.author.displayName.charAt(0).toUpperCase()}
                                                             </div>
-                                                            <span className="font-semibold text-gray-900 dark:text-white truncate">
+                                                            <span className="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate">
                                                                 {comment.author.displayName}
                                                             </span>
-                                                            <span className="text-xs text-gray-400 shrink-0">added a comment</span>
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">added a comment</span>
+                                                            <span className="text-xs text-gray-400 shrink-0">-</span>
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                                                                {comment.created ? format(parseISO(comment.created), 'd/MMM/yy h:mm a') : ''}
+                                                            </span>
+                                                            {comment.updated && Math.abs(new Date(comment.updated).getTime() - new Date(comment.created).getTime()) > 1000 && (
+                                                                <span
+                                                                    className="text-xs text-gray-400 dark:text-gray-500 shrink-0 hover:text-gray-600 dark:hover:text-gray-300 cursor-help"
+                                                                    title={`Edited${comment.updated ? ` on ${format(parseISO(comment.updated), 'd/MMM/yy h:mm a')}` : ''}`}
+                                                                >
+                                                                    - edited
+                                                                </span>
+                                                            )}
                                                             {comment.isInternal && (
-                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shrink-0">
+                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shrink-0 ml-1">
                                                                     <Lock size={9} />
                                                                     Internal
                                                                 </span>
                                                             )}
                                                             {isPinned && (
-                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 shrink-0">
+                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 shrink-0 ml-1">
                                                                     <Pin size={9} className="fill-purple-600" />
                                                                     Pinned
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <span className="text-xs text-gray-400 shrink-0">
-                                                            {comment.created ? format(parseISO(comment.created), 'MMM d, h:mm a') : ''}
-                                                        </span>
                                                     </div>
 
                                                     {isEditingThis ? (
@@ -2737,25 +2767,34 @@ export default function ShootDetailsPage() {
                                         if (item.type === 'COMMENT') {
                                             return (
                                                 <div key={item.id} className="pt-3.5 first:pt-0 space-y-1.5 text-xs sm:text-sm">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold flex items-center justify-center text-[11px]">
+                                                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                                                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap text-xs sm:text-sm">
+                                                            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold flex items-center justify-center text-[11px] shrink-0">
                                                                 {item.comment.author.displayName.charAt(0).toUpperCase()}
                                                             </div>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">
+                                                            <span className="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate">
                                                                 {item.comment.author.displayName}
                                                             </span>
-                                                            <span className="text-xs text-gray-400">commented</span>
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">added a comment</span>
+                                                            <span className="text-xs text-gray-400 shrink-0">-</span>
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                                                                {format(parseISO(item.timestamp), 'd/MMM/yy h:mm a')}
+                                                            </span>
+                                                            {item.comment.updated && Math.abs(new Date(item.comment.updated).getTime() - new Date(item.comment.created).getTime()) > 1000 && (
+                                                                <span
+                                                                    className="text-xs text-gray-400 dark:text-gray-500 shrink-0 hover:text-gray-600 dark:hover:text-gray-300 cursor-help"
+                                                                    title={`Edited${item.comment.updated ? ` on ${format(parseISO(item.comment.updated), 'd/MMM/yy h:mm a')}` : ''}`}
+                                                                >
+                                                                    - edited
+                                                                </span>
+                                                            )}
                                                             {item.comment.isInternal && (
-                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shrink-0 ml-1">
                                                                     <Lock size={9} />
                                                                     Internal
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <span className="text-xs text-gray-400">
-                                                            {format(parseISO(item.timestamp), 'MMM d, h:mm a')}
-                                                        </span>
                                                     </div>
                                                     <div className="pl-8 text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
                                                         {item.comment.body.replace(/^\[Production App • [^\]]+\]\s*/i, '')}
@@ -2821,46 +2860,46 @@ export default function ShootDetailsPage() {
                 </div>
 
                 {/* Right Column (5 cols): Linked Transactions, Project Expenses & Shoot Overview */}
-                <div className="lg:col-span-5 space-y-5">
+                <div className="lg:col-span-5 space-y-3.5 sm:space-y-4">
                     {/* Google Calendar Banner (if not synced and confirmed) */}
                     {!shoot.googleEventId && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && shoot.status === 'CONFIRMED' && (
-                        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 space-y-2.5">
+                        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3.5 space-y-2">
                             <div className="flex items-center gap-2">
-                                <Calendar size={16} className="text-primary" />
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">Google Calendar Sync</p>
+                                <Calendar size={15} className="text-primary" />
+                                <p className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">Google Calendar Sync</p>
                             </div>
-                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Invite assigned crew and sync this shoot to calendar.</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Invite assigned crew and sync this shoot to calendar.</p>
                             <Button
                                 size="sm"
                                 onClick={handleSyncToCalendar}
                                 disabled={isSyncing}
-                                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-2 h-9 text-xs sm:text-sm rounded-xl font-semibold cursor-pointer"
+                                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-8 text-xs rounded-xl font-semibold cursor-pointer"
                             >
-                                {isSyncing ? <Loader2 size={15} className="animate-spin" /> : <Calendar size={15} />}
+                                {isSyncing ? <Loader2 size={13} className="animate-spin" /> : <Calendar size={13} />}
                                 Sync to Calendar
                             </Button>
                         </div>
                     )}
 
                     {/* Linked Equipment Transactions */}
-                    <div className="rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2.5">
+                    <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3">
+                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
                             <div className="flex items-center gap-2">
-                                <Video size={17} className="text-primary" />
-                                <h2 className="text-base font-bold text-gray-900 dark:text-white">Linked Transactions</h2>
+                                <Video size={16} className="text-primary" />
+                                <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">Linked Transactions</h2>
                             </div>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                                 {linkedTransactions.length} Checkouts
                             </span>
                         </div>
 
                         {linkedTransactions.length === 0 ? (
-                            <div className="text-center py-6 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-dashed border-gray-200 dark:border-gray-800">
-                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No equipment checkouts linked</p>
-                                <p className="text-xs text-gray-400 mt-1">Transactions linked to this {labels.workLower} will appear here.</p>
+                            <div className="text-center py-5 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-dashed border-gray-200 dark:border-gray-800">
+                                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">No equipment checkouts linked</p>
+                                <p className="text-[11px] text-gray-400 mt-0.5">Transactions linked to this {labels.workLower} will appear here.</p>
                             </div>
                         ) : (
-                            <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
+                            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
                                 {linkedTransactions.map((txn) => {
                                     const primaryUser = users.find(u => u.id === txn.userId);
                                     return (
@@ -2869,24 +2908,24 @@ export default function ShootDetailsPage() {
                                             href={`/transactions/${txn.id}?returnTo=${encodeURIComponent(`/shoots/${shoot.id}`)}&returnLabel=${encodeURIComponent(`Back to ${shoot.title || labels.workSingular}`)}`}
                                             className="block group"
                                         >
-                                            <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80 group-hover:border-primary/40 transition-colors">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                                                        <Video size={16} />
+                                            <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80 group-hover:border-primary/40 transition-colors">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                                                        <Video size={14} />
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <h4 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white group-hover:text-primary transition-colors truncate">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <h4 className="font-bold text-xs text-gray-900 dark:text-white group-hover:text-primary transition-colors truncate">
                                                                 {txn.project || 'Unspecified Project'}
                                                             </h4>
-                                                            <span className="text-xs font-mono text-gray-400">#{txn.id}</span>
+                                                            <span className="text-[11px] font-mono text-gray-400">#{txn.id}</span>
                                                         </div>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                                             {txn.items.length} items • {primaryUser?.name || 'Unknown User'} • {format(parseISO(txn.timestampOut), 'MMM d, h:mm a')}
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <Badge variant={txn.status === 'OPEN' ? 'success' : 'default'} className="px-2 py-0.5 text-xs font-bold shrink-0 ml-2">
+                                                <Badge variant={txn.status === 'OPEN' ? 'success' : 'default'} className="px-1.5 py-0.5 text-[10px] font-bold shrink-0 ml-2">
                                                     {txn.status}
                                                 </Badge>
                                             </div>
@@ -2899,11 +2938,11 @@ export default function ShootDetailsPage() {
 
                     {/* Project Expenses (Sidebar Card) */}
                     {((user?.role && ['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user.role)) || user?.canManageExpenses) && (
-                        <div className="rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3.5">
-                            <div className="flex items-center justify-between flex-wrap gap-2 border-b border-gray-100 dark:border-gray-800 pb-2.5">
+                        <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3">
+                            <div className="flex items-center justify-between flex-wrap gap-2 border-b border-gray-100 dark:border-gray-800 pb-2">
                                 <div className="flex items-center gap-2">
-                                    <Receipt size={17} className="text-emerald-500" />
-                                    <h2 className="text-base font-bold text-gray-900 dark:text-white">Project Expenses</h2>
+                                    <Receipt size={16} className="text-emerald-500" />
+                                    <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">Project Expenses</h2>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
@@ -2917,7 +2956,7 @@ export default function ShootDetailsPage() {
                             <div className="flex items-center justify-between gap-2">
                                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Category</span>
                                 <select
-                                    className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer"
+                                    className="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer"
                                     value={selectedCampaign || ""}
                                     onChange={(e) => handleCampaignChange(e.target.value)}
                                 >
@@ -2932,11 +2971,11 @@ export default function ShootDetailsPage() {
                             </div>
 
                             {/* 5 Fixed Expense Fields */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                                 {FIXED_EXPENSE_TYPES.map((type) => (
-                                    <div key={type} className="flex items-center justify-between p-2 px-3 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80 text-xs">
-                                        <span className="font-semibold text-gray-700 dark:text-gray-300">{type}</span>
-                                        <div className="relative w-24">
+                                    <div key={type} className="flex items-center justify-between p-2 px-2.5 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80 text-xs">
+                                        <span className="font-semibold text-gray-700 dark:text-gray-300 text-xs">{type}</span>
+                                        <div className="relative w-20 sm:w-24">
                                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium">₹</span>
                                             <input
                                                 type="number"
@@ -2962,16 +3001,16 @@ export default function ShootDetailsPage() {
                     )}
 
                     {/* Quick Metadata Details Card */}
-                    <div className="rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800 pb-2.5">
+                    <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-2.5">
+                        <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800 pb-2">
                             Shoot Overview
                         </h3>
-                        <div className="space-y-2.5 text-xs sm:text-sm">
-                            <div className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/40">
+                        <div className="space-y-2 text-xs">
+                            <div className="flex items-center justify-between py-0.5 border-b border-gray-50 dark:border-gray-800/40">
                                 <span className="text-gray-500 dark:text-gray-400">Department</span>
                                 <span className="font-semibold text-gray-900 dark:text-white">{pageDepartment?.name || 'Video Production'}</span>
                             </div>
-                            <div className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/40">
+                            <div className="flex items-center justify-between py-0.5 border-b border-gray-50 dark:border-gray-800/40">
                                 <span className="text-gray-500 dark:text-gray-400">Created Date</span>
                                 <span className="font-medium text-gray-800 dark:text-gray-200">
                                     {shoot.createdAt ? format(parseISO(shoot.createdAt), 'MMM d, yyyy') : '-'}
@@ -2979,11 +3018,11 @@ export default function ShootDetailsPage() {
                             </div>
                             {jiraDetails && (
                                 <>
-                                    <div className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/40">
+                                    <div className="flex items-center justify-between py-0.5 border-b border-gray-50 dark:border-gray-800/40">
                                         <span className="text-gray-500 dark:text-gray-400">Jira Priority</span>
                                         <span className="font-semibold text-gray-800 dark:text-gray-200">{jiraDetails.priority || 'Medium'}</span>
                                     </div>
-                                    <div className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800/40">
+                                    <div className="flex items-center justify-between py-0.5 border-b border-gray-50 dark:border-gray-800/40">
                                         <span className="text-gray-500 dark:text-gray-400">Jira Assignee</span>
                                         <span className="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[140px] text-right">{jiraDetails.assignee || '-'}</span>
                                     </div>
@@ -3043,7 +3082,11 @@ export default function ShootDetailsPage() {
             {/* Dedicated High-Performance Crew Assignment Modal */}
             <CrewAssignmentModal
                 isOpen={isCrewModalOpen}
-                onClose={() => setIsCrewModalOpen(false)}
+                onClose={() => {
+                    setPendingStatusAfterCrew(null);
+                    setIsCrewModalOpen(false);
+                }}
+                targetStatus={pendingStatusAfterCrew}
                 shoot={shoot}
                 users={users}
                 allAssignments={allAssignments}
@@ -3070,7 +3113,29 @@ export default function ShootDetailsPage() {
                     await queryClient.invalidateQueries({ queryKey: ['assignments'] });
                     await queryClient.invalidateQueries({ queryKey: ['assignmentSegments'] });
                     await queryClient.invalidateQueries({ queryKey: ['shoots'] });
-                    showToast('Crew assignments updated!', 'success');
+
+                    if (pendingStatusAfterCrew && newIds.length > 0) {
+                        const target = pendingStatusAfterCrew;
+                        setPendingStatusAfterCrew(null);
+                        await handleUpdateStatus(target, newIds);
+                    } else {
+                        // If shoot is already in an active confirmed/ready status with Jira ticket, edit the Jira comment in place
+                        if (shoot.jiraTicketId && (shoot.status === 'READY_FOR_SHOOT' || shoot.status === 'CONFIRMED' || shoot.status === 'SHOOT_IN_PROGRESS')) {
+                            const assignedUsers = newIds
+                                .map(userId => users.find(u => u.id === userId))
+                                .filter((u): u is User => Boolean(u));
+
+                            await syncJiraCameramenComment({
+                                ticketKey: shoot.jiraTicketId,
+                                assignedUsers,
+                                deptTitle: pageDepartment?.name,
+                                authorName: user?.name || 'System',
+                                existingComments: jiraComments
+                            }).catch(err => console.debug('[Jira Comment Edit Sync Error]:', err));
+                            fetchJiraComments();
+                        }
+                        showToast('Crew assignments updated!', 'success');
+                    }
                 }}
             />
 

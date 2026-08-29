@@ -29,8 +29,8 @@ const customFields = () => ({
     startTime: process.env.JIRA_FIELD_START_TIME || 'customfield_63400',
     endTime: process.env.JIRA_FIELD_END_TIME || 'customfield_63401',
     location: process.env.JIRA_FIELD_LOCATION || 'customfield_63402',
-    pocName: process.env.JIRA_FIELD_POC_NAME || '',
-    pocContact: process.env.JIRA_FIELD_POC_CONTACT || '',
+    pocName: process.env.JIRA_FIELD_POC_NAME || 'customfield_10200',
+    pocContact: process.env.JIRA_FIELD_POC_CONTACT || 'customfield_53800',
     crew: process.env.JIRA_FIELD_CREW || '',
 });
 
@@ -198,8 +198,8 @@ export const normaliseIssue = (issue: RawIssue): JiraTicket => {
         location: combinedLocation,
         eventLocation,
         eventVenue,
-        pocName: fieldText(f, cf.pocName) || (f.reporter as { displayName?: string } | undefined)?.displayName || '',
-        pocContact: fieldText(f, cf.pocContact) || '',
+        pocName: fieldText(f, 'customfield_10200') || fieldText(f, cf.pocName) || '',
+        pocContact: fieldText(f, 'customfield_53800') || fieldText(f, cf.pocContact) || '',
         startTime: fieldText(f, cf.startTime) || '',
         endTime: fieldText(f, cf.endTime) || (f.duedate as string) || '',
         crewString: fieldText(f, cf.crew) || '',
@@ -228,6 +228,8 @@ export interface JiraIssueUpdateInput {
     startTime?: string; // ISO date string
     endTime?: string; // ISO date string
     title?: string;
+    pocName?: string;
+    pocContact?: string;
 }
 
 export function formatJiraDateTime(dateStr: string): string {
@@ -278,6 +280,12 @@ export const updateJiraIssue = async (
     }
     if (updates.endTime !== undefined && updates.endTime) {
         fields['customfield_63401'] = formatJiraDateTime(updates.endTime);
+    }
+    if (updates.pocName !== undefined) {
+        fields['customfield_10200'] = updates.pocName;
+    }
+    if (updates.pocContact !== undefined) {
+        fields['customfield_53800'] = updates.pocContact;
     }
 
     if (Object.keys(fields).length === 0) {

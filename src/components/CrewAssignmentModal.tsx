@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { User, Shoot, Assignment, Leave } from '@/types';
+import { User, Shoot, ShootStatus, Assignment, Leave } from '@/types';
 import { Button } from '@/components/Button';
 import {
     Search,
@@ -81,6 +81,7 @@ export interface CrewAssignmentModalProps {
     isOpen: boolean;
     onClose: () => void;
     shoot: Shoot;
+    targetStatus?: ShootStatus | null;
     users: User[];
     allAssignments: Assignment[];
     allShoots: Shoot[];
@@ -168,6 +169,7 @@ function CrewAssignmentModalInner({
     isOpen,
     onClose,
     shoot,
+    targetStatus,
     users,
     allAssignments,
     allShoots,
@@ -839,6 +841,11 @@ function CrewAssignmentModalInner({
                                     <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary text-white shrink-0 shadow-2xs">
                                         {selectedIds.length} Assigned
                                     </span>
+                                    {(targetStatus === 'READY_FOR_SHOOT' || targetStatus === 'CONFIRMED') && (
+                                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 shrink-0 animate-in fade-in duration-200">
+                                            → Ready for Shoot
+                                        </span>
+                                    )}
                                 </div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                     {shoot.startTime ? format(parseISO(shoot.startTime), 'EEE, MMM d, yyyy • h:mm a') : 'Schedule TBD'}
@@ -1520,7 +1527,12 @@ function CrewAssignmentModalInner({
                             disabled={isSaving}
                             className="px-6 py-2 rounded-xl text-xs sm:text-sm font-bold bg-primary text-white hover:bg-primary/90 shadow-xs hover:shadow-primary/20"
                         >
-                            {isSaving ? 'Saving...' : `Save Assignments (${selectedIds.length})`}
+                            {isSaving
+                                ? 'Saving...'
+                                : (targetStatus === 'READY_FOR_SHOOT' || targetStatus === 'CONFIRMED')
+                                    ? `Save & Set Ready for Shoot (${selectedIds.length})`
+                                    : `Save Assignments (${selectedIds.length})`
+                            }
                         </Button>
                     </div>
                 </div>

@@ -142,13 +142,41 @@ export const Header = () => {
             });
         }
 
-        return <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">VP App</span>;
+        const routeTitles: Record<string, string> = {
+            '/shoots': labels.workPlural,
+            '/inventory': 'Inventory',
+            '/dashboard': 'Dashboard',
+            '/checkout': 'Checkout',
+            '/returns': 'Returns',
+            '/transactions': 'Transactions',
+            '/verification': 'Verification',
+            '/assets': 'Data Assets',
+            '/reports': 'Data Report',
+            '/calendar': 'Calendar',
+            '/leaves': 'Leaves',
+            '/admin/users': 'Users',
+            '/admin/departments': 'Departments',
+            '/admin/whatsapp-hub': 'WhatsApp Hub',
+            '/admin/activity-logs': 'Activity Logs',
+            '/profile': 'Profile',
+        };
+
+        const currentTitle = routeTitles[pathname || ''];
+        if (currentTitle) {
+            return (
+                <div className="flex items-center gap-2">
+                    <h1 className="font-bold text-gray-900 dark:text-gray-100 text-[15px] tracking-tight">{currentTitle}</h1>
+                </div>
+            );
+        }
+
+        return <span className="font-semibold text-[#1d1d1f] text-[15px] dark:text-gray-200">{department?.name || 'VP App'}</span>;
     };
 
     return (
         // Desktop only - mobile uses MobileHeader component
-        <header className={`h-[44px] fixed top-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#f5f5f7] px-4 hidden md:flex items-center justify-between transition-[left] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[left] ${isCollapsed ? 'left-[72px]' : 'left-[260px]'
-            } pl-6 dark:bg-[#2c2c2e]/80 dark:border-[#3a3a3c]`}>
+        <header className={`h-[44px] fixed top-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#f5f5f7] px-4 hidden md:flex items-center justify-between transition-[left] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[left] ${isCollapsed ? 'left-[62px] 2xl:left-[70px]' : 'left-[228px] 2xl:left-[255px]'
+            } pl-4 sm:pl-6 dark:bg-[#2c2c2e]/80 dark:border-[#3a3a3c]`}>
             {/* Page title / Breadcrumb navigation area */}
             <div className="flex-1 flex items-center">
                 {renderNavTitle()}

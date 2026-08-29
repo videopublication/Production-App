@@ -81,9 +81,9 @@ export const generateShootWhatsAppPayload = (
                     if (!mentions.includes(jid)) {
                         mentions.push(jid);
                     }
-                    message += `- @${formattedPhone} (${user.name}) ${role}\n`;
+                    message += `- ${user.name} (@${formattedPhone})${role ? ` ${role}` : ''}\n`;
                 } else {
-                    message += `- @${user.name} ${role}\n`;
+                    message += `- ${user.name}${role ? ` ${role}` : ''}\n`;
                 }
             }
         });
@@ -141,7 +141,7 @@ export const generateBulkShootsWhatsAppPayload = (
                         if (!allMentions.includes(jid)) {
                             allMentions.push(jid);
                         }
-                        crewNames.push(`@${formattedPhone} (${u.name})`);
+                        crewNames.push(`${u.name} (@${formattedPhone})`);
                     } else {
                         crewNames.push(u.name);
                     }

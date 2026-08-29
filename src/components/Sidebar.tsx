@@ -63,34 +63,36 @@ export const Sidebar = () => {
             {/* Desktop only - hidden on mobile (bottom tabs used instead) */}
             <aside className={`
                 hidden md:flex fixed top-0 left-0 h-screen bg-card dark:bg-[#2c2c2e] z-30 transition-[width] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[width] flex-col border-r border-border dark:border-[#3a3a3c]
-                ${isCollapsed ? 'w-[72px]' : 'w-[260px]'}
+                ${isCollapsed ? 'w-[62px] 2xl:w-[70px]' : 'w-[228px] 2xl:w-[255px]'}
             `}>
-                {/* Logo & Top Expander / Toggle Button (Single unified row h-16) */}
-                <div className={`h-16 flex items-center border-b border-border dark:border-[#3a3a3c] shrink-0 ${isCollapsed ? 'justify-center px-0' : 'px-4 justify-between'}`}>
+                {/* Logo & Top Expander / Toggle Button (Single unified row h-13 on laptops, h-16 on 2xl screens) */}
+                <div className={`h-13 2xl:h-16 flex items-center border-b border-border dark:border-[#3a3a3c] shrink-0 ${isCollapsed ? 'justify-center px-0' : 'px-3 2xl:px-4 justify-between'}`}>
                     {isCollapsed ? (
                         <button
                             onClick={toggleCollapsed}
                             onMouseEnter={(e) => showTooltip('Expand sidebar', e)}
                             onMouseLeave={hideTooltip}
-                            className="w-11 h-11 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer group"
+                            className="w-9.5 h-9.5 2xl:w-11 2xl:h-11 rounded-lg 2xl:rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer group"
                             title="Expand sidebar"
                         >
-                            <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg className="w-4.5 h-4.5 2xl:w-5 2xl:h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <rect width="18" height="18" x="3" y="3" rx="2" />
                                 <path d="M9 3v18" />
                             </svg>
                         </button>
                     ) : (
                         <>
-                            <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center flex-shrink-0 shadow-2xs">
-                                    <svg className="w-5 h-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-1">
+                                <div className="w-7.5 h-7.5 2xl:w-9 2xl:h-9 bg-primary rounded-lg 2xl:rounded-xl flex items-center justify-center flex-shrink-0 shadow-2xs">
+                                    <svg className="w-4 h-4 2xl:w-5 2xl:h-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                     </svg>
                                 </div>
-                                <span className="font-semibold text-[17px] text-foreground truncate max-w-[145px]">
-                                    {department?.name || 'VP App'}
-                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <span className="font-bold text-[13.5px] 2xl:text-[15px] text-foreground tracking-tight leading-tight block truncate" title={department?.name || 'VP App'}>
+                                        {department?.name || 'VP App'}
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Top Panel Collapse Toggle */}
@@ -98,10 +100,10 @@ export const Sidebar = () => {
                                 onClick={toggleCollapsed}
                                 onMouseEnter={(e) => showTooltip('Collapse sidebar', e)}
                                 onMouseLeave={hideTooltip}
-                                className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer"
+                                className="p-1.5 2xl:p-2 rounded-lg 2xl:rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer shrink-0"
                                 title="Collapse sidebar"
                             >
-                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg className="w-4 h-4 2xl:w-5 2xl:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <rect width="18" height="18" x="3" y="3" rx="2" />
                                     <path d="M9 3v18" />
                                 </svg>
@@ -110,29 +112,29 @@ export const Sidebar = () => {
                     )}
                 </div>
 
-                {/* Navigation */}
-                <nav className={`flex-1 py-3 overflow-y-auto ${isCollapsed ? 'px-3' : 'px-4'}`}>
+                {/* Navigation (Hidden Scrollbar across all browsers, comfortable reading font) */}
+                <nav className={`flex-1 py-2 2xl:py-3 overflow-y-auto no-scrollbar scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isCollapsed ? 'px-1.5 2xl:px-2' : 'px-2 2xl:px-2.5'}`}>
                     {navItems.map((item) => (
                         item.roles.includes(user.role) &&
                         (!item.feature || hasFeature(item.feature)) && (
                             <Link
                                 key={item.path}
                                 href={item.path}
-                                className="block mb-1.5"
+                                className="block mb-0.5 2xl:mb-1"
                                 onMouseEnter={(e) => showTooltip(item.name, e)}
                                 onMouseLeave={hideTooltip}
                             >
-                                <div className={`flex items-center rounded-xl transition-colors duration-150 ${isCollapsed
-                                    ? 'justify-center w-11 h-11 mx-auto'
-                                    : 'gap-3 px-3 py-2.5'
+                                <div className={`flex items-center rounded-lg 2xl:rounded-xl transition-colors duration-150 ${isCollapsed
+                                    ? 'justify-center w-9.5 h-9.5 2xl:w-11 2xl:h-11 mx-auto'
+                                    : 'gap-2.5 2xl:gap-3 px-2.5 py-1.75 2xl:px-3 2xl:py-2.5'
                                     } ${isActive(item.path)
-                                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                                        ? 'bg-primary text-primary-foreground shadow-2xs font-semibold'
                                         : 'text-foreground hover:bg-muted dark:hover:bg-[#3a3a3c]'
                                     }`}>
-                                    <svg className="w-[20px] h-[20px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <svg className="w-[18px] h-[18px] 2xl:w-[20px] 2xl:h-[20px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                                     </svg>
-                                    {!isCollapsed && <span className="text-[15px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>}
+                                    {!isCollapsed && <span className="text-[13.5px] 2xl:text-[14.5px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">{item.name}</span>}
                                 </div>
                             </Link>
                         )
@@ -140,57 +142,57 @@ export const Sidebar = () => {
                 </nav>
 
                 {/* Bottom Collapse Toggle Button */}
-                <div className={`px-3 py-2 border-t border-border dark:border-[#3a3a3c] shrink-0 ${isCollapsed ? 'flex justify-center' : ''}`}>
+                <div className={`px-2 2xl:px-3 py-1.5 2xl:py-2 border-t border-border dark:border-[#3a3a3c] shrink-0 ${isCollapsed ? 'flex justify-center' : ''}`}>
                     <button
                         onClick={toggleCollapsed}
                         onMouseEnter={(e) => showTooltip(isCollapsed ? 'Expand sidebar' : 'Collapse sidebar', e)}
                         onMouseLeave={hideTooltip}
-                        className={`flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150 cursor-pointer ${
-                            isCollapsed ? 'w-11 h-11 mx-auto' : 'w-full gap-2 px-3 py-2.5'
+                        className={`flex items-center justify-center rounded-lg 2xl:rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150 cursor-pointer ${
+                            isCollapsed ? 'w-9.5 h-9.5 2xl:w-11 2xl:h-11 mx-auto' : 'w-full gap-2 px-2.5 py-1.5 2xl:px-3 2xl:py-2'
                         }`}
                         title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
                     >
                         <svg
-                            className={`w-[18px] h-[18px] transition-transform duration-200 ${isCollapsed ? 'rotate-180' : ''}`}
+                            className={`w-4 h-4 2xl:w-[18px] 2xl:h-[18px] transition-transform duration-200 ${isCollapsed ? 'rotate-180' : ''}`}
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
-                            strokeWidth={1.5}
+                            strokeWidth={1.75}
                         >
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                         </svg>
-                        {!isCollapsed && <span className="text-[13px] font-medium">Collapse</span>}
+                        {!isCollapsed && <span className="text-xs 2xl:text-[13px] font-medium">Collapse</span>}
                     </button>
                 </div>
 
                 {/* User Profile */}
-                <div className={`p-3 border-t border-border dark:border-[#3a3a3c] shrink-0 ${isCollapsed ? 'flex justify-center' : ''}`}>
+                <div className={`p-2 2xl:p-3 border-t border-border dark:border-[#3a3a3c] shrink-0 ${isCollapsed ? 'flex justify-center' : ''}`}>
                     {isCollapsed ? (
                         <Link
                             href="/profile"
-                            className="w-11 h-11 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-[15px] hover:opacity-90 transition-opacity"
+                            className="w-9.5 h-9.5 2xl:w-11 2xl:h-11 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-xs 2xl:text-sm hover:opacity-90 transition-opacity"
                             onMouseEnter={(e) => showTooltip(`${user.name} (${getRoleLabel(user.role)})`, e)}
                             onMouseLeave={hideTooltip}
                         >
                             {user.name.charAt(0).toUpperCase()}
                         </Link>
                     ) : (
-                        <div className="flex items-center gap-3 px-3 py-3">
-                            <Link href="/profile" className="flex items-center gap-3 flex-1 min-w-0 group cursor-pointer">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-[15px] flex-shrink-0 group-hover:opacity-90 transition-opacity">
+                        <div className="flex items-center gap-2 2xl:gap-2.5 px-1 py-0.5 2xl:px-1.5 2xl:py-1">
+                            <Link href="/profile" className="flex items-center gap-2.5 2xl:gap-3 flex-1 min-w-0 group cursor-pointer">
+                                <div className="w-8 h-8 2xl:w-9.5 2xl:h-9.5 rounded-full bg-gradient-to-br from-[#5856d6] to-[#af52de] flex items-center justify-center text-white font-semibold text-xs 2xl:text-[13px] flex-shrink-0 group-hover:opacity-90 transition-opacity">
                                     {user.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-[14px] text-foreground truncate group-hover:text-primary transition-colors">{user.name}</p>
-                                    <p className="text-[12px] text-muted-foreground">{getRoleLabel(user.role)}</p>
+                                    <p className="font-semibold text-xs 2xl:text-[13.5px] text-foreground truncate group-hover:text-primary transition-colors leading-tight">{user.name}</p>
+                                    <p className="text-[11px] 2xl:text-xs text-muted-foreground truncate leading-tight mt-0.5">{getRoleLabel(user.role)}</p>
                                 </div>
                             </Link>
                             <button
                                 onClick={logout}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                className="w-7 h-7 2xl:w-8 2xl:h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
                                 title="Sign Out"
                             >
-                                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <svg className="w-4 h-4 2xl:w-[18px] 2xl:h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                 </svg>
                             </button>
@@ -203,11 +205,11 @@ export const Sidebar = () => {
             {isCollapsed && hoveredTooltip && (
                 <div
                     style={{ top: `${hoveredTooltip.top}px` }}
-                    className="fixed left-[78px] -translate-y-1/2 z-50 pointer-events-none animate-in fade-in-0 zoom-in-95 duration-100"
+                    className="fixed left-[68px] 2xl:left-[78px] -translate-y-1/2 z-50 pointer-events-none animate-in fade-in-0 zoom-in-95 duration-100"
                 >
-                    <div className="relative bg-[#18181b] dark:bg-[#27272a] text-white text-[13px] font-medium px-3 py-1.5 rounded-lg shadow-2xl border border-white/10 dark:border-white/15 whitespace-nowrap flex items-center">
+                    <div className="relative bg-[#18181b] dark:bg-[#27272a] text-white text-xs font-medium px-2.5 py-1 rounded-lg shadow-2xl border border-white/10 dark:border-white/15 whitespace-nowrap flex items-center">
                         {/* Left Arrow Pointer */}
-                        <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-[#18181b] dark:border-r-[#27272a]" />
+                        <div className="absolute right-full top-1/2 -translate-y-1/2 border-[4px] 2xl:border-[5px] border-transparent border-r-[#18181b] dark:border-r-[#27272a]" />
                         {hoveredTooltip.text}
                     </div>
                 </div>

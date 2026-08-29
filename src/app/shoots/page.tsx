@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage'; // Still used for type referencing if valid, or remove if unused, but kept for safety. Ideally hooks replace it but types might be needed. Alternatively just imports.
-import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X, IndianRupee, RefreshCw, CheckCircle2, SlidersHorizontal, GripVertical } from 'lucide-react';
+import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X, IndianRupee, RefreshCw, CheckCircle2, SlidersHorizontal, GripVertical, MoreVertical } from 'lucide-react';
 import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, generateShootWhatsAppPayload, generateBulkShootsWhatsAppPayload, openWhatsApp } from '@/lib/whatsapp';
@@ -172,17 +172,17 @@ export default function ShootList() {
     ];
 
     const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
-        shootNumber: 105,
-        title: 250,
-        jiraTicket: 115,
-        date: 190,
-        location: 200,
-        crew: 120,
-        status: 140,
+        shootNumber: 110,
+        title: 210,
+        jiraTicket: 105,
+        date: 160,
+        location: 165,
+        crew: 115,
+        status: 125,
         actions: 95,
-        poc: 140,
-        createdAt: 115,
-        expenses: 115,
+        poc: 130,
+        createdAt: 110,
+        expenses: 110,
     };
 
     const getDefaultColumnWidths = (customAvailableWidth?: number): Record<ColumnKey, number> => {
@@ -191,15 +191,15 @@ export default function ShootList() {
         if (typeof window !== 'undefined') {
             const screenW = window.innerWidth;
             const isSidebarCollapsed = localStorage.getItem('sidebar_is_collapsed') === 'true' || screenW < 1360;
-            const sidebarW = isSidebarCollapsed ? 72 : 260;
-            const availableWidth = customAvailableWidth || Math.max(900, screenW - sidebarW - 48);
-            const defaultTotal = 105 + 250 + 115 + 190 + 200 + 120 + 140 + 95; // 1215
+            const sidebarW = isSidebarCollapsed ? (screenW >= 1536 ? 70 : 62) : (screenW >= 1536 ? 255 : 228);
+            const availableWidth = customAvailableWidth || Math.max(900, screenW - sidebarW - (screenW >= 1536 ? 48 : 32));
+            const defaultTotal = 110 + 210 + 105 + 160 + 165 + 115 + 125 + 95; // 1085
 
             if (availableWidth > defaultTotal) {
                 const diff = availableWidth - defaultTotal;
-                base.title = Math.round(base.title + diff * 0.38);
+                base.title = Math.round(base.title + diff * 0.40);
                 base.location = Math.round(base.location + diff * 0.32);
-                base.date = Math.round(base.date + diff * 0.30);
+                base.date = Math.round(base.date + diff * 0.28);
             }
         }
         return base;
@@ -243,7 +243,7 @@ export default function ShootList() {
     // Flag to know if user has customized column widths manually
     const [hasUserCustomWidths, setHasUserCustomWidths] = useState<boolean>(() => {
         if (typeof window !== 'undefined') {
-            return !!localStorage.getItem('shoots_table_col_widths_v7');
+            return !!localStorage.getItem('shoots_table_col_widths_v9');
         }
         return false;
     });
@@ -252,7 +252,7 @@ export default function ShootList() {
     const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
         if (typeof window !== 'undefined') {
             try {
-                const saved = localStorage.getItem('shoots_table_col_widths_v7');
+                const saved = localStorage.getItem('shoots_table_col_widths_v9');
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     const merged = { ...getDefaultColumnWidths(), ...parsed };
@@ -296,7 +296,7 @@ export default function ShootList() {
                     if (currentWidth < 200) {
                         const updated = { ...curr, crew: 240 };
                         try {
-                            localStorage.setItem('shoots_table_col_widths_v7', JSON.stringify(updated));
+                            localStorage.setItem('shoots_table_col_widths_v8', JSON.stringify(updated));
                         } catch {}
                         return updated;
                     }
@@ -306,7 +306,7 @@ export default function ShootList() {
                 setColWidths(curr => {
                     const updated = { ...curr, crew: DEFAULT_COLUMN_WIDTHS.crew };
                     try {
-                        localStorage.setItem('shoots_table_col_widths_v7', JSON.stringify(updated));
+                        localStorage.setItem('shoots_table_col_widths_v8', JSON.stringify(updated));
                     } catch {}
                     return updated;
                 });
@@ -318,6 +318,7 @@ export default function ShootList() {
     const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
     const columnMenuRef = React.useRef<HTMLDivElement>(null);
     const headerRef = React.useRef<HTMLDivElement>(null);
+    const bodyScrollRef = React.useRef<HTMLDivElement>(null);
 
     // Column Resizing State
     const [resizingCol, setResizingCol] = useState<ColumnKey | null>(null);
@@ -338,31 +339,31 @@ export default function ShootList() {
         // Fluid 100% Fit Mode: Harmonious, proportional, generous right columns, zero cut-off
         switch (colKey) {
             case 'shootNumber':
-                return { width: '105px', minWidth: '100px', flexShrink: 0 };
+                return { width: '110px', minWidth: '105px', flexShrink: 0 };
             case 'jiraTicket':
-                return { width: '115px', minWidth: '105px', flexShrink: 0 };
+                return { width: '105px', minWidth: '95px', flexShrink: 0 };
             case 'crew':
                 return crewDisplayMode === 'full'
-                    ? { width: '240px', minWidth: '200px', flexShrink: 0 }
-                    : { width: '120px', minWidth: '110px', flexShrink: 0 };
+                    ? { width: '220px', minWidth: '180px', flexShrink: 0 }
+                    : { width: '115px', minWidth: '105px', flexShrink: 0 };
             case 'status':
-                return { width: '140px', minWidth: '130px', flexShrink: 0 };
+                return { width: '125px', minWidth: '115px', flexShrink: 0 };
             case 'actions':
                 return { width: '95px', minWidth: '90px', flexShrink: 0 };
             case 'poc':
-                return { width: '140px', minWidth: '125px', flexShrink: 0 };
+                return { width: '130px', minWidth: '120px', flexShrink: 0 };
             case 'createdAt':
-                return { width: '115px', minWidth: '105px', flexShrink: 0 };
+                return { width: '110px', minWidth: '100px', flexShrink: 0 };
             case 'expenses':
-                return { width: '115px', minWidth: '105px', flexShrink: 0 };
+                return { width: '110px', minWidth: '100px', flexShrink: 0 };
             case 'title':
-                return { flex: '1.3 1 220px', minWidth: '180px' };
+                return { flex: '1.3 1 190px', minWidth: '160px' };
             case 'location':
-                return { flex: '1.0 1 190px', minWidth: '160px' };
+                return { flex: '1.0 1 160px', minWidth: '140px' };
             case 'date':
-                return { flex: '0.9 1 180px', minWidth: '160px' };
+                return { flex: '1.0 1 155px', minWidth: '140px' };
             default:
-                return { flex: '1 1 120px', minWidth: '100px' };
+                return { flex: '1 1 110px', minWidth: '90px' };
         }
     };
 
@@ -400,7 +401,7 @@ export default function ShootList() {
             setColWidths(prev => {
                 const updated = { ...prev, [colKey]: newWidth };
                 try {
-                    localStorage.setItem('shoots_table_col_widths_v7', JSON.stringify(updated));
+                    localStorage.setItem('shoots_table_col_widths_v9', JSON.stringify(updated));
                 } catch {}
                 return updated;
             });
@@ -505,7 +506,8 @@ export default function ShootList() {
             localStorage.removeItem('shoots_visible_columns_v3');
             localStorage.removeItem('shoots_visible_columns');
             localStorage.removeItem('shoots_column_order');
-            localStorage.removeItem('shoots_table_col_widths_v7');
+            localStorage.removeItem('shoots_table_col_widths_v9');
+            localStorage.removeItem('shoots_table_col_widths_v8');
             localStorage.removeItem('shoots_table_col_widths_v6');
             localStorage.removeItem('shoots_table_col_widths_v5');
             localStorage.removeItem('shoots_table_col_widths');
@@ -1146,161 +1148,62 @@ export default function ShootList() {
 
     return (
         <PullToRefresh onRefresh={handleRefresh}>
-            <div className="flex flex-col h-[calc(100dvh-76px)] sm:h-[calc(100dvh-92px)] w-full overflow-hidden space-y-3 sm:space-y-3.5 animate-fade-in">
-                {/* Header (Fixed) */}
-                <div className="shrink-0 flex items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white">{labels.workPlural}</h1>
-                        <p className="text-xs sm:text-sm mt-0.5 sm:mt-1 text-gray-500 dark:text-gray-400">Manage upcoming {labels.workPluralLower}</p>
-                    </div>
-
-                    <div className="flex gap-2">
-                        {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
-                            <>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        const headers = [
-                                            labels.workIdLabel, 'Title', 'Start Date', 'Start Time', 'End Date', 'End Time', 'Location', 'POC Name', 'Status', 
-                                            `${labels.teamPlural} Count`, `${labels.teamPlural} Names`, 
-                                            'Total Expenses', 'Category', 
-                                            'Boarding', 'Travel', 'Equipment', 'Manpower', 'Other',
-                                            'Description'
-                                        ];
-                                        const rows = filteredShoots.map(shoot => {
-                                            const crew = getShootCrew(shoot.id);
-                                            const startDate = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
-                                            const startTime = shoot.startTime ? format(parseISO(shoot.startTime), 'HH:mm') : '';
-                                            const endDate = shoot.endTime ? format(parseISO(shoot.endTime), 'yyyy-MM-dd') : '';
-                                            const endTime = shoot.endTime ? format(parseISO(shoot.endTime), 'HH:mm') : '';
-                                            const crewNames = crew.map(c => c.name).join(', ');
-                                            const totalExpenses = getShootTotalExpense(shoot);
-                                            const category = shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || '';
-
-                                            const getExp = (type: string) => {
-                                                const exp = shoot.expenses?.find((e: ShootExpense) => e.type === type);
-                                                return exp ? exp.amount : 0;
-                                            };
-
-                                            return [
-                                                shoot.shootNumber ? `#${shoot.shootNumber}` : '',
-                                                `"${shoot.title.replace(/"/g, '""')}"`,
-                                                startDate,
-                                                startTime,
-                                                endDate,
-                                                endTime,
-                                                `"${(shoot.location || '').replace(/"/g, '""')}"`,
-                                                `"${(shoot.pocName || '').replace(/"/g, '""')}"`,
-                                                shoot.status,
-                                                crew.length,
-                                                `"${crewNames}"`,
-                                                totalExpenses,
-                                                `"${category}"`,
-                                                getExp('Boarding'),
-                                                getExp('Travel'),
-                                                getExp('Equipment'),
-                                                getExp('Manpower'),
-                                                getExp('Other'),
-                                                `"${(shoot.description || '').replace(/"/g, '""')}"`
-                                            ].join(',');
-                                        });
-
-                                        const csvContent = [headers.join(','), ...rows].join('\n');
-                                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                                        const url = URL.createObjectURL(blob);
-                                        const link = document.createElement('a');
-                                        link.setAttribute('href', url);
-                                        link.setAttribute('download', `${labels.workPluralLower}_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                    }}
-                                    className="flex gap-2 shadow-sm rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold bg-white dark:bg-[#1c1c1e] text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+            <div className="flex flex-col h-[calc(100dvh-62px)] 2xl:h-[calc(100dvh-66px)] max-h-[calc(100dvh-62px)] 2xl:max-h-[calc(100dvh-66px)] w-full overflow-hidden space-y-1.5 animate-fade-in">
+                {/* Unified Toolbar: Search + Views + Filters + Columns + Actions */}
+                <div className="shrink-0 rounded-xl 2xl:rounded-2xl p-1.5 sm:p-2 2xl:p-2.5 shadow-2xs space-y-1.5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-1.5 sm:gap-2">
+                        {/* Search Input */}
+                        <div className="relative flex-1 min-w-[200px]">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 2xl:size-4" />
+                            <input
+                                type="text"
+                                placeholder="Search title, location, ID..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-9 2xl:pl-10 pr-7 py-1 rounded-lg 2xl:rounded-xl text-xs sm:text-sm 2xl:text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 h-8 sm:h-8.5 2xl:h-9.5"
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
+                                    title="Clear search"
                                 >
-                                    <FileText size={16} strokeWidth={2.5} />
-                                    <span className="hidden sm:inline">Export CSV</span>
-                                    <span className="sm:hidden">CSV</span>
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={handleSyncJira}
-                                    disabled={isSyncingJira}
-                                    className="flex gap-2 shadow-sm rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold bg-white dark:bg-[#1c1c1e] text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
-                                    title="Fetch & Auto-Sync Customer Jira Tickets"
-                                >
-                                    <RefreshCw size={16} strokeWidth={2.5} className={isSyncingJira ? 'animate-spin' : ''} />
-                                    <span className="hidden sm:inline">{isSyncingJira ? 'Syncing Jira...' : 'Sync Jira Requests'}</span>
-                                    <span className="sm:hidden">Jira</span>
-                                </Button>
-                            </>
-                        )}
-                        {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
-                            <Link href="/shoots/new" className="shrink-0">
-                                <Button variant="primary" className="gap-2 shadow-lg rounded-xl h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-semibold">
-                                    <Plus size={16} strokeWidth={2.5} />
-                                    <span className="hidden xs:inline">New {labels.workSingular}</span>
-                                    <span className="xs:hidden">New</span>
-                                </Button>
-                            </Link>
-                        )}
-                    </div>
-                </div>
+                                    <X size={13} />
+                                </button>
+                            )}
+                        </div>
 
-                {/* Search & Filters Bar (Fixed) */}
-                <div className="shrink-0 rounded-2xl p-3 sm:p-4 shadow-xs space-y-3 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800">
-                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                            {/* Search */}
-                            <div className="relative flex-1">
-                                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-                                <input
-                                    type="text"
-                                    placeholder="Search title, location, ID..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-11 sm:pl-12 pr-4 py-2 sm:py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                                />
-                                {searchQuery && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setSearchQuery('')}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
-                                        title="Clear search"
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                )}
-                            </div>
-
-                        {/* View Toggle & Filter Button */}
-                        <div className="flex gap-2">
+                        {/* Controls & Action Buttons in single unified line */}
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap shrink-0">
                             {/* View Mode Toggle */}
-                            <div className="flex rounded-lg p-1 shrink-0 bg-gray-100 dark:bg-gray-800">
+                            <div className="flex rounded-lg 2xl:rounded-xl p-0.5 shrink-0 bg-gray-100 dark:bg-gray-800">
                                 <button
                                     onClick={() => setViewMode('card')}
-                                    className={`p-1.5 sm:p-2 rounded-md transition-all ${viewMode === 'card'
-                                        ? 'bg-white dark:bg-[#1c1c1e] shadow text-gray-900 dark:text-white'
+                                    className={`p-1.5 2xl:p-2 rounded-md 2xl:rounded-lg transition-all ${viewMode === 'card'
+                                        ? 'bg-white dark:bg-[#1c1c1e] shadow-xs text-gray-900 dark:text-white'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                                         }`}
                                     title="Grid / Card View"
                                 >
-                                    <Grid3X3 size={18} />
+                                    <Grid3X3 size={14} className="2xl:size-4" />
                                 </button>
                                 <button
                                     onClick={() => setViewMode('list')}
-                                    className={`p-1.5 sm:p-2 rounded-md transition-all ${viewMode === 'list'
-                                        ? 'bg-white dark:bg-[#1c1c1e] shadow text-gray-900 dark:text-white'
+                                    className={`p-1.5 2xl:p-2 rounded-md 2xl:rounded-lg transition-all ${viewMode === 'list'
+                                        ? 'bg-white dark:bg-[#1c1c1e] shadow-xs text-gray-900 dark:text-white'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                                         }`}
                                     title="Table / List View"
                                 >
-                                    <List size={18} />
+                                    <List size={14} className="2xl:size-4" />
                                 </button>
                             </div>
 
                             {/* Filter Toggle Button with Active Count Badge */}
                             <button
                                 onClick={() => setShowFilters(!showFilters)}
-                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                                className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 2xl:px-3.5 py-1.5 rounded-lg 2xl:rounded-xl text-xs 2xl:text-sm font-medium transition-all cursor-pointer h-8 sm:h-8.5 2xl:h-9.5 ${
                                     showFilters || (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL')
                                         ? 'bg-primary/10 text-primary border border-primary/25 font-semibold'
                                         : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent'
@@ -1311,10 +1214,10 @@ export default function ShootList() {
                                         : 'Filter shoots'
                                 }
                             >
-                                <Filter size={15} />
+                                <Filter size={12} className="2xl:size-3.5" />
                                 <span className="hidden sm:inline">Filters</span>
                                 {(isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL') && (
-                                    <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full">
+                                    <span className="flex items-center justify-center min-w-[15px] h-[15px] px-1 bg-primary text-primary-foreground text-[9px] 2xl:text-[10px] font-bold rounded-full">
                                         {[
                                             isStatusFiltered,
                                             timeFilter !== 'ALL',
@@ -1324,135 +1227,109 @@ export default function ShootList() {
                                         ].filter(Boolean).length}
                                     </span>
                                 )}
-                                <ChevronDown size={14} className={`transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+                                <ChevronDown size={12} className={`transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
                             </button>
 
-                            {/* Columns Customizer (for List View) */}
-                            <div className="relative" ref={columnMenuRef}>
-                                <button
-                                    onClick={() => setIsColumnMenuOpen(!isColumnMenuOpen)}
-                                    className={`flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${isColumnMenuOpen
-                                        ? 'bg-primary/10 text-primary border border-primary/20'
-                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent'
-                                        }`}
-                                    title="Add or Remove Columns"
-                                >
-                                    <SlidersHorizontal size={15} />
-                                    <span className="hidden sm:inline">Columns</span>
-                                    <ChevronDown size={14} className={`transition-transform ${isColumnMenuOpen ? 'rotate-180' : ''}`} />
-                                </button>
 
-                                {isColumnMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1c1e] shadow-xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
-                                        <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
-                                            <div>
-                                                <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider block">Columns</span>
-                                                <span className="text-[10px] text-gray-400">Toggle & reorder positions</span>
-                                            </div>
-                                            <button
-                                                onClick={handleResetColumns}
-                                                className="text-[11px] text-primary hover:underline font-semibold"
-                                            >
-                                                Reset
-                                            </button>
-                                        </div>
-                                        <div className="space-y-1 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
-                                            {columnOrder.map((colKey, index) => {
-                                                const colDef = ALL_COLUMNS.find(c => c.id === colKey);
-                                                if (!colDef) return null;
-                                                if (colKey === 'expenses' && !['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '')) {
-                                                    return null;
-                                                }
-                                                const isChecked = visibleColumns.includes(colKey);
-                                                return (
-                                                    <div
-                                                        key={colKey}
-                                                        className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors select-none ${
-                                                            isChecked ? 'bg-gray-50 dark:bg-gray-800/60' : 'opacity-60 hover:opacity-90'
-                                                        }`}
-                                                    >
-                                                        <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 pr-2">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isChecked}
-                                                                onChange={() => toggleColumn(colKey)}
-                                                                className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 dark:border-gray-600 bg-transparent cursor-pointer shrink-0"
-                                                            />
-                                                            <span className={`font-medium truncate ${isChecked ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
-                                                                {colDef.label}
-                                                            </span>
-                                                        </label>
-                                                        {/* Reorder Buttons */}
-                                                        <div className="flex items-center gap-0.5 shrink-0">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    moveColumn(colKey, 'up');
-                                                                }}
-                                                                disabled={index === 0}
-                                                                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-20 disabled:pointer-events-none transition-colors"
-                                                                title="Move column left / up"
-                                                            >
-                                                                <ChevronUp size={13} />
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    moveColumn(colKey, 'down');
-                                                                }}
-                                                                disabled={index === columnOrder.length - 1}
-                                                                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-20 disabled:pointer-events-none transition-colors"
-                                                                title="Move column right / down"
-                                                            >
-                                                                <ChevronDown size={13} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
 
-                                        {/* Crew View Mode Switcher */}
-                                        <div className="pt-2.5 mt-1 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                                            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">{labels.teamPlural} View</span>
-                                            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (crewDisplayMode !== 'count') toggleCrewDisplayMode();
-                                                    }}
-                                                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all ${
-                                                        crewDisplayMode === 'count'
-                                                            ? 'bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white shadow-xs'
-                                                            : 'text-gray-500 hover:text-gray-900 dark:text-gray-400'
-                                                    }`}
-                                                >
-                                                    Count
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (crewDisplayMode !== 'full') toggleCrewDisplayMode();
-                                                    }}
-                                                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all ${
-                                                        crewDisplayMode === 'full'
-                                                            ? 'bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white shadow-xs'
-                                                            : 'text-gray-500 hover:text-gray-900 dark:text-gray-400'
-                                                    }`}
-                                                >
-                                                    Full Names
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            {/* Action Buttons: Export CSV, Sync Jira, + New */}
+                            {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const headers = [
+                                                labels.workIdLabel, 'Title', 'Start Date', 'Start Time', 'End Date', 'End Time', 'Location', 'POC Name', 'Status', 
+                                                `${labels.teamPlural} Count`, `${labels.teamPlural} Names`, 
+                                                'Total Expenses', 'Category', 
+                                                'Boarding', 'Travel', 'Equipment', 'Manpower', 'Other',
+                                                'Description'
+                                            ];
+                                            const rows = filteredShoots.map(shoot => {
+                                                const crew = getShootCrew(shoot.id);
+                                                const startDate = shoot.startTime ? format(parseISO(shoot.startTime), 'yyyy-MM-dd') : '';
+                                                const startTime = shoot.startTime ? format(parseISO(shoot.startTime), 'HH:mm') : '';
+                                                const endDate = shoot.endTime ? format(parseISO(shoot.endTime), 'yyyy-MM-dd') : '';
+                                                const endTime = shoot.endTime ? format(parseISO(shoot.endTime), 'HH:mm') : '';
+                                                const crewNames = crew.map(c => c.name).join(', ');
+                                                const totalExpenses = getShootTotalExpense(shoot);
+                                                const category = shoot.expenses?.find((e: ShootExpense) => e.campaign)?.campaign || '';
+
+                                                const getExp = (type: string) => {
+                                                    const exp = shoot.expenses?.find((e: ShootExpense) => e.type === type);
+                                                    return exp ? exp.amount : 0;
+                                                };
+
+                                                return [
+                                                    shoot.shootNumber ? `#${shoot.shootNumber}` : '',
+                                                    `"${shoot.title.replace(/"/g, '""')}"`,
+                                                    startDate,
+                                                    startTime,
+                                                    endDate,
+                                                    endTime,
+                                                    `"${(shoot.location || '').replace(/"/g, '""')}"`,
+                                                    `"${(shoot.pocName || '').replace(/"/g, '""')}"`,
+                                                    shoot.status,
+                                                    crew.length,
+                                                    `"${crewNames}"`,
+                                                    totalExpenses,
+                                                    `"${category}"`,
+                                                    getExp('Boarding'),
+                                                    getExp('Travel'),
+                                                    getExp('Equipment'),
+                                                    getExp('Manpower'),
+                                                    getExp('Other'),
+                                                    `"${(shoot.description || '').replace(/"/g, '""')}"`
+                                                ].join(',');
+                                            });
+
+                                            const csvContent = [headers.join(','), ...rows].join('\n');
+                                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                                            const url = URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.setAttribute('href', url);
+                                            link.setAttribute('download', `${labels.workPluralLower}_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                        }}
+                                        className="flex items-center gap-1.5 px-2.5 sm:px-3 2xl:px-3.5 py-1 rounded-lg 2xl:rounded-xl text-xs 2xl:text-sm font-medium bg-white dark:bg-[#1c1c1e] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-2xs cursor-pointer h-8 sm:h-8.5 2xl:h-9.5"
+                                        title="Export CSV"
+                                    >
+                                        <FileText size={12} className="text-gray-500 dark:text-gray-400 2xl:size-3.5" />
+                                        <span className="hidden sm:inline">Export</span>
+                                        <span className="sm:hidden">CSV</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleSyncJira}
+                                        disabled={isSyncingJira}
+                                        className="flex items-center gap-1.5 px-2.5 sm:px-3 2xl:px-3.5 py-1 rounded-lg 2xl:rounded-xl text-xs 2xl:text-sm font-medium bg-indigo-50/70 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/40 disabled:opacity-50 transition-all shadow-2xs cursor-pointer h-8 sm:h-8.5 2xl:h-9.5"
+                                        title="Fetch & Auto-Sync Customer Jira Tickets"
+                                    >
+                                        <RefreshCw size={12} className={`2xl:size-3.5 ${isSyncingJira ? 'animate-spin' : ''}`} />
+                                        <span className="hidden sm:inline">{isSyncingJira ? 'Syncing...' : 'Sync Jira'}</span>
+                                        <span className="sm:hidden">Jira</span>
+                                    </button>
+
+                                    <Link href="/shoots/new" className="shrink-0">
+                                        <button
+                                            type="button"
+                                            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 2xl:px-4 py-1 rounded-lg 2xl:rounded-xl text-xs 2xl:text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground transition-all shadow-2xs cursor-pointer h-8 sm:h-8.5 2xl:h-9.5"
+                                        >
+                                            <Plus size={12} strokeWidth={2.5} className="2xl:size-3.5" />
+                                            <span className="hidden xs:inline">New</span>
+                                        </button>
+                                    </Link>
+                                </>
+                            )}
                         </div>
                     </div>
 
-                    {/* ALWAYS-VISIBLE ACTIVE FILTER CHIPS (Visible even when filter panel is closed) */}
-                    {(isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || searchQuery.trim()) && (
-                        <div className="flex flex-wrap items-center gap-1.5 px-0.5 animate-in fade-in duration-200">
+                    {/* ALWAYS-VISIBLE ACTIVE FILTER CHIPS (Only shown when filter panel is collapsed) */}
+                    {!showFilters && (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || searchQuery.trim()) && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-800/80 animate-in fade-in duration-150">
                             <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 flex items-center gap-1 mr-0.5">
                                 <Filter size={11} className="text-primary" />
                                 Active:
@@ -1564,181 +1441,199 @@ export default function ShootList() {
                         </div>
                     )}
 
-                    {/* COMPACT 1-LINE FILTER TOOLBAR (When Expanded) */}
+                    {/* SLEEK 1-ROW FILTER BAR (When Expanded) */}
                     {showFilters && (
-                        <div className="flex flex-wrap items-center gap-2.5 p-2 rounded-xl bg-gray-50/80 dark:bg-gray-800/50 border border-gray-200/80 dark:border-gray-700/70 animate-in fade-in slide-in-from-top-1 duration-150">
+                        <div className="flex items-center gap-1.5 sm:gap-2 pt-1.5 border-t border-gray-100 dark:border-gray-800/80 flex-wrap sm:flex-nowrap overflow-x-auto no-scrollbar animate-in fade-in slide-in-from-top-1 duration-150">
                             {/* 1. Status Multi-Filter Trigger */}
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Status:</span>
-                                <button
-                                    type="button"
-                                    data-filter-trigger="status"
-                                    onClick={(e) => toggleFilterMenu('status', e)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 ${
-                                        isStatusFiltered
-                                            ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
-                                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                                    }`}
-                                >
-                                    <span className="truncate max-w-[140px]">
-                                        {!isStatusFiltered
-                                            ? 'All Statuses'
-                                            : statusFilter.length === 1
-                                            ? (ALL_STATUS_OPTIONS.find(o => o.value === statusFilter[0])?.label || statusFilter[0])
-                                            : `${statusFilter.length} Statuses`}
-                                    </span>
-                                    <ChevronDown size={12} className="text-gray-400 shrink-0" />
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                data-filter-trigger="status"
+                                onClick={(e) => toggleFilterMenu('status', e)}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer h-7.5 shadow-2xs shrink-0 ${
+                                    isStatusFiltered
+                                        ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                }`}
+                            >
+                                <span className="text-gray-400 dark:text-gray-500 font-normal">Status:</span>
+                                <span className="truncate max-w-[110px]">
+                                    {!isStatusFiltered
+                                        ? 'All'
+                                        : statusFilter.length === 1
+                                        ? (ALL_STATUS_OPTIONS.find(o => o.value === statusFilter[0])?.label || statusFilter[0])
+                                        : `${statusFilter.length} active`}
+                                </span>
+                                <ChevronDown size={11} className="text-gray-400 shrink-0" />
+                            </button>
 
-                            {/* 2. When / Time Filter */}
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">When:</span>
+                            {/* 2. When / Date Filter */}
+                            <div className="relative flex items-center shrink-0">
                                 <select
                                     value={timeFilter}
                                     onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs focus:ring-1 focus:ring-primary ${
+                                    className={`h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary ${
                                         timeFilter !== 'ALL'
                                             ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
-                                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                     }`}
                                 >
-                                    <option value="ALL">All Dates</option>
-                                    <option value="TODAY">Today</option>
-                                    <option value="UPCOMING">Upcoming</option>
-                                    <option value="PAST">Past</option>
-                                    <option value="CUSTOM">Custom Range...</option>
+                                    <option value="ALL">Date: All</option>
+                                    <option value="TODAY">Date: Today</option>
+                                    <option value="UPCOMING">Date: Upcoming</option>
+                                    <option value="PAST">Date: Past</option>
+                                    <option value="CUSTOM">Date: Custom Range...</option>
                                 </select>
-
-                                {timeFilter === 'CUSTOM' && (
-                                    <div className="flex items-center gap-1 animate-in fade-in duration-150">
-                                        <input
-                                            type="date"
-                                            value={customDateRange.start}
-                                            onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))}
-                                            className="px-2 py-0.5 text-xs rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs"
-                                        />
-                                        <span className="text-gray-400 text-xs">-</span>
-                                        <input
-                                            type="date"
-                                            value={customDateRange.end}
-                                            onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))}
-                                            className="px-2 py-0.5 text-xs rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs"
-                                        />
-                                    </div>
-                                )}
+                                <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
                             </div>
 
-                            {/* 3. Assigned Crew (Admin Only) Multi-Filter Trigger */}
-                            {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Assigned:</span>
-                                    <button
-                                        type="button"
-                                        data-filter-trigger="crew"
-                                        onClick={(e) => toggleFilterMenu('crew', e)}
-                                        className={`flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-lg border text-xs transition-all cursor-pointer shadow-2xs ${
-                                            isCrewFiltered
-                                                ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
-                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                                        }`}
-                                    >
-                                        <span className="truncate max-w-[130px]">
-                                            {!isCrewFiltered
-                                                ? `All ${labels.teamPlural}`
-                                                : crewFilter.length === 1
-                                                ? (crewFilter[0] === 'UNASSIGNED' ? 'Unassigned' : users.find(u => u.id === crewFilter[0])?.name || '1 Member')
-                                                : `${crewFilter.length} ${labels.teamPlural}`}
-                                        </span>
-                                        <ChevronDown size={12} className="text-gray-400 shrink-0" />
-                                    </button>
+                            {timeFilter === 'CUSTOM' && (
+                                <div className="flex items-center gap-1 animate-in fade-in duration-150 shrink-0">
+                                    <input
+                                        type="date"
+                                        value={customDateRange.start}
+                                        onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                        className="h-7.5 px-2 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs"
+                                    />
+                                    <span className="text-gray-400 text-xs">-</span>
+                                    <input
+                                        type="date"
+                                        value={customDateRange.end}
+                                        onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                        className="h-7.5 px-2 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs"
+                                    />
                                 </div>
                             )}
 
+                            {/* 3. Assigned Crew (Admin Only) */}
+                            {['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && (
+                                <button
+                                    type="button"
+                                    data-filter-trigger="crew"
+                                    onClick={(e) => toggleFilterMenu('crew', e)}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer h-7.5 shadow-2xs shrink-0 ${
+                                        isCrewFiltered
+                                            ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <span className="text-gray-400 dark:text-gray-500 font-normal">Crew:</span>
+                                    <span className="truncate max-w-[100px]">
+                                        {!isCrewFiltered
+                                            ? 'All'
+                                            : crewFilter.length === 1
+                                            ? (crewFilter[0] === 'UNASSIGNED' ? 'Unassigned' : users.find(u => u.id === crewFilter[0])?.name || '1 Member')
+                                            : `${crewFilter.length} active`}
+                                    </span>
+                                    <ChevronDown size={11} className="text-gray-400 shrink-0" />
+                                </button>
+                            )}
+
                             {/* 4. Category Filter */}
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Category:</span>
+                            <div className="relative flex items-center shrink-0">
                                 <select
                                     value={categoryFilter}
                                     onChange={(e) => setCategoryFilter(e.target.value)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs focus:ring-1 focus:ring-primary ${
+                                    className={`h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary ${
                                         categoryFilter !== 'ALL'
                                             ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
-                                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                     }`}
                                 >
-                                    <option value="ALL">All Categories</option>
+                                    <option value="ALL">Category: All</option>
                                     {availableCategories.map(cat => (
                                         <option key={cat} value={cat}>{cat}</option>
                                     ))}
                                     <option value="UNASSIGNED">Unassigned</option>
                                 </select>
+                                <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
                             </div>
 
                             {/* 5. Expenses Filter (Admin / Finance only) */}
                             {['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '') && (
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Expenses:</span>
+                                <div className="relative flex items-center shrink-0">
                                     <select
                                         value={expenseFilter}
                                         onChange={(e) => setExpenseFilter(e.target.value)}
-                                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs focus:ring-1 focus:ring-primary ${
+                                        className={`h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary ${
                                             expenseFilter !== 'ALL'
                                                 ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
-                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                                : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                         }`}
                                     >
-                                        <option value="ALL">All Expenses</option>
+                                        <option value="ALL">Expenses: All</option>
                                         <option value="HAS_EXPENSES">With Expenses</option>
                                         <option value="NO_EXPENSES">No Expenses</option>
                                     </select>
+                                    <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
                                 </div>
                             )}
 
-                            {/* Sort Controls (in expanded filters) */}
-                            <div className="flex items-center gap-1.5 sm:ml-auto">
-                                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Sort:</span>
-                                <select
-                                    value={sortField}
-                                    onChange={(e) => setSortField(e.target.value as SortField)}
-                                    className="px-2 py-1 rounded-lg text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 focus:ring-1 focus:ring-primary cursor-pointer shadow-2xs"
+                            {/* Reset Filters Action Button */}
+                            {(isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL') && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setStatusFilter(['ALL']);
+                                        setTimeFilter('ALL');
+                                        setCrewFilter(['ALL']);
+                                        setCategoryFilter('ALL');
+                                        setExpenseFilter('ALL');
+                                        setCustomDateRange({ start: '', end: '' });
+                                    }}
+                                    className="h-7.5 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 transition-colors cursor-pointer shrink-0"
+                                    title="Reset all active filters"
                                 >
-                                    <option value="date">Date</option>
-                                    <option value="shootNumber">{labels.workIdLabel}</option>
-                                    <option value="title">{labels.workSingular} Name</option>
-                                    <option value="status">Status</option>
-                                    <option value="expenses">Expenses</option>
-                                </select>
+                                    <X size={11} />
+                                    <span>Reset</span>
+                                </button>
+                            )}
+
+                            {/* Sort Controls (Compact & Flush on the right) */}
+                            <div className="flex items-center gap-1 sm:ml-auto shrink-0">
+                                <div className="relative flex items-center">
+                                    <select
+                                        value={sortField}
+                                        onChange={(e) => setSortField(e.target.value as SortField)}
+                                        className="h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shadow-2xs appearance-none"
+                                    >
+                                        <option value="shootNumber">Sort: ID</option>
+                                        <option value="date">Sort: Date</option>
+                                        <option value="title">Sort: Name</option>
+                                        <option value="status">Sort: Status</option>
+                                        <option value="expenses">Sort: Expenses</option>
+                                    </select>
+                                    <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
+                                </div>
                                 <button
                                     type="button"
                                     onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                                    className="p-1 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1 text-xs cursor-pointer shadow-2xs"
+                                    className="h-7.5 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1 text-xs cursor-pointer shadow-2xs"
                                     title={`Sorting ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}. Click to toggle`}
                                 >
-                                    {sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
-                                    <span>{sortDirection === 'asc' ? 'Asc' : 'Desc'}</span>
+                                    {sortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                                    <span className="font-semibold text-[11px]">{sortDirection === 'asc' ? 'Asc' : 'Desc'}</span>
                                 </button>
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* Results Count (Fixed) */}
-                <div className="shrink-0 flex items-center justify-between px-1">
-                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                {/* Results Count (Fixed & Compact) */}
+                <div className="shrink-0 flex items-center justify-between px-1 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
+                    <p>
                         {totalShoots === 0 ? (
                             `0 ${labels.workPluralLower}`
                         ) : (
                             <>
                                 Showing <span className="font-semibold text-gray-900 dark:text-white">{fromIndex}–{toIndex}</span> of <span className="font-semibold text-gray-900 dark:text-white">{totalShoots}</span> {labels.workPluralLower}
                                 {totalShoots !== shoots.length && (
-                                    <span className="text-xs text-gray-400 ml-1"> (filtered from {shoots.length})</span>
+                                    <span className="text-gray-400 ml-1"> (filtered from {shoots.length})</span>
                                 )}
                             </>
                         )}
                     </p>
                     {totalShoots > 0 && pageSize !== 'ALL' && totalPages > 1 && (
-                        <p className="text-xs text-gray-400">
+                        <p className="text-gray-400">
                             Page {currentPage} of {totalPages}
                         </p>
                     )}
@@ -2031,12 +1926,11 @@ export default function ShootList() {
                         })}
                     </div>
                 ) : (
-                    /* List View (Unified Single Scroll Container with Sticky Header, Resizable & Reorderable Columns) */
-                    <div className="rounded-2xl shadow-xs bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-800 flex-1 min-h-0 flex flex-col overflow-hidden">
-                        <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
-                            <div className="w-full min-w-full">
-                                {/* Table Header (Sticky with Drag to Reorder & Resize) */}
-                                <div ref={headerRef} className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-center w-full min-w-full text-[11px] font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs">
+                    /* List View (Fixed Header + Dedicated Scrollable Body) */
+                    <div className="rounded-xl shadow-2xs bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 flex-1 min-h-0 flex flex-col overflow-hidden">
+                        {/* Table Header (Fixed at Top - Scrollbar does NOT go over it!) */}
+                        <div className="bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-stretch w-full min-w-full text-[10px] sm:text-[11px] 2xl:text-xs font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs shrink-0">
+                            <div ref={headerRef} className="flex items-center flex-1 min-w-0 overflow-x-hidden">
                                 {orderedVisibleColumns.map((colKey, colIdx) => {
                                     const isLast = colIdx === orderedVisibleColumns.length - 1;
                                     const isDragOver = dragOverCol === colKey;
@@ -2052,18 +1946,16 @@ export default function ShootList() {
                                             onDragOver={(e) => handleHeaderDragOver(colKey, e)}
                                             onDrop={(e) => handleHeaderDrop(colKey, e)}
                                             onDragEnd={handleHeaderDragEnd}
-                                            className={`relative flex items-center px-2.5 py-2.5 group/header cursor-grab active:cursor-grabbing transition-colors ${
+                                            className={`relative flex items-center px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 group/header cursor-grab active:cursor-grabbing transition-colors ${
                                                 !isLast ? 'border-r border-gray-200 dark:border-gray-800' : ''
                                             } ${isDragOver ? 'bg-primary/20 ring-2 ring-primary ring-inset' : ''} ${
                                                 isDragging ? 'opacity-30' : ''
                                             }`}
                                             title="Drag column header left/right to reorder"
                                         >
-                                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                                <GripVertical size={11} className="text-gray-400 dark:text-gray-500 opacity-0 group-hover/header:opacity-100 transition-opacity shrink-0 cursor-grab" />
-                                                
+                                            <div className="flex items-center min-w-0 flex-1 w-full">
                                                 {colKey === 'shootNumber' && (
-                                                    <div className="flex items-center gap-2 min-w-0">
+                                                    <div className="flex items-center gap-2 min-w-0 w-full">
                                                         <input
                                                             type="checkbox"
                                                             checked={paginatedShoots.length > 0 && paginatedShoots.every(s => selectedShootIds.includes(s.id))}
@@ -2154,39 +2046,22 @@ export default function ShootList() {
                                                         >
                                                             {labels.teamPlural} <SortIndicator field="crew" />
                                                         </button>
-                                                        <div className="flex items-center gap-0.5 shrink-0">
-                                                            <button
-                                                                type="button"
-                                                                data-filter-trigger="crew"
-                                                                onClick={(e) => toggleFilterMenu('crew', e)}
-                                                                className={`p-1 rounded transition-all shrink-0 flex items-center gap-0.5 ${
-                                                                    isCrewFiltered
-                                                                        ? 'bg-primary text-white shadow-xs px-1.5'
-                                                                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
-                                                                }`}
-                                                                title={`Filter by Crew (${isCrewFiltered ? `${crewFilter.length} selected` : 'All'})`}
-                                                            >
-                                                                <Filter size={11} className={isCrewFiltered ? 'fill-current' : ''} />
-                                                                {isCrewFiltered && (
-                                                                    <span className="text-[10px] font-bold leading-none">{crewFilter.length}</span>
-                                                                )}
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    toggleCrewDisplayMode();
-                                                                }}
-                                                                className={`ml-0.5 px-1 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight transition-all shrink-0 border ${
-                                                                    crewDisplayMode === 'full'
-                                                                        ? 'bg-primary/15 text-primary border-primary/40 hover:bg-primary/25'
-                                                                        : 'bg-gray-200/80 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-transparent hover:text-gray-900 dark:hover:text-white'
-                                                                }`}
-                                                                title={crewDisplayMode === 'full' ? 'Currently showing full names. Click to switch to count' : 'Currently showing count. Click to switch to full names'}
-                                                            >
-                                                                {crewDisplayMode === 'full' ? 'Names' : 'Count'}
-                                                            </button>
-                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            data-filter-trigger="crew"
+                                                            onClick={(e) => toggleFilterMenu('crew', e)}
+                                                            className={`p-1 rounded transition-all shrink-0 flex items-center gap-0.5 ${
+                                                                isCrewFiltered
+                                                                    ? 'bg-primary text-white shadow-xs px-1.5'
+                                                                    : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                                            }`}
+                                                            title={`Filter by Crew (${isCrewFiltered ? `${crewFilter.length} selected` : 'All'})`}
+                                                        >
+                                                            <Filter size={11} className={isCrewFiltered ? 'fill-current' : ''} />
+                                                            {isCrewFiltered && (
+                                                                <span className="text-[10px] font-bold leading-none">{crewFilter.length}</span>
+                                                            )}
+                                                        </button>
                                                     </div>
                                                 )}
 
@@ -2271,8 +2146,145 @@ export default function ShootList() {
                                 })}
                             </div>
 
-                            {/* Table Rows */}
-                            <div className="divide-y divide-gray-100 dark:divide-gray-800/70">
+                            {/* Permanent Fixed 3-Dots Menu at the far right of Table Header */}
+                            <div className="relative shrink-0 flex items-center justify-center px-2 py-1.5 border-l border-gray-200 dark:border-gray-800 bg-gray-50/95 dark:bg-[#1f1f23]/95 z-30" ref={columnMenuRef}>
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsColumnMenuOpen(!isColumnMenuOpen);
+                                    }}
+                                    className={`p-1 rounded-md transition-all cursor-pointer ${
+                                        isColumnMenuOpen
+                                            ? 'bg-primary text-white shadow-xs'
+                                            : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                    }`}
+                                    title="Columns & Table Settings"
+                                >
+                                    <MoreVertical size={13} />
+                                </button>
+
+                                {isColumnMenuOpen && (
+                                    <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="absolute right-1 top-full mt-1.5 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1c1c1e] shadow-xl p-3 z-50 normal-case tracking-normal font-normal text-left animate-in fade-in zoom-in-95 duration-100"
+                                    >
+                                        <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
+                                            <div>
+                                                <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider block">Columns</span>
+                                                <span className="text-[10px] text-gray-400">Toggle & reorder positions</span>
+                                            </div>
+                                            <button
+                                                onClick={handleResetColumns}
+                                                className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                                            >
+                                                Reset
+                                            </button>
+                                        </div>
+                                        <div className="space-y-1 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
+                                            {columnOrder.map((colKey, index) => {
+                                                const colDef = ALL_COLUMNS.find(c => c.id === colKey);
+                                                if (!colDef) return null;
+                                                if (colKey === 'expenses' && !['ADMIN', 'SUPER_ADMIN', 'FINANCE_MANAGER'].includes(user?.role || '')) {
+                                                    return null;
+                                                }
+                                                const isChecked = visibleColumns.includes(colKey);
+                                                return (
+                                                    <div
+                                                        key={colKey}
+                                                        className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors select-none ${
+                                                            isChecked ? 'bg-gray-50 dark:bg-gray-800/60' : 'opacity-60 hover:opacity-90'
+                                                        }`}
+                                                    >
+                                                        <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 pr-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isChecked}
+                                                                onChange={() => toggleColumn(colKey)}
+                                                                className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 dark:border-gray-600 bg-transparent cursor-pointer shrink-0"
+                                                            />
+                                                            <span className={`font-medium truncate ${isChecked ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                                {colDef.label}
+                                                            </span>
+                                                        </label>
+                                                        {/* Reorder Buttons */}
+                                                        <div className="flex items-center gap-0.5 shrink-0">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    moveColumn(colKey, 'up');
+                                                                }}
+                                                                disabled={index === 0}
+                                                                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-20 disabled:pointer-events-none transition-colors"
+                                                                title="Move column left / up"
+                                                            >
+                                                                <ChevronUp size={13} />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    moveColumn(colKey, 'down');
+                                                                }}
+                                                                disabled={index === columnOrder.length - 1}
+                                                                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-20 disabled:pointer-events-none transition-colors"
+                                                                title="Move column right / down"
+                                                            >
+                                                                <ChevronDown size={13} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Crew View Mode Switcher */}
+                                        <div className="pt-2.5 mt-1 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">{labels.teamPlural} View</span>
+                                            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (crewDisplayMode !== 'count') toggleCrewDisplayMode();
+                                                    }}
+                                                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all ${
+                                                        crewDisplayMode === 'count'
+                                                            ? 'bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white shadow-xs'
+                                                            : 'text-gray-500 hover:text-gray-900 dark:text-gray-400'
+                                                    }`}
+                                                >
+                                                    Count
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (crewDisplayMode !== 'full') toggleCrewDisplayMode();
+                                                    }}
+                                                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all ${
+                                                        crewDisplayMode === 'full'
+                                                            ? 'bg-white dark:bg-[#2c2c2e] text-gray-900 dark:text-white shadow-xs'
+                                                            : 'text-gray-500 hover:text-gray-900 dark:text-gray-400'
+                                                    }`}
+                                                >
+                                                    Full Names
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Table Body Rows (Vertical Scrollbar starts cleanly BELOW header) */}
+                        <div 
+                            ref={bodyScrollRef}
+                            onScroll={(e) => {
+                                if (headerRef.current) {
+                                    headerRef.current.scrollLeft = (e.currentTarget as HTMLElement).scrollLeft;
+                                }
+                            }}
+                            className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar"
+                        >
+                            <div className="divide-y divide-gray-100 dark:divide-gray-800/70 w-full min-w-full">
                                 {paginatedShoots.map((shoot, index) => {
                                     const statusStyle = getStatusStyle(shoot.status);
                                     const crewCount = getCrewCount(shoot.id);
@@ -2291,14 +2303,15 @@ export default function ShootList() {
                                                 : ''
                                         }`}
                                     >
-                                        {orderedVisibleColumns.map((colKey, colIdx) => {
-                                            const isLast = colIdx === orderedVisibleColumns.length - 1;
+                                        <div className="flex items-center flex-1 min-w-0">
+                                            {orderedVisibleColumns.map((colKey, colIdx) => {
+                                                const isLast = colIdx === orderedVisibleColumns.length - 1;
 
                                             return (
                                                 <div
                                                     key={colKey}
                                                     style={getColumnStyle(colKey)}
-                                                    className={`px-2.5 py-2 flex items-center min-h-[38px] min-w-0 ${
+                                                    className={`px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 flex items-center min-h-[33px] 2xl:min-h-[40px] text-xs 2xl:text-sm min-w-0 ${
                                                         !isLast ? 'border-r border-gray-100 dark:border-gray-800/60' : ''
                                                     }`}
                                                 >
@@ -2601,23 +2614,24 @@ export default function ShootList() {
                                                 </div>
                                             );
                                         })}
+                                        </div>
+                                        <div className="w-8 shrink-0 border-l border-transparent" />
                                     </div>
                                 </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
+                            );
+                        })}
                     </div>
                 </div>
-                )}
+            </div>
+        )}
             </div>
 
-                {/* Modern Pagination Controls (Fixed Footer) */}
+                {/* Modern Pagination Controls (Fixed Footer & Compact) */}
                 {totalShoots > 0 && (
                     <div className="shrink-0">
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-2.5 sm:p-3 text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 p-2 sm:p-2.5 2xl:p-3 text-xs 2xl:text-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-[#1c1c1e] rounded-xl 2xl:rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-2xs">
                             {/* Left: Row Count Details */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 text-[11px] sm:text-xs 2xl:text-sm">
                                 <span>
                                     Showing <strong className="font-semibold text-gray-900 dark:text-white">{fromIndex}</strong> to <strong className="font-semibold text-gray-900 dark:text-white">{toIndex}</strong> of <strong className="font-semibold text-gray-900 dark:text-white">{totalShoots}</strong> {labels.workPluralLower}
                                 </span>
@@ -2631,22 +2645,22 @@ export default function ShootList() {
                                         disabled={currentPage === 1}
                                         aria-label="First page"
                                         title="First page"
-                                        className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                        className="p-1 2xl:p-1.5 rounded-md 2xl:rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
                                     >
-                                        <ChevronsLeft size={15} />
+                                        <ChevronsLeft size={13} className="2xl:size-3.5" />
                                     </button>
                                     <button
                                         onClick={() => handlePageChange(currentPage - 1)}
                                         disabled={currentPage === 1}
                                         aria-label="Previous page"
                                         title="Previous page"
-                                        className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                        className="p-1 2xl:p-1.5 rounded-md 2xl:rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
                                     >
-                                        <ChevronLeft size={15} />
+                                        <ChevronLeft size={13} className="2xl:size-3.5" />
                                     </button>
 
                                     {/* Page numbers */}
-                                    <div className="flex items-center gap-1 mx-1">
+                                    <div className="flex items-center gap-1 mx-0.5">
                                         {Array.from({ length: totalPages }, (_, i) => i + 1)
                                             .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
                                             .map((p, idx, arr) => {
@@ -2654,12 +2668,12 @@ export default function ShootList() {
                                                 const showEllipsis = prevP && p - prevP > 1;
                                                 return (
                                                     <React.Fragment key={p}>
-                                                        {showEllipsis && <span className="px-1 text-gray-400">…</span>}
+                                                        {showEllipsis && <span className="px-0.5 text-gray-400 text-xs">…</span>}
                                                         <button
                                                             onClick={() => handlePageChange(p)}
-                                                            className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                                            className={`min-w-[28px] 2xl:min-w-[32px] h-7 2xl:h-8 px-1.5 rounded-md 2xl:rounded-lg text-xs 2xl:text-sm font-semibold transition-all cursor-pointer ${
                                                                 currentPage === p
-                                                                    ? 'bg-primary text-primary-foreground shadow-sm'
+                                                                    ? 'bg-primary text-primary-foreground shadow-2xs'
                                                                     : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                                                             }`}
                                                         >
@@ -2675,24 +2689,24 @@ export default function ShootList() {
                                         disabled={currentPage === totalPages}
                                         aria-label="Next page"
                                         title="Next page"
-                                        className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                        className="p-1 2xl:p-1.5 rounded-md 2xl:rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
                                     >
-                                        <ChevronRight size={15} />
+                                        <ChevronRight size={13} className="2xl:size-3.5" />
                                     </button>
                                     <button
                                         onClick={() => handlePageChange(totalPages)}
                                         disabled={currentPage === totalPages}
                                         aria-label="Last page"
                                         title="Last page"
-                                        className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                        className="p-1 2xl:p-1.5 rounded-md 2xl:rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
                                     >
-                                        <ChevronsRight size={15} />
+                                        <ChevronsRight size={13} className="2xl:size-3.5" />
                                     </button>
                                 </div>
                             )}
 
                             {/* Right: Page Size Selector */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs 2xl:text-sm">
                                 <span className="text-gray-500 dark:text-gray-400">Rows per page:</span>
                                 <select
                                     value={pageSize}
@@ -2701,7 +2715,7 @@ export default function ShootList() {
                                         setPageSize(val);
                                         setCurrentPage(1);
                                     }}
-                                    className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-medium focus:ring-1 focus:ring-primary cursor-pointer shadow-xs"
+                                    className="px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs 2xl:text-sm font-medium focus:ring-1 focus:ring-primary cursor-pointer shadow-2xs"
                                 >
                                     <option value={25}>25</option>
                                     <option value={50}>50</option>
