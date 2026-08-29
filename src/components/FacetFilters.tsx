@@ -118,22 +118,22 @@ export function FacetFilters({
     const GroupPanel = (group: FacetGroup, fill: boolean) => {
         const count = group.selected.length;
         const q = (groupQuery[group.key] || '').toLowerCase();
-        const showSearch = group.options.length > 8;
+        const showSearch = group.options.length > 6;
         // Alphabetical, always. Selections keep their place in the list — the panel scrolls to
         // show them instead (see revealSelected), because moving a row out from under the
         // cursor is worse than having to look for it.
         const opts = q ? group.options.filter(o => o.label.toLowerCase().includes(q)) : group.options;
         const allShownSelected = opts.length > 0 && opts.every(o => group.selected.includes(o.value));
         return (
-            <div className={fill ? 'flex min-h-0 flex-1 flex-col' : ''}>
-                <div className="mb-1 flex shrink-0 items-center justify-between px-1">
-                    <span className="text-[11px] text-muted-foreground">{group.options.length} option{group.options.length !== 1 ? 's' : ''}</span>
+            <div className={fill ? 'flex min-h-0 flex-1 flex-col' : 'space-y-1'}>
+                <div className="flex shrink-0 items-center justify-between px-0.5 pb-0.5">
+                    <span className="text-[10px] text-gray-400">{group.options.length} option{group.options.length !== 1 ? 's' : ''}</span>
                     <div className="flex items-center gap-1">
                         <button
                             type="button"
                             onClick={() => { const set = new Set(group.selected); opts.forEach(o => set.add(o.value)); group.onChange(Array.from(set)); }}
                             disabled={allShownSelected}
-                            className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-40"
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-40 cursor-pointer"
                         >
                             {q ? 'Select shown' : 'Select all'}
                         </button>
@@ -141,7 +141,7 @@ export function FacetFilters({
                             type="button"
                             onClick={() => group.onChange([])}
                             disabled={count === 0}
-                            className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted disabled:opacity-40"
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-40 cursor-pointer"
                         >
                             Clear
                         </button>
@@ -154,28 +154,28 @@ export function FacetFilters({
                         value={groupQuery[group.key] || ''}
                         onChange={e => setGroupQuery(s => ({ ...s, [group.key]: e.target.value }))}
                         placeholder={`Search ${group.label.toLowerCase()}…`}
-                        className="mb-2 h-9 w-full shrink-0 rounded-lg border border-border bg-background px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary"
+                        className="h-7 w-full shrink-0 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 px-2 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                     />
                 )}
 
                 <div
                     ref={revealSelected}
-                    className={`grid grid-cols-1 gap-0.5 overflow-y-auto ${fill ? 'min-h-0 flex-1' : ''}`}
-                    style={fill ? undefined : { maxHeight: '14rem' }}
+                    className={`grid grid-cols-1 gap-0.5 overflow-y-auto custom-scrollbar ${fill ? 'min-h-0 flex-1' : ''}`}
+                    style={fill ? undefined : { maxHeight: '11rem' }}
                 >
                     {opts.length === 0 ? (
-                        <p className="px-1 py-2 text-[13px] text-muted-foreground">No matches.</p>
+                        <p className="px-1 py-1.5 text-xs text-gray-400">No matches.</p>
                     ) : opts.map(o => {
                         const checked = group.selected.includes(o.value);
                         return (
                             <label
                                 key={o.value}
                                 data-selected={checked ? 'true' : undefined}
-                                className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-[14px] transition-colors focus-within:ring-2 focus-within:ring-primary ${checked ? 'bg-primary/5 text-primary font-semibold dark:bg-primary/15' : 'text-foreground hover:bg-muted'}`}
+                                className={`flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs transition-colors select-none ${checked ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                             >
-                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${checked ? 'border-primary bg-primary text-white' : 'border-border bg-background'}`}>
+                                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${checked ? 'border-primary bg-primary text-white' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'}`}>
                                     {checked && (
-                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                         </svg>
                                     )}
@@ -197,31 +197,31 @@ export function FacetFilters({
 
     // Desktop: accordion — one facet expanded at a time inside the popover.
     const Body = (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
             {usable.map(group => {
                 const isExpanded = group.key === activeKey;
                 const count = group.selected.length;
                 return (
-                    <div key={group.key} className="overflow-hidden rounded-xl border border-border">
+                    <div key={group.key} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
                         <button
                             type="button"
                             onClick={() => setOpenKey(isExpanded ? '' : group.key)}
-                            className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${isExpanded ? 'bg-secondary/50' : 'hover:bg-muted'}`}
+                            className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left transition-colors cursor-pointer ${isExpanded ? 'bg-gray-100 dark:bg-gray-800/80' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}
                             aria-expanded={isExpanded}
                         >
-                            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-gray-100">
                                 {group.label}
                                 {count > 0 && (
-                                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">{count}</span>
+                                    <span className="rounded-full bg-primary px-1.5 py-0.2 text-[9px] font-bold text-white leading-tight">{count}</span>
                                 )}
                             </span>
-                            <svg className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <svg className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                             </svg>
                         </button>
 
                         {isExpanded && (
-                            <div className="border-t border-border p-2">{GroupPanel(group, false)}</div>
+                            <div className="border-t border-gray-100 dark:border-gray-800 p-2 bg-white dark:bg-[#1c1c1e]">{GroupPanel(group, false)}</div>
                         )}
                     </div>
                 );
@@ -243,12 +243,12 @@ export function FacetFilters({
                             key={group.key}
                             type="button"
                             onClick={() => setOpenKey(group.key)}
-                            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors ${isActive ? 'bg-primary text-primary-foreground' : 'bg-secondary/60 text-foreground hover:bg-secondary'}`}
+                            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${isActive ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200'}`}
                             aria-pressed={isActive}
                         >
                             {group.label}
                             {count > 0 && (
-                                <span className={`rounded-full px-1.5 text-[10px] font-bold leading-4 ${isActive ? 'bg-white/25 text-primary-foreground' : 'bg-primary text-primary-foreground'}`}>{count}</span>
+                                <span className={`rounded-full px-1.5 text-[9px] font-bold leading-tight ${isActive ? 'bg-white/25 text-white' : 'bg-primary text-white'}`}>{count}</span>
                             )}
                         </button>
                     );
@@ -259,19 +259,19 @@ export function FacetFilters({
     );
 
     const Footer = (
-        <div className="flex items-center justify-between gap-3 border-t border-border px-1 pt-3">
+        <div className="flex items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800 px-0.5 pt-2">
             <button
                 type="button"
                 onClick={clearAll}
                 disabled={totalSelected === 0}
-                className="text-[13px] font-semibold text-muted-foreground hover:text-foreground disabled:opacity-40"
+                className="text-xs font-semibold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-40 cursor-pointer"
             >
                 Clear all
             </button>
             <button
                 type="button"
                 onClick={closeSheet}
-                className="rounded-full bg-primary px-4 py-2 text-[13px] font-bold text-primary-foreground hover:opacity-90"
+                className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary/90 transition-all cursor-pointer shadow-xs"
             >
                 Show {resultCount} item{resultCount !== 1 ? 's' : ''}
             </button>
@@ -281,36 +281,36 @@ export function FacetFilters({
     if (usable.length === 0) return null;
 
     return (
-        <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+        <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
             <div className="relative">
                 <button
                     ref={btnRef}
                     type="button"
                     onClick={() => setOpen(o => !o)}
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors ${open || totalSelected > 0 ? 'border-primary/40 bg-primary/5 text-primary' : 'border-border bg-secondary/40 text-foreground hover:bg-secondary'}`}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${open || totalSelected > 0 ? 'border-primary/40 bg-primary/10 text-primary' : 'border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                     aria-expanded={open}
                 >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M6 12h12M10 20h4" />
                     </svg>
                     Filters
                     {totalSelected > 0 && (
-                        <span className="rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-primary-foreground">{totalSelected}</span>
+                        <span className="rounded-full bg-primary px-1.5 py-0.2 text-[10px] font-bold text-white leading-tight">{totalSelected}</span>
                     )}
-                    <svg className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
 
-                {/* Desktop popover */}
+                {/* Desktop popover - aligned right so it never clips out of screen */}
                 {open && !isMobile && (
                     <div
                         ref={popRef}
-                        className="absolute left-0 z-[120] mt-2 rounded-2xl border border-border bg-card p-4 shadow-2xl"
-                        style={{ width: '22rem', maxWidth: 'calc(100vw - 2rem)' }}
+                        className="absolute right-0 z-[120] mt-1.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] p-2.5 shadow-xl space-y-2"
+                        style={{ width: '19rem', maxWidth: 'calc(100vw - 2rem)' }}
                     >
-                        <div className="overflow-y-auto pr-1" style={{ maxHeight: '26rem' }}>{Body}</div>
-                        <div className="mt-3">{Footer}</div>
+                        <div className="overflow-y-auto pr-0.5 custom-scrollbar" style={{ maxHeight: '22rem' }}>{Body}</div>
+                        <div>{Footer}</div>
                     </div>
                 )}
             </div>
@@ -321,17 +321,17 @@ export function FacetFilters({
                     key={`${chip.group.key}:${chip.value}`}
                     type="button"
                     onClick={() => removeOne(chip.group, chip.value)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 py-1 pl-3 pr-2 text-[13px] font-medium text-primary transition-colors hover:bg-primary/20"
+                    className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 py-0.5 pl-2 pr-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors cursor-pointer"
                     title={`Remove ${chip.group.label}: ${chip.label}`}
                 >
-                    <span className="max-w-[10rem] truncate">{chip.label}</span>
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <span className="max-w-[8rem] truncate">{chip.label}</span>
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
             ))}
             {totalSelected > 0 && (
-                <button type="button" onClick={clearAll} className="text-[13px] font-semibold text-muted-foreground hover:text-foreground">
+                <button type="button" onClick={clearAll} className="text-xs font-semibold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer">
                     Clear all
                 </button>
             )}
@@ -340,13 +340,13 @@ export function FacetFilters({
             {open && isMobile && typeof document !== 'undefined' && createPortal(
                 <>
                     <div className="fixed inset-0 z-[155] bg-black/40 backdrop-blur-sm" onClick={closeSheet} />
-                    <div className="fixed inset-x-0 bottom-0 z-[160] flex flex-col rounded-t-3xl border-t border-border bg-card shadow-2xl" style={{ height: '85vh' }}>
+                    <div className="fixed inset-x-0 bottom-0 z-[160] flex flex-col rounded-t-2xl border-t border-border bg-card shadow-2xl" style={{ height: '85vh' }}>
                         {/* grab handle */}
                         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" />
                         <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-2">
-                            <span className="text-base font-bold text-foreground">Filters</span>
+                            <span className="text-sm font-bold text-foreground">Filters</span>
                             <button type="button" onClick={closeSheet} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label="Close filters">
-                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
