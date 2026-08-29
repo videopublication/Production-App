@@ -1363,180 +1363,167 @@ function InventoryPageContent() {
     }
 
     return (
-        <div className="space-y-4 sm:space-y-6 animate-fade-in">
-            <div className="flex flex-col gap-3 sm:gap-4">
-                <div className="flex items-center justify-between gap-2">
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Inventory</h1>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                        <div className="flex bg-secondary p-0.5 sm:p-1 rounded-lg border border-border">
+        <div className="flex flex-col h-[calc(100dvh-62px)] 2xl:h-[calc(100dvh-66px)] max-h-[calc(100dvh-62px)] 2xl:max-h-[calc(100dvh-66px)] w-full overflow-hidden space-y-1.5 animate-fade-in">
+            {/* Unified Compact Toolbar: Search + Quick Actions + Filters */}
+            <div className="shrink-0 rounded-xl p-1.5 sm:p-2 shadow-2xs space-y-1.5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800">
+                {/* Row 1: Search + Quick Tools + View Switcher + Primary Actions */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5 sm:gap-2">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        {/* Compact Search Input */}
+                        <div className="relative flex-1 min-w-[180px] max-w-md">
+                            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                            <input
+                                type="search"
+                                placeholder="Search name, barcode, serial…"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') openLookupItem(search);
+                                }}
+                                className="w-full h-8 pl-8 pr-7 text-xs bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/80 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                            />
+                            {search && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Scanner Toggle Button */}
+                        <button
+                            type="button"
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all cursor-pointer ${
+                                showInventoryScanner
+                                    ? 'border-primary bg-primary text-white shadow-xs'
+                                    : 'border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                            }`}
+                            onClick={() => setShowInventoryScanner(prev => !prev)}
+                            title={showInventoryScanner ? 'Hide scanner' : 'Scan QR code'}
+                        >
+                            <ScanLine size={15} />
+                        </button>
+                    </div>
+
+                    {/* View Mode + Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                        {/* View Mode Toggle */}
+                        <div className="flex bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700">
                             <button
                                 onClick={() => setViewMode('grid')}
-                                className={`p-1.5 sm:p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`p-1 rounded-md transition-all cursor-pointer ${
+                                    viewMode === 'grid'
+                                        ? 'bg-white dark:bg-[#2c2c2e] text-primary shadow-xs'
+                                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                                title="Grid View"
                             >
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                                 </svg>
                             </button>
                             <button
                                 onClick={() => setViewMode('list')}
-                                className={`p-1.5 sm:p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`p-1 rounded-md transition-all cursor-pointer ${
+                                    viewMode === 'list'
+                                        ? 'bg-white dark:bg-[#2c2c2e] text-primary shadow-xs'
+                                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                                title="List / Table View"
                             >
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                 </svg>
                             </button>
                         </div>
-                        {(user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                            <div className="flex gap-1 sm:gap-2">
-                                {/* database cleanup button - shows only if needed */}
-                                {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && can('fixData') && (
-                                    <Button
-                                        variant="danger"
-                                        size="sm"
-                                        className="whitespace-nowrap px-2 sm:px-3 animate-pulse"
-                                        onClick={handleCleanupAssignments}
-                                        title="Fix inconsistent data in database"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-database-zap"><path d="M7.4 17.65c-.66.86-1.4 1.85-1.4 3.75 0 0 4.1 1.7 8 0 0-1.9-.74-2.89-1.4-3.75l-5.2-7.25c-.66-.86.13-1.65.95-1.65h3.3c.82 0 1.61.79.95 1.65l-5.2 7.25Z" /><path d="M12 2c5.523 0 10 4.477 10 10 0 2.275-.76 4.375-2.031 6.094" /><path d="M2.031 11.906A10 10 0 0 1 12 2" /></svg>
-                                        <span className="hidden sm:inline ml-2">Fix Data ({cleanupData.staleAssignments.length + cleanupData.ghostCheckouts.length})</span>
-                                    </Button>
-                                )}
-                                <Link href="/inventory/bulk-add">
-                                    <Button variant="secondary" size="sm" className="whitespace-nowrap px-2 sm:px-3">
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        <span className="hidden sm:inline ml-2">Bulk Import</span>
-                                    </Button>
-                                </Link>
-                                {can('exportCsv') && (
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    className="whitespace-nowrap px-2 sm:px-3"
-                                    onClick={() => {
-                                        const headers = ['Name', 'Category', 'Barcode', 'Serial Number', 'Status', 'Assigned To'];
-                                        const rows = filteredItems.map(item => [
-                                            `"${item.name.replace(/"/g, '""')}"`,
-                                            `"${item.category.replace(/"/g, '""')}"`,
-                                            item.barcode,
-                                            item.serialNumber || '',
-                                            item.status,
-                                            item.assignedTo ? (users[item.assignedTo] || 'Unknown') : ''
-                                        ].join(','));
 
-                                        const csvContent = [headers.join(','), ...rows].join('\n');
-                                        downloadFile(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), `inventory_export_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
-                                    }}
-                                >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <span className="hidden sm:inline ml-2">Export CSV</span>
-                                </Button>
-                                )}
-                                <Link href="/inventory/add">
-                                    <Button className="whitespace-nowrap px-2 sm:px-4" size="sm">
-                                        <span className="hidden sm:inline">Add Equipment</span>
-                                        <span className="sm:hidden">+ Add</span>
-                                    </Button>
-                                </Link>
-                            </div>
+                        {/* Database Cleanup Button */}
+                        {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && can('fixData') && (
+                            <button
+                                onClick={handleCleanupAssignments}
+                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-lg border border-rose-500/30 flex items-center gap-1 transition-all animate-pulse cursor-pointer"
+                                title="Fix inconsistent data in database"
+                            >
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M7.4 17.65c-.66.86-1.4 1.85-1.4 3.75 0 0 4.1 1.7 8 0 0-1.9-.74-2.89-1.4-3.75l-5.2-7.25c-.66-.86.13-1.65.95-1.65h3.3c.82 0 1.61.79.95 1.65l-5.2 7.25Z" />
+                                    <path d="M12 2c5.523 0 10 4.477 10 10 0 2.275-.76 4.375-2.031 6.094" />
+                                </svg>
+                                <span>Fix ({cleanupData.staleAssignments.length + cleanupData.ghostCheckouts.length})</span>
+                            </button>
+                        )}
+
+                        {/* Bulk Import */}
+                        <Link
+                            href="/inventory/bulk-add"
+                            className="px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                            <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span className="hidden sm:inline">Bulk Import</span>
+                        </Link>
+
+                        {/* Export CSV */}
+                        {can('exportCsv') && (
+                            <button
+                                onClick={() => {
+                                    const headers = ['Name', 'Category', 'Barcode', 'Serial Number', 'Status', 'Assigned To'];
+                                    const rows = filteredItems.map(item => [
+                                        `"${item.name.replace(/"/g, '""')}"`,
+                                        `"${item.category.replace(/"/g, '""')}"`,
+                                        item.barcode,
+                                        item.serialNumber || '',
+                                        item.status,
+                                        item.assignedTo ? (users[item.assignedTo] || 'Unknown') : ''
+                                    ].join(','));
+                                    const csvContent = [headers.join(','), ...rows].join('\n');
+                                    downloadFile(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), `inventory_export_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
+                                }}
+                                className="px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-1 transition-all cursor-pointer"
+                            >
+                                <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>Export</span>
+                            </button>
+                        )}
+
+                        {/* Add Equipment */}
+                        {['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '') && (
+                            <Link
+                                href="/inventory/add"
+                                className="px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-xs flex items-center gap-1 transition-all cursor-pointer"
+                            >
+                                <span>+ New</span>
+                            </Link>
                         )}
                     </div>
                 </div>
-            </div>
 
-            <div className="flex flex-col gap-3">
-                <div className="flex h-14 w-full items-center gap-2 rounded-2xl border border-border bg-secondary/50 pl-4 pr-3 transition-all duration-200 focus-within:border-transparent focus-within:ring-2 focus-within:ring-primary">
-                    <Search className="h-5 w-5 shrink-0 text-muted-foreground sm:h-6 sm:w-6" />
-                    <input
-                        type="search"
-                        placeholder="Search name, barcode, serial…"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') openLookupItem(search);
-                        }}
-                        className="h-full min-w-0 flex-1 bg-transparent py-2 text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
-                    />
-                    <button
-                        type="button"
-                        className={`flex h-11 w-12 shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95 ${showInventoryScanner
-                            ? 'border-primary/30 bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                            : 'border-border bg-[#1f2937] text-white hover:bg-[#273449] dark:bg-secondary dark:text-foreground dark:hover:bg-secondary/80'
-                            }`}
-                        onClick={() => setShowInventoryScanner(prev => !prev)}
-                        title={showInventoryScanner ? 'Hide scanner' : 'Scan item'}
-                        aria-label={showInventoryScanner ? 'Hide scanner' : 'Scan item'}
-                    >
-                        <ScanLine className="h-6 w-6" strokeWidth={2.25} />
-                    </button>
-                </div>
-
-                {showInventoryScanner && (
-                    <div className="overflow-hidden rounded-[28px] border border-border bg-card p-3 shadow-xl shadow-black/10 dark:bg-[#1c1c1e]">
-                        <div className="mb-3 flex items-center justify-between gap-3 px-1">
-                            <div className="min-w-0">
-                                <h2 className="text-[18px] font-bold text-foreground">QR Code Scanner</h2>
-                                <p className="truncate text-[13px] text-muted-foreground">Scan an item to open its details.</p>
-                            </div>
+                {/* Row 2: Status Filter Tabs + Facet Filters + Summary Count */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-0.5 border-t border-gray-100 dark:border-gray-800/80">
+                    {/* Status Tabs */}
+                    <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide py-0.5">
+                        {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
                             <button
-                                type="button"
-                                onClick={() => setShowInventoryScanner(false)}
-                                className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                key={status}
+                                onClick={() => setStatusFilter(status)}
+                                className={`whitespace-nowrap px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                                    statusFilter === status
+                                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black shadow-2xs font-semibold'
+                                        : 'text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                                }`}
                             >
-                                Close
+                                {status === 'ALL' ? 'All' : status === 'NEEDS_ATTENTION' ? 'Needs Attention' : status === 'PENDING_VERIFICATION' ? 'Pending' : status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
                             </button>
-                        </div>
-
-                        <div className="md:hidden h-[min(72vh,560px)] min-h-[420px] overflow-hidden rounded-[24px] bg-black shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
-                            <MobileScanner
-                                onScan={handleInventoryScan}
-                                onError={(error) => showToast(error, 'error')}
-                                onClose={() => setShowInventoryScanner(false)}
-                                autoStart={true}
-                            />
-                        </div>
-
-                        <div className="hidden md:block">
-                            <QRScanner
-                                onScan={handleInventoryScan}
-                                onError={(error) => showToast(error, 'error')}
-                                continuous={false}
-                                compact
-                                autoStart
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {/* Filter bar: status tabs, then Category / Brand / Size facet pickers.
-                    Pick any combination, then Select all + Export/QR/Bulk Edit act on the
-                    filtered rows. */}
-                <div className="space-y-2.5">
-                    <div className="w-full overflow-x-auto scrollbar-hide">
-                        <div className="flex gap-1.5 sm:gap-2 pb-0.5">
-                            {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
-                                <button
-                                    key={status}
-                                    onClick={() => setStatusFilter(status)}
-                                    className={`whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${statusFilter === status
-                                        ? 'bg-[#1d1d1f] text-white dark:bg-white dark:text-black'
-                                        : 'bg-transparent text-[#86868b] hover:bg-[#e8e8ed] hover:text-[#1d1d1f] dark:hover:bg-[#2c2c2e] dark:hover:text-white'
-                                        }`}
-                                    style={{ WebkitTapHighlightColor: 'transparent' }}
-                                >
-                                    {status === 'ALL' ? 'All' : status === 'NEEDS_ATTENTION' ? 'Needs Attention' : status === 'PENDING_VERIFICATION' ? 'Pending' : status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                                </button>
-                            ))}
-                        </div>
+                        ))}
                     </div>
 
-                    {/* One Filters control (popover on desktop, bottom sheet on phones) holding
-                        all facets, with applied values shown as removable chips. Status has its
-                        own tabs above; free-text has the search bar. */}
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                    {/* Facet Filters & Selected Count */}
+                    <div className="flex items-center gap-2 flex-wrap">
                         <FacetFilters
                             resultCount={filteredItems.length}
                             groups={[
@@ -1546,222 +1533,189 @@ function InventoryPageContent() {
                                 { key: 'end', label: 'Connector end', options: endOptions, selected: endFilter, onChange: setEndFilter },
                             ]}
                         />
-                        <span className="ml-auto whitespace-nowrap text-[13px] font-medium text-muted-foreground">
+                        <span className="text-[11px] font-medium text-gray-400">
                             {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
                         </span>
                     </div>
                 </div>
             </div>
 
-            {viewMode === 'list' && (
-                <div className="flex items-center justify-between bg-secondary/30 rounded-lg px-4 py-2 border border-border flex-wrap gap-3">
-                    <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
-                                onChange={toggleSelectAll}
-                                className="w-4 h-4 rounded border-border accent-primary"
-                            />
-                            <span className="text-sm text-muted-foreground">
-                                {selectedItems.size > 0 ? `${selectedItems.size} selected` : 'Select all'}
-                            </span>
-                        </label>
+            {/* Scanner Drawer (if activated) */}
+            {showInventoryScanner && (
+                <div className="shrink-0 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] p-3 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                        <div className="min-w-0">
+                            <h2 className="text-sm font-bold text-gray-900 dark:text-white">QR Code Scanner</h2>
+                            <p className="truncate text-xs text-gray-400">Scan an item barcode to open its details.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowInventoryScanner(false)}
+                            className="rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                        >
+                            Close
+                        </button>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {/* Hand gear over to the data team. They move items back from their
-                            own page, since this list no longer shows their items. */}
+
+                    <div className="md:hidden h-[min(60vh,400px)] min-h-[300px] overflow-hidden rounded-xl bg-black">
+                        <MobileScanner
+                            onScan={handleInventoryScan}
+                            onError={(error) => showToast(error, 'error')}
+                            onClose={() => setShowInventoryScanner(false)}
+                            autoStart={true}
+                        />
+                    </div>
+
+                    <div className="hidden md:block">
+                        <QRScanner
+                            onScan={handleInventoryScan}
+                            onError={(error) => showToast(error, 'error')}
+                            continuous={false}
+                            compact
+                            autoStart
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk Actions Banner (When items selected or editing) */}
+            {(selectedItems.size > 0 || isBulkEditMode) && (
+                <div className="shrink-0 flex items-center justify-between bg-primary/[0.08] dark:bg-primary/[0.15] border border-primary/30 rounded-xl px-3 py-1.5 gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
+                            onChange={toggleSelectAll}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-primary">
+                            {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
+                        </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Hand gear over to the data team */}
                         {hasFeature('data_assets') && canManageDataAssets(user) && can('moveToDataTeam') && selectedItems.size > 0 && !isBulkEditMode && (
-                            <Button
-                                variant="outline"
-                                size="sm"
+                            <button
                                 onClick={() => setSelectedCustodian('DATA')}
-                                isLoading={custodianApplying}
-                                className="gap-2"
+                                disabled={custodianApplying}
+                                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition-all cursor-pointer"
                             >
-                                Move to data team
-                            </Button>
+                                Move to Data Team
+                            </button>
                         )}
-                        {['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'DATA_MANAGER'].includes(user?.role || '') && (
+
+                        {isBulkEditMode ? (
                             <>
-                                {isBulkEditMode ? (
-                                    <>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                setEditDrafts({});
-                                                setIsBulkEditMode(false);
-                                            }}
-                                            className="gap-2 text-muted-foreground"
-                                            disabled={isSavingDrafts}
-                                        >
-                                            Cancel
-                                        </Button>
-                                        <Button
-                                            variant="primary"
-                                            size="sm"
-                                            onClick={async () => {
-                                                // Custodian boundary — never write an item this
-                                                // user doesn't own, even if a draft exists for it.
-                                                const draftIds = Object.keys(editDrafts).filter(id =>
-                                                    canManageItem(user, items.find(i => i.id === id))
-                                                );
-                                                if (draftIds.length === 0) {
-                                                    setIsBulkEditMode(false);
-                                                    return;
-                                                }
-                                                setIsSavingDrafts(true);
-                                                let hasError = false;
-                                                for (const id of draftIds) {
-                                                    try {
-                                                        const d = editDrafts[id];
-                                                        await updateEquipment({ id, updates: d });
-                                                        const orig = items.find(i => i.id === id);
-                                                        if (orig) {
-                                                            const changed: string[] = [];
-                                                            if (d.name !== undefined && d.name.trim() !== orig.name) changed.push(`name: "${orig.name}" → "${d.name.trim()}"`);
-                                                            if (d.category !== undefined && d.category !== orig.category) changed.push(`category: "${orig.category}" → "${d.category}"`);
-                                                            if (d.barcode !== undefined && d.barcode !== orig.barcode) changed.push(`barcode: "${orig.barcode}" → "${d.barcode}"`);
-                                                            if (d.serialNumber !== undefined && (d.serialNumber || '') !== (orig.serialNumber || '')) changed.push(`serial: "${orig.serialNumber || ''}" → "${d.serialNumber || ''}"`);
-                                                            const origModel = orig.metadata?.model || '';
-                                                            const newModel = d.metadata?.model || '';
-                                                            if (d.metadata?.model !== undefined && newModel !== origModel) changed.push(`model: "${origModel}" → "${newModel}"`);
-                                                            if (changed.length > 0) await logEquipmentEdit(orig, `Bulk edit "${orig.name}" (${orig.barcode}): ${changed.join(', ')}`);
-                                                        }
-                                                    } catch (error) {
-                                                        console.error(`Update failed for ${id}:`, error);
-                                                        hasError = true;
-                                                    }
-                                                }
-                                                setIsSavingDrafts(false);
-                                                if (hasError) {
-                                                    showToast('Some updates failed', 'error');
-                                                } else {
-                                                    showToast('All changes saved successfully', 'success');
-                                                    setEditDrafts({});
-                                                    setIsBulkEditMode(false);
-                                                    refresh();
-                                                }
-                                            }}
-                                            className="gap-2"
-                                            disabled={isSavingDrafts}
-                                        >
-                                            {isSavingDrafts ? (
-                                                <>
-                                                    <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                                                    Saving...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                    Save Changes
-                                                </>
-                                            )}
-                                        </Button>
-                                    </>
-                                ) : (
-                                    <>
-                                        {ncConnectorCount > 0 && can('normalizeConnectors') && (
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={openNormalize}
-                                                className="gap-2"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                                </svg>
-                                                Normalize Connectors
-                                            </Button>
-                                        )}
-                                        {can('generateBarcodes') && (
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={openBarcodeGen}
-                                                className="gap-2"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h1m3 0h1m3 0h1m3 0h1M4 18h1m3 0h1m3 0h1m3 0h1M4 12h16" />
-                                                </svg>
-                                                Generate Barcodes
-                                            </Button>
-                                        )}
-                                        {can('fixNames') && (
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={openRename}
-                                                className="gap-2"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7V5a1 1 0 011-1h14a1 1 0 011 1v2M9 20h6M12 4v16" />
-                                                </svg>
-                                                Fix Names
-                                            </Button>
-                                        )}
-                                        {can('findReplace') && (
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => setFrOpen(true)}
-                                                className="gap-2"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 6a5 5 0 015 5m-5 5a5 5 0 100-10 5 5 0 000 10z" />
-                                                </svg>
-                                                Find & Replace
-                                            </Button>
-                                        )}
-                                        {can('bulkEdit') && (
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => setIsBulkEditMode(true)}
-                                                className="gap-2"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                                Bulk Edit
-                                            </Button>
-                                        )}
-                                    </>
-                                )}
-                            </>
-                        )}
-                        {selectedItems.size > 0 && (
-                            <>
-                                {can('printLabels') && (
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => setQrModalOpen(true)}
-                                    disabled={isGeneratingQR}
-                                    className="gap-2"
+                                <button
+                                    onClick={() => {
+                                        setEditDrafts({});
+                                        setIsBulkEditMode(false);
+                                    }}
+                                    disabled={isSavingDrafts}
+                                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 transition-all cursor-pointer"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                    </svg>
-                                    {isGeneratingQR ? 'Generating…' : 'Print QR / Labels'}
-                                </Button>
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        const draftIds = Object.keys(editDrafts).filter(id =>
+                                            canManageItem(user, items.find(i => i.id === id))
+                                        );
+                                        if (draftIds.length === 0) {
+                                            setIsBulkEditMode(false);
+                                            return;
+                                        }
+                                        setIsSavingDrafts(true);
+                                        let hasError = false;
+                                        for (const id of draftIds) {
+                                            try {
+                                                const d = editDrafts[id];
+                                                await updateEquipment({ id, updates: d });
+                                                const orig = items.find(i => i.id === id);
+                                                if (orig) {
+                                                    const changed: string[] = [];
+                                                    if (d.name !== undefined && d.name.trim() !== orig.name) changed.push(`name: "${orig.name}" → "${d.name.trim()}"`);
+                                                    if (d.category !== undefined && d.category !== orig.category) changed.push(`category: "${orig.category}" → "${d.category}"`);
+                                                    if (d.barcode !== undefined && d.barcode !== orig.barcode) changed.push(`barcode: "${orig.barcode}" → "${d.barcode}"`);
+                                                    if (d.serialNumber !== undefined && (d.serialNumber || '') !== (orig.serialNumber || '')) changed.push(`serial: "${orig.serialNumber || ''}" → "${d.serialNumber || ''}"`);
+                                                    const origModel = orig.metadata?.model || '';
+                                                    const newModel = d.metadata?.model || '';
+                                                    if (d.metadata?.model !== undefined && newModel !== origModel) changed.push(`model: "${origModel}" → "${newModel}"`);
+                                                    if (changed.length > 0) await logEquipmentEdit(orig, `Bulk edit "${orig.name}" (${orig.barcode}): ${changed.join(', ')}`);
+                                                }
+                                            } catch (error) {
+                                                console.error(`Update failed for ${id}:`, error);
+                                                hasError = true;
+                                            }
+                                        }
+                                        setIsSavingDrafts(false);
+                                        if (hasError) {
+                                            showToast('Some updates failed', 'error');
+                                        } else {
+                                            showToast('All changes saved successfully', 'success');
+                                            setEditDrafts({});
+                                            setIsBulkEditMode(false);
+                                            refresh();
+                                        }
+                                    }}
+                                    disabled={isSavingDrafts}
+                                    className="px-3 py-1 text-xs font-semibold rounded-lg bg-primary text-white hover:bg-primary/90 transition-all cursor-pointer shadow-xs"
+                                >
+                                    {isSavingDrafts ? 'Saving…' : 'Save Changes'}
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                {can('generateBarcodes') && (
+                                    <button
+                                        onClick={openBarcodeGen}
+                                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition-all cursor-pointer"
+                                    >
+                                        Generate Barcodes
+                                    </button>
+                                )}
+                                {can('fixNames') && (
+                                    <button
+                                        onClick={openRename}
+                                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition-all cursor-pointer"
+                                    >
+                                        Fix Names
+                                    </button>
+                                )}
+                                {can('findReplace') && (
+                                    <button
+                                        onClick={() => setFrOpen(true)}
+                                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition-all cursor-pointer"
+                                    >
+                                        Find & Replace
+                                    </button>
+                                )}
+                                {can('bulkEdit') && (
+                                    <button
+                                        onClick={() => setIsBulkEditMode(true)}
+                                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition-all cursor-pointer"
+                                    >
+                                        Bulk Edit
+                                    </button>
+                                )}
+                                {can('printLabels') && (
+                                    <button
+                                        onClick={() => setQrModalOpen(true)}
+                                        disabled={isGeneratingQR}
+                                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition-all cursor-pointer"
+                                    >
+                                        {isGeneratingQR ? 'Generating…' : 'Print QR / Labels'}
+                                    </button>
                                 )}
                                 {can('bulkDelete') && (
-                                    <Button
-                                        variant="danger"
-                                        size="sm"
+                                    <button
                                         onClick={handleBulkDelete}
                                         disabled={isActionLoading}
-                                        className="gap-2"
+                                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all cursor-pointer"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
                                         Delete
-                                    </Button>
+                                    </button>
                                 )}
                             </>
                         )}
@@ -1769,294 +1723,266 @@ function InventoryPageContent() {
                 </div>
             )}
 
-            <PullToRefresh onRefresh={async () => { await refresh(); }}>
+            {/* Main Content Area (Fixed Viewport Card) */}
+            <div className="rounded-xl shadow-2xs bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 flex-1 min-h-0 flex flex-col overflow-hidden">
                 {isActionLoading || isInventoryLoading ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    <div className="p-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
                         {Array.from({ length: 12 }).map((_, i) => (
-                            <Skeleton key={i} className="h-[280px] w-full rounded-2xl" />
+                            <Skeleton key={i} className="h-32 w-full rounded-xl" />
                         ))}
                     </div>
                 ) : viewMode === 'grid' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {filteredItems.map((item) => {
-                            const issue = getEquipmentIssue(item);
+                    <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-2 sm:p-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+                            {filteredItems.map((item) => {
+                                const issue = getEquipmentIssue(item);
 
-                            return (
-                            <Link
-                                key={item.id}
-                                href={`/inventory/${item.barcode}`}
-                                onClick={() => {
-                                    const scroller = document.querySelector('.app-main-scroll');
-                                    sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
-                                    sessionStorage.setItem('inventoryFlash', item.barcode);
-                                }}
-                                className="block h-full"
-                            >
-                                <div className={`group bg-white dark:bg-[#1c1c1e] rounded-xl p-4 border transition-all duration-700 cursor-pointer h-full flex flex-col ${item.barcode === flashBarcode ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-inset ring-primary/30' : 'border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-md'}`}>
-                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                        <div className="flex-1 min-w-0 pr-6">
-                                            {/* Composed names ("Wellborn NP F 970 Big Battery") are long, so wrap
-                                                to two lines rather than truncating mid-word — and don't repeat
-                                                the brand, model or size the name already contains. */}
-                                            <div className="flex items-start gap-1.5 min-w-0">
-                                                <h3 className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 break-words min-w-0 group-hover:text-primary transition-colors">
-                                                    {item.name}
-                                                </h3>
-                                                {item.metadata?.size && !nameCovers(item, item.metadata.size) && (
-                                                    <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground/70 border border-border/60 whitespace-nowrap max-w-[6rem] truncate">
-                                                        {item.metadata.size}
-                                                    </span>
+                                return (
+                                    <Link
+                                        key={item.id}
+                                        href={`/inventory/${item.barcode}`}
+                                        onClick={() => {
+                                            const scroller = document.querySelector('.app-main-scroll');
+                                            sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
+                                            sessionStorage.setItem('inventoryFlash', item.barcode);
+                                        }}
+                                        className="block h-full"
+                                    >
+                                        <div className={`group bg-white dark:bg-[#1c1c1e] rounded-xl p-2.5 border transition-all duration-300 cursor-pointer h-full flex flex-col ${item.barcode === flashBarcode ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-inset ring-primary/30' : 'border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-xs'}`}>
+                                            <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-start gap-1 min-w-0">
+                                                        <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 break-words min-w-0 group-hover:text-primary transition-colors">
+                                                            {item.name}
+                                                        </h3>
+                                                        {item.metadata?.size && !nameCovers(item, item.metadata.size) && (
+                                                            <span className="shrink-0 text-[9px] font-semibold px-1 py-0.2 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 whitespace-nowrap max-w-[5rem] truncate">
+                                                                {item.metadata.size}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {(() => {
+                                                        const detail = itemDetailLineForRow(item);
+                                                        return detail ? (
+                                                            <p className="text-[11px] font-medium text-gray-500 truncate mt-0.5">{detail}</p>
+                                                        ) : null;
+                                                    })()}
+                                                </div>
+                                                <Badge
+                                                    variant={getDisplayStatusVariant(item)}
+                                                    className="text-[9px] font-semibold px-1.5 py-0.2 rounded shrink-0"
+                                                >
+                                                    {getDisplayStatus(item)}
+                                                </Badge>
+                                            </div>
+
+                                            <div className="flex-1 flex flex-col justify-end">
+                                                {item.serialNumber && (
+                                                    <div className="mb-1.5">
+                                                        <span className="text-[10px] font-mono font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700">
+                                                            {item.serialNumber}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex items-center justify-between text-[10px] text-gray-400 mt-auto pt-1">
+                                                    <span className="truncate pr-1">{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? '' : item.category}</span>
+                                                    <span className="font-mono text-gray-500 shrink-0">{item.barcode}</span>
+                                                </div>
+
+                                                {issue && (
+                                                    <div className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-1.5 py-1 text-[10px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                        <span className="block truncate">{getIssueSummary(issue)}</span>
+                                                        <span className="block truncate font-medium">{issue.note}</span>
+                                                    </div>
+                                                )}
+
+                                                {item.status !== 'AVAILABLE' && item.assignedTo && (
+                                                    <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800">
+                                                        <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-primary to-cyan-500 flex items-center justify-center">
+                                                            <span className="text-[7px] font-bold text-white">
+                                                                {getUserName(item.assignedTo)?.charAt(0).toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                        <span className="text-[10px] text-gray-600 dark:text-gray-400 truncate">
+                                                            {getUserName(item.assignedTo)}
+                                                        </span>
+                                                    </div>
                                                 )}
                                             </div>
-                                            {(() => {
-                                                const detail = itemDetailLineForRow(item);
-                                                return detail ? (
-                                                    <p className="text-[12px] font-medium text-foreground/75 truncate mt-0.5">{detail}</p>
-                                                ) : null;
-                                            })()}
                                         </div>
-                                        <Badge
-                                            variant={getDisplayStatusVariant(item)}
-                                            className="text-[10px] font-medium px-2 py-0.5 rounded-md shrink-0"
-                                        >
-                                            {getDisplayStatus(item)}
-                                        </Badge>
-                                    </div>
-
-                                    <div className="flex-1">
-                                        {item.serialNumber && (
-                                            <div className="mb-3">
-                                                <span className="text-[11px] font-mono font-medium text-foreground/80 bg-secondary/80 px-1.5 py-0.5 rounded border border-border/50">
-                                                    {item.serialNumber}
-                                                </span>
-                                            </div>
-                                        )}
-
-                                        <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-auto">
-                                            <span>{item.category.trim().toLowerCase() === item.name.trim().toLowerCase() ? '' : item.category}</span>
-                                            <span className="font-mono text-muted-foreground/60">{item.barcode}</span>
-                                        </div>
-
-                                        {issue && (
-                                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                                <span className="block truncate">{getIssueSummary(issue)}</span>
-                                                <span className="block truncate font-medium">{issue.note}</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {item.status !== 'AVAILABLE' && item.assignedTo && (
-                                        <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-50 dark:border-gray-800 mt-auto">
-                                            <div className="w-4 h-4 rounded-full bg-gradient-to-br from-primary to-cyan-500 flex items-center justify-center">
-                                                <span className="text-[8px] font-bold text-white">
-                                                    {getUserName(item.assignedTo)?.charAt(0).toUpperCase()}
-                                                </span>
-                                            </div>
-                                            <span className="text-[11px] text-gray-600 dark:text-gray-400 truncate">
-                                                {getUserName(item.assignedTo)}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            </Link>
-                            );
-                        })}
+                                    </Link>
+                                );
+                            })}
+                        </div>
                     </div>
                 ) : (
-                    <Card className="overflow-hidden border-border/50 bg-secondary/30">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
-                                    <tr>
-                                        <th className="px-4 py-3 w-10">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
-                                                onChange={toggleSelectAll}
-                                                className="w-4 h-4 rounded border-border accent-primary"
-                                            />
-                                        </th>
-                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('name')}>
-                                            <div className="flex items-center whitespace-nowrap">Equipment Name <SortIcon active={sortConfig?.key === 'name'} direction={sortConfig?.direction || 'asc'} /></div>
-                                        </th>
-                                        <th className="px-6 py-3">Brand</th>
-                                        <th className="px-6 py-3">Model</th>
-                                        <th className="px-6 py-3">Size</th>
-                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('category')}>
-                                            <div className="flex items-center">Category <SortIcon active={sortConfig?.key === 'category'} direction={sortConfig?.direction || 'asc'} /></div>
-                                        </th>
-                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('barcode')}>
-                                            <div className="flex items-center">Barcode <SortIcon active={sortConfig?.key === 'barcode'} direction={sortConfig?.direction || 'asc'} /></div>
-                                        </th>
-                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('serialNumber')}>
-                                            <div className="flex items-center whitespace-nowrap">S/N <SortIcon active={sortConfig?.key === 'serialNumber'} direction={sortConfig?.direction || 'asc'} /></div>
-                                        </th>
-                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('status')}>
-                                            <div className="flex items-center">Status <SortIcon active={sortConfig?.key === 'status'} direction={sortConfig?.direction || 'asc'} /></div>
-                                        </th>
-                                        <th className="px-6 py-3">
-                                            <div className="flex items-center">Action</div>
-                                        </th>
-                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('assignedToName')}>
-                                            <div className="flex items-center">Assigned To <SortIcon active={sortConfig?.key === 'assignedToName'} direction={sortConfig?.direction || 'asc'} /></div>
-                                        </th>
-                                        <th className="px-6 py-3 cursor-pointer hover:text-foreground transition-colors" onClick={() => handleSort('createdAt')}>
-                                            <div className="flex items-center whitespace-nowrap">Added <SortIcon active={sortConfig?.key === 'createdAt'} direction={sortConfig?.direction || 'asc'} /></div>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {isInventoryLoading ? (
-                                        Array.from({ length: 8 }).map((_, i) => (
-                                            <tr key={i} className="border-b border-border bg-background/50">
-                                                <td className="px-4 py-4"><Skeleton className="w-4 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-40 h-5 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-20 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-20 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-16 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-24 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-28 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-24 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-20 h-6 rounded-full" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-5 h-5 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-32 h-4 rounded" /></td>
-                                                <td className="px-6 py-4"><Skeleton className="w-20 h-4 rounded" /></td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        filteredItems.map((item) => {
-                                            const issue = getEquipmentIssue(item);
+                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-xs text-left border-collapse">
+                            <thead className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 shadow-2xs">
+                                <tr>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3 py-1.5 2xl:py-2 w-8">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
+                                            onChange={toggleSelectAll}
+                                            className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary cursor-pointer"
+                                        />
+                                    </th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('name')}>
+                                        <div className="flex items-center whitespace-nowrap">Equipment Name <SortIcon active={sortConfig?.key === 'name'} direction={sortConfig?.direction || 'asc'} /></div>
+                                    </th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">Brand</th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">Model</th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">Size</th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('category')}>
+                                        <div className="flex items-center">Category <SortIcon active={sortConfig?.key === 'category'} direction={sortConfig?.direction || 'asc'} /></div>
+                                    </th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('barcode')}>
+                                        <div className="flex items-center">Barcode <SortIcon active={sortConfig?.key === 'barcode'} direction={sortConfig?.direction || 'asc'} /></div>
+                                    </th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('serialNumber')}>
+                                        <div className="flex items-center whitespace-nowrap">S/N <SortIcon active={sortConfig?.key === 'serialNumber'} direction={sortConfig?.direction || 'asc'} /></div>
+                                    </th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('status')}>
+                                        <div className="flex items-center">Status <SortIcon active={sortConfig?.key === 'status'} direction={sortConfig?.direction || 'asc'} /></div>
+                                    </th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-center">Action</th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('assignedToName')}>
+                                        <div className="flex items-center">Assigned To <SortIcon active={sortConfig?.key === 'assignedToName'} direction={sortConfig?.direction || 'asc'} /></div>
+                                    </th>
+                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('createdAt')}>
+                                        <div className="flex items-center whitespace-nowrap">Added <SortIcon active={sortConfig?.key === 'createdAt'} direction={sortConfig?.direction || 'asc'} /></div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800/70">
+                                {filteredItems.map((item) => {
+                                    const issue = getEquipmentIssue(item);
 
-                                            return (
-                                            <tr
-                                                key={item.id}
-                                                onClick={() => {
-                                                    if (isBulkEditMode) return;
-                                                    // Don't navigate if the user is selecting text in the row.
-                                                    if (typeof window !== 'undefined' && window.getSelection()?.toString()) return;
-                                                    openItem(item.barcode);
-                                                }}
-                                                className={`border-b border-border transition-[background-color,box-shadow,border-color] duration-700 ${!isBulkEditMode && 'cursor-pointer hover:bg-secondary/50'} ${item.barcode === flashBarcode ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : selectedItems.has(item.id) ? 'bg-primary/5' : 'bg-background/50'}`}
-                                            >
-                                                <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedItems.has(item.id)}
-                                                        onChange={(e) => toggleSelect(e, item.id)}
-                                                        className="w-4 h-4 rounded border-border accent-primary"
-                                                    />
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    {isBulkEditMode ? (
-                                                        <div className="w-40">
-                                                            <InlineInput value={editDrafts[item.id]?.name ?? item.name} onChange={(val) => handleDraftChange(item.id, 'name', val)} placeholder="Name" />
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <div className="font-medium text-foreground">{item.name}</div>
-                                                            {issue && (
-                                                                <div className="mt-1 flex max-w-[320px] items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                                                    <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                                                    </svg>
-                                                                    <span className="line-clamp-2">{getIssueSummary(issue)}: {issue.note}</span>
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 text-muted-foreground">
-                                                    {isBulkEditMode ? (
-                                                        <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.brand ?? item.metadata?.brand ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'brand', val)} placeholder="Brand" /></div>
-                                                    ) : (item.metadata?.brand || '—')}
-                                                </td>
-                                                <td className="px-6 py-4 text-muted-foreground">
-                                                    {isBulkEditMode ? (
-                                                        <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.model ?? item.metadata?.model ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'model', val)} placeholder="Model" /></div>
-                                                    ) : (item.metadata?.model || '—')}
-                                                </td>
-                                                <td className="px-6 py-4 text-muted-foreground">
-                                                    {isBulkEditMode ? (
-                                                        <div className="w-24"><InlineInput value={editDrafts[item.id]?.metadata?.size ?? item.metadata?.size ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'size', val)} placeholder="Size" /></div>
-                                                    ) : (item.metadata?.size || '—')}
-                                                </td>
-                                                <td className="px-6 py-4 text-muted-foreground">
-                                                    {isBulkEditMode ? (
-                                                        <div className="w-32">
-                                                            <InlineInput value={editDrafts[item.id]?.category ?? item.category} onChange={(val) => handleDraftChange(item.id, 'category', val)} placeholder="Category" />
-                                                        </div>
-                                                    ) : item.category}
-                                                </td>
-                                                <td className="px-6 py-4 font-mono text-muted-foreground">
-                                                    {isBulkEditMode ? (
-                                                        <div className="w-32">
-                                                            <InlineInput value={editDrafts[item.id]?.barcode ?? item.barcode} onChange={(val) => handleDraftChange(item.id, 'barcode', val)} placeholder="Barcode" />
-                                                        </div>
-                                                    ) : item.barcode}
-                                                </td>
-                                                <td className="px-6 py-4 font-mono text-muted-foreground">
-                                                    {isBulkEditMode ? (
-                                                        <div className="w-28"><InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N" /></div>
-                                                    ) : (item.serialNumber || '—')}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <Badge variant={getDisplayStatusVariant(item)}>
-                                                        {getDisplayStatus(item)}
-                                                    </Badge>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <button
-                                                        onClick={(e) => handlePrintQR(e, item)}
-                                                        className="text-primary hover:text-primary/80 transition-colors"
-                                                        title="Print QR"
-                                                    >
-                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                                        </svg>
-                                                    </button>
-                                                </td>
-                                                <td className="px-6 py-4 text-muted-foreground">{item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">
-                                                    {(item.createdAt || item.lastActivity)
-                                                        ? new Date(item.createdAt || item.lastActivity!).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-                                                        : '—'}
-                                                </td>
-                                            </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </Card>
+                                    return (
+                                        <tr
+                                            key={item.id}
+                                            onClick={() => {
+                                                if (isBulkEditMode) return;
+                                                if (typeof window !== 'undefined' && window.getSelection()?.toString()) return;
+                                                openItem(item.barcode);
+                                            }}
+                                            className={`transition-colors min-h-[34px] ${!isBulkEditMode && 'cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-950/20'} ${item.barcode === flashBarcode ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : selectedItems.has(item.id) ? 'bg-primary/[0.06] dark:bg-primary/[0.12]' : 'bg-white dark:bg-transparent'}`}
+                                        >
+                                            <td className="px-2.5 2xl:px-3 py-1.5 2xl:py-2" onClick={(e) => e.stopPropagation()}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedItems.has(item.id)}
+                                                    onChange={(e) => toggleSelect(e, item.id)}
+                                                    className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary cursor-pointer"
+                                                />
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">
+                                                {isBulkEditMode ? (
+                                                    <div className="w-40">
+                                                        <InlineInput value={editDrafts[item.id]?.name ?? item.name} onChange={(val) => handleDraftChange(item.id, 'name', val)} placeholder="Name" />
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
+                                                        {issue && (
+                                                            <div className="mt-0.5 flex max-w-[320px] items-start gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                                <svg className="mt-0.5 h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                                </svg>
+                                                                <span className="line-clamp-2">{getIssueSummary(issue)}: {issue.note}</span>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
+                                                {isBulkEditMode ? (
+                                                    <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.brand ?? item.metadata?.brand ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'brand', val)} placeholder="Brand" /></div>
+                                                ) : (item.metadata?.brand || '—')}
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
+                                                {isBulkEditMode ? (
+                                                    <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.model ?? item.metadata?.model ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'model', val)} placeholder="Model" /></div>
+                                                ) : (item.metadata?.model || '—')}
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
+                                                {isBulkEditMode ? (
+                                                    <div className="w-24"><InlineInput value={editDrafts[item.id]?.metadata?.size ?? item.metadata?.size ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'size', val)} placeholder="Size" /></div>
+                                                ) : (item.metadata?.size || '—')}
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
+                                                {isBulkEditMode ? (
+                                                    <div className="w-32">
+                                                        <InlineInput value={editDrafts[item.id]?.category ?? item.category} onChange={(val) => handleDraftChange(item.id, 'category', val)} placeholder="Category" />
+                                                    </div>
+                                                ) : item.category}
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 font-mono text-gray-600 dark:text-gray-400">
+                                                {isBulkEditMode ? (
+                                                    <div className="w-32">
+                                                        <InlineInput value={editDrafts[item.id]?.barcode ?? item.barcode} onChange={(val) => handleDraftChange(item.id, 'barcode', val)} placeholder="Barcode" />
+                                                    </div>
+                                                ) : item.barcode}
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 font-mono text-gray-600 dark:text-gray-400">
+                                                {isBulkEditMode ? (
+                                                    <div className="w-28"><InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N" /></div>
+                                                ) : (item.serialNumber || '—')}
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">
+                                                <Badge variant={getDisplayStatusVariant(item)} className="text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                                                    {getDisplayStatus(item)}
+                                                </Badge>
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-center">
+                                                <button
+                                                    onClick={(e) => handlePrintQR(e, item)}
+                                                    className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
+                                                    title="Print QR"
+                                                >
+                                                    <svg className="w-4 h-4 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                                    </svg>
+                                                </button>
+                                            </td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">{item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}</td>
+                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 whitespace-nowrap text-gray-400">
+                                                {(item.createdAt || item.lastActivity)
+                                                    ? new Date(item.createdAt || item.lastActivity!).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                                                    : '—'}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
 
                 {filteredItems.length === 0 && !isInventoryLoading && (
-                    <div className="col-span-full flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-[#1c1c1e] rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
-                        <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                        <div className="w-12 h-12 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-3">
+                            <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                             </svg>
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">No items found</h3>
-                        <p className="text-gray-500 mt-1 mb-6 max-w-sm">
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">No items found</h3>
+                        <p className="text-xs text-gray-500 mt-1 mb-4 max-w-sm">
                             We could not find any items matching your current filters. Try adjusting your search criteria.
                         </p>
                         {(search || statusFilter !== 'ALL' || categoryFilter.length > 0 || brandFilter.length > 0 || sizeFilter.length > 0 || endFilter.length > 0) && (
-                            <Button
-                                variant="outline"
+                            <button
                                 onClick={() => { setSearch(''); setStatusFilter('ALL'); setCategoryFilter([]); setBrandFilter([]); setSizeFilter([]); setEndFilter([]); }}
-                                className="bg-white hover:bg-gray-50 dark:bg-transparent dark:hover:bg-gray-800"
+                                className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
                             >
                                 Clear all filters
-                            </Button>
+                            </button>
                         )}
                     </div>
                 )}
-            </PullToRefresh>
-
-            {/* QR / Label options dialog — choose what to print before downloading */}
-            {/* Normalize Connectors dialog */}
+            </div>
             {ncOpen && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
                     <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]">
