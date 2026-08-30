@@ -691,12 +691,23 @@ export default function ShootList() {
             }
 
             // Search filter
-            const query = searchQuery.toLowerCase();
+            const query = searchQuery.toLowerCase().trim();
+            const shootCrew = assignments.filter(a => a.shootId === shoot.id);
+            const matchesCrewName = query ? shootCrew.some(a => {
+                const u = users.find(user => user.id === a.userId);
+                return u?.name?.toLowerCase().includes(query);
+            }) : false;
+
             const matchesSearch = !query ||
                 shoot.title.toLowerCase().includes(query) ||
+                shoot.jiraTicketId?.toLowerCase().includes(query) ||
                 shoot.location?.toLowerCase().includes(query) ||
                 shoot.description?.toLowerCase().includes(query) ||
-                (shoot.shootNumber && shoot.shootNumber.toString().includes(query));
+                shoot.pocName?.toLowerCase().includes(query) ||
+                shoot.pocContact?.toLowerCase().includes(query) ||
+                (shoot.shootNumber && shoot.shootNumber.toString().includes(query)) ||
+                (shoot.shootNumber && `#${shoot.shootNumber}`.toLowerCase().includes(query)) ||
+                matchesCrewName;
 
             // Status filter (supports multiple active statuses)
             const isAllStatusesSelected = statusFilter.includes('ALL') || statusFilter.length === ALL_INDIVIDUAL_STATUSES.length;
