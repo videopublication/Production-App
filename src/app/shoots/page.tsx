@@ -2197,12 +2197,17 @@ export default function ShootList() {
                                                         }`}
                                                     >
                                                         <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 pr-2">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isChecked}
-                                                                onChange={() => toggleColumn(colKey)}
-                                                                className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 dark:border-gray-600 bg-transparent cursor-pointer shrink-0"
-                                                            />
+                                                            <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                                isChecked
+                                                                    ? 'border-primary bg-primary text-white'
+                                                                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                            }`}>
+                                                                {isChecked && (
+                                                                    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                )}
+                                                            </span>
                                                             <span className={`font-medium truncate ${isChecked ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                                                                 {colDef.label}
                                                             </span>
@@ -2882,12 +2887,17 @@ export default function ShootList() {
                                             }`}
                                         >
                                             <div className="flex items-center gap-2.5 min-w-0">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    onChange={() => {}}
-                                                    className="w-3.5 h-3.5 rounded text-primary focus:ring-primary/40 cursor-pointer accent-primary pointer-events-none"
-                                                />
+                                                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                    isChecked
+                                                        ? 'border-primary bg-primary text-white'
+                                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                }`}>
+                                                    {isChecked && (
+                                                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </span>
                                                 {!isAllOption && (
                                                     <span
                                                         className="w-2 h-2 rounded-full shrink-0"
@@ -3038,12 +3048,17 @@ export default function ShootList() {
                                     }`}
                                 >
                                     <div className="flex items-center gap-2.5 min-w-0">
-                                        <input
-                                            type="checkbox"
-                                            checked={isAllCrewSelected}
-                                            onChange={() => {}}
-                                            className="w-3.5 h-3.5 rounded text-primary focus:ring-primary/40 cursor-pointer accent-primary pointer-events-none"
-                                        />
+                                        <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                            isAllCrewSelected
+                                                ? 'border-primary bg-primary text-white'
+                                                : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                        }`}>
+                                            {isAllCrewSelected && (
+                                                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </span>
                                         <span className="text-xs">All Crew Members</span>
                                     </div>
                                 </div>
@@ -3058,12 +3073,17 @@ export default function ShootList() {
                                     }`}
                                 >
                                     <div className="flex items-center gap-2.5 min-w-0">
-                                        <input
-                                            type="checkbox"
-                                            checked={crewFilter.includes('UNASSIGNED')}
-                                            onChange={() => {}}
-                                            className="w-3.5 h-3.5 rounded text-primary focus:ring-primary/40 cursor-pointer accent-primary pointer-events-none"
-                                        />
+                                        <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                            crewFilter.includes('UNASSIGNED')
+                                                ? 'border-primary bg-primary text-white'
+                                                : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                        }`}>
+                                            {crewFilter.includes('UNASSIGNED') && (
+                                                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </span>
                                         <span className="text-xs">Unassigned (0 Crew)</span>
                                     </div>
                                 </div>
@@ -3085,12 +3105,17 @@ export default function ShootList() {
                                                 }`}
                                             >
                                                 <div className="flex items-center gap-2.5 min-w-0">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isChecked}
-                                                        onChange={() => {}}
-                                                        className="w-3.5 h-3.5 rounded text-primary focus:ring-primary/40 cursor-pointer accent-primary pointer-events-none"
-                                                    />
+                                                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                        isChecked
+                                                            ? 'border-primary bg-primary text-white'
+                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                    }`}>
+                                                        {isChecked && (
+                                                            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        )}
+                                                    </span>
                                                     <span className="truncate text-xs">{u.name}</span>
                                                 </div>
                                                 <span className="text-[10px] text-gray-400 font-mono ml-2 shrink-0">{getRoleLabel(u.role)}</span>
