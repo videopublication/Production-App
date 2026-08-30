@@ -1217,12 +1217,28 @@ export default function VerificationPage() {
                                 <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
                                     <th className="w-12 px-5 py-3">
                                         <div className="flex items-center justify-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={filteredPendingItems.length > 0 && filteredPendingItems.every(item => selectedItems.has(item.id))}
-                                                onChange={selectAll}
-                                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer transition-all"
-                                            />
+                                            {(() => {
+                                                const allSelected = filteredPendingItems.length > 0 && filteredPendingItems.every(item => selectedItems.has(item.id));
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        onClick={selectAll}
+                                                        className="flex items-center justify-center cursor-pointer"
+                                                    >
+                                                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                            allSelected
+                                                                ? 'border-primary bg-primary text-white'
+                                                                : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                        }`}>
+                                                            {allSelected && (
+                                                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            )}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })()}
                                         </div>
                                     </th>
                                     <th className="px-5 py-3 text-left"><button onClick={() => handleSort('item')} className="flex items-center text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Item <SortIndicator field="item" /></button></th>
@@ -1242,7 +1258,17 @@ export default function VerificationPage() {
                                         <tr key={item.id} onClick={() => toggleItemSelection(item.id)} className={`group transition-all duration-200 cursor-pointer ${isSelected ? 'bg-primary/5' : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/80'}`}>
                                             <td className="px-5 py-4">
                                                 <div className="flex items-center justify-center">
-                                                    <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(item.id)} className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" />
+                                                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                        isSelected
+                                                            ? 'border-primary bg-primary text-white'
+                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                    }`}>
+                                                        {isSelected && (
+                                                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        )}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4">

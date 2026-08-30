@@ -1956,23 +1956,38 @@ export default function ShootList() {
                                             <div className="flex items-center min-w-0 flex-1 w-full">
                                                 {colKey === 'shootNumber' && (
                                                     <div className="flex items-center gap-2 min-w-0 w-full">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={paginatedShoots.length > 0 && paginatedShoots.every(s => selectedShootIds.includes(s.id))}
-                                                            onChange={() => {
-                                                                const allSelected = paginatedShoots.length > 0 && paginatedShoots.every(s => selectedShootIds.includes(s.id));
-                                                                if (allSelected) {
-                                                                    const pageIds = new Set(paginatedShoots.map(s => s.id));
-                                                                    setSelectedShootIds(prev => prev.filter(id => !pageIds.has(id)));
-                                                                } else {
-                                                                    const pageIds = paginatedShoots.map(s => s.id);
-                                                                    setSelectedShootIds(prev => Array.from(new Set([...prev, ...pageIds])));
-                                                                }
-                                                            }}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            className="w-3.5 h-3.5 rounded text-primary focus:ring-primary border-gray-300 dark:border-gray-600 bg-transparent cursor-pointer shrink-0"
-                                                            title={paginatedShoots.length > 0 && paginatedShoots.every(s => selectedShootIds.includes(s.id)) ? 'Deselect all on this page' : 'Select all on this page'}
-                                                        />
+                                                        {(() => {
+                                                            const allSelected = paginatedShoots.length > 0 && paginatedShoots.every(s => selectedShootIds.includes(s.id));
+                                                            return (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (allSelected) {
+                                                                            const pageIds = new Set(paginatedShoots.map(s => s.id));
+                                                                            setSelectedShootIds(prev => prev.filter(id => !pageIds.has(id)));
+                                                                        } else {
+                                                                            const pageIds = paginatedShoots.map(s => s.id);
+                                                                            setSelectedShootIds(prev => Array.from(new Set([...prev, ...pageIds])));
+                                                                        }
+                                                                    }}
+                                                                    className="flex items-center justify-center cursor-pointer shrink-0"
+                                                                    title={allSelected ? 'Deselect all on this page' : 'Select all on this page'}
+                                                                >
+                                                                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                                        allSelected
+                                                                            ? 'border-primary bg-primary text-white'
+                                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                                    }`}>
+                                                                        {allSelected && (
+                                                                            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                            </svg>
+                                                                        )}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })()}
                                                         <button
                                                             onClick={() => handleSort('shootNumber')}
                                                             className={`flex items-center gap-1 font-bold transition-colors text-left truncate ${sortField === 'shootNumber' ? 'text-primary' : 'hover:text-gray-900 dark:hover:text-white'}`}
@@ -2323,20 +2338,31 @@ export default function ShootList() {
                                                     {/* 1. Shoot # & Checkbox */}
                                                     {colKey === 'shootNumber' && (
                                                         <div className="flex items-center gap-2 shrink-0 min-w-0">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isSelected}
-                                                                onChange={() => {
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
                                                                     setSelectedShootIds(prev =>
                                                                         prev.includes(shoot.id)
                                                                             ? prev.filter(id => id !== shoot.id)
                                                                             : [...prev, shoot.id]
                                                                     );
                                                                 }}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="w-3.5 h-3.5 rounded text-primary focus:ring-primary border-gray-300 dark:border-gray-600 bg-transparent cursor-pointer shrink-0"
+                                                                className="flex items-center justify-center cursor-pointer shrink-0"
                                                                 title={isSelected ? 'Deselect shoot' : 'Select shoot'}
-                                                            />
+                                                            >
+                                                                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                                    isSelected
+                                                                        ? 'border-primary bg-primary text-white'
+                                                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                                }`}>
+                                                                    {isSelected && (
+                                                                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                    )}
+                                                                </span>
+                                                            </button>
                                                             {shoot.shootNumber ? (
                                                                 <span className="text-xs font-mono font-medium text-gray-500 dark:text-gray-400">
                                                                     #{shoot.shootNumber}

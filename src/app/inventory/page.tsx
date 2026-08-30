@@ -1582,12 +1582,23 @@ function InventoryPageContent() {
             {(selectedItems.size > 0 || isBulkEditMode) && (
                 <div className="shrink-0 flex items-center justify-between bg-primary/[0.08] dark:bg-primary/[0.15] border border-primary/30 rounded-xl px-3 py-1.5 gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
-                            onChange={toggleSelectAll}
-                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                        />
+                        <button
+                            type="button"
+                            onClick={toggleSelectAll}
+                            className="flex items-center justify-center cursor-pointer shrink-0"
+                        >
+                            <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                selectedItems.size === filteredItems.length && filteredItems.length > 0
+                                    ? 'border-primary bg-primary text-white'
+                                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                            }`}>
+                                {selectedItems.size === filteredItems.length && filteredItems.length > 0 && (
+                                    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                )}
+                            </span>
+                        </button>
                         <span className="text-xs font-semibold text-primary">
                             {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
                         </span>
@@ -1822,12 +1833,23 @@ function InventoryPageContent() {
                             <thead className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 shadow-2xs">
                                 <tr>
                                     <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3 py-1.5 2xl:py-2 w-8">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
-                                            onChange={toggleSelectAll}
-                                            className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary cursor-pointer"
-                                        />
+                                        <button
+                                            type="button"
+                                            onClick={toggleSelectAll}
+                                            className="flex items-center justify-center cursor-pointer"
+                                        >
+                                            <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                selectedItems.size === filteredItems.length && filteredItems.length > 0
+                                                    ? 'border-primary bg-primary text-white'
+                                                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                            }`}>
+                                                {selectedItems.size === filteredItems.length && filteredItems.length > 0 && (
+                                                    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                            </span>
+                                        </button>
                                     </th>
                                     <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('name')}>
                                         <div className="flex items-center whitespace-nowrap">Equipment Name <SortIcon active={sortConfig?.key === 'name'} direction={sortConfig?.direction || 'asc'} /></div>
@@ -1871,12 +1893,23 @@ function InventoryPageContent() {
                                             className={`transition-colors min-h-[34px] ${!isBulkEditMode && 'cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-950/20'} ${item.barcode === flashBarcode ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : selectedItems.has(item.id) ? 'bg-primary/[0.06] dark:bg-primary/[0.12]' : 'bg-white dark:bg-transparent'}`}
                                         >
                                             <td className="px-2.5 2xl:px-3 py-1.5 2xl:py-2" onClick={(e) => e.stopPropagation()}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedItems.has(item.id)}
-                                                    onChange={(e) => toggleSelect(e, item.id)}
-                                                    className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary cursor-pointer"
-                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => toggleSelect(e, item.id)}
+                                                    className="flex items-center justify-center cursor-pointer"
+                                                >
+                                                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                        selectedItems.has(item.id)
+                                                            ? 'border-primary bg-primary text-white'
+                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                    }`}>
+                                                        {selectedItems.has(item.id) && (
+                                                            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        )}
+                                                    </span>
+                                                </button>
                                             </td>
                                             <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">
                                                 {isBulkEditMode ? (

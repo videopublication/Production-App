@@ -3329,12 +3329,17 @@ export default function ShootDetailsPage() {
                                                     className="flex items-center justify-between gap-2 cursor-pointer"
                                                 >
                                                     <div className="flex items-center gap-2 min-w-0">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={isSelected}
-                                                            onChange={() => {}}
-                                                            className="w-3.5 h-3.5 rounded text-primary cursor-pointer"
-                                                        />
+                                                        <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                            isSelected
+                                                                ? 'border-primary bg-primary text-white'
+                                                                : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                        }`}>
+                                                            {isSelected && (
+                                                                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            )}
+                                                        </span>
                                                         <span className="font-semibold text-gray-900 dark:text-white truncate">{u.name}</span>
                                                         <span className="text-[10px] text-gray-400">({getRoleLabel(u.role) || 'Crew'})</span>
                                                     </div>

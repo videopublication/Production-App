@@ -997,12 +997,22 @@ function CrewAssignmentModalInner({
                                         >
                                             {/* 1: Checkbox */}
                                             <td className="px-4 py-3.5 text-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    onChange={() => toggleUser(u.id)}
-                                                    className="w-4.5 h-4.5 rounded text-primary focus:ring-primary/40 cursor-pointer accent-primary"
-                                                />
+                                                <div 
+                                                    onClick={() => toggleUser(u.id)}
+                                                    className="flex items-center justify-center cursor-pointer select-none"
+                                                >
+                                                    <span className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                                                        isSelected
+                                                            ? 'border-primary bg-primary text-white'
+                                                            : 'border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800'
+                                                    }`}>
+                                                        {isSelected && (
+                                                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        )}
+                                                    </span>
+                                                </div>
                                             </td>
 
                                             {/* 2: Crew Member Name + Role */}
@@ -1421,12 +1431,17 @@ function CrewAssignmentModalInner({
                                                                                     className="flex items-center justify-between gap-2 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700/50 cursor-pointer text-xs transition-colors"
                                                                                 >
                                                                                     <div className="flex items-center gap-2 min-w-0">
-                                                                                        <input
-                                                                                            type="checkbox"
-                                                                                            checked={isDaySelected}
-                                                                                            onChange={() => toggleMemberDay(u.id, day.dateStr)}
-                                                                                            className="w-4 h-4 rounded text-primary focus:ring-primary/40"
-                                                                                        />
+                                                                                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                                                            isDaySelected
+                                                                                                ? 'border-primary bg-primary text-white'
+                                                                                                : 'border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800'
+                                                                                        }`}>
+                                                                                            {isDaySelected && (
+                                                                                                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                                                </svg>
+                                                                                            )}
+                                                                                        </span>
                                                                                         <span className="text-gray-900 dark:text-white font-medium text-xs truncate">
                                                                                             {day.fullLabel}
                                                                                         </span>
