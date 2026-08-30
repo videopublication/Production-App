@@ -230,7 +230,10 @@ export default function ShootList() {
                 const saved = localStorage.getItem('shoots_visible_columns_v3');
                 if (saved) {
                     const parsed: ColumnKey[] = JSON.parse(saved);
-                    if (Array.isArray(parsed) && parsed.length >= 6) return parsed;
+                    if (Array.isArray(parsed) && parsed.length >= 3) {
+                        const safe = Array.from(new Set(['shootNumber', 'title', ...parsed]));
+                        return safe as ColumnKey[];
+                    }
                 }
             } catch {}
         }
@@ -339,27 +342,27 @@ export default function ShootList() {
         // Fluid 100% Fit Mode: Harmonious, proportional, generous right columns, zero cut-off
         switch (colKey) {
             case 'shootNumber':
-                return { width: '110px', minWidth: '105px', flexShrink: 0 };
+                return { width: '105px', minWidth: '100px', flexShrink: 0 };
             case 'jiraTicket':
-                return { width: '105px', minWidth: '95px', flexShrink: 0 };
+                return { width: '110px', minWidth: '100px', flexShrink: 0 };
             case 'crew':
                 return crewDisplayMode === 'full'
-                    ? { width: '220px', minWidth: '180px', flexShrink: 0 }
+                    ? { flex: '1.2 1 200px', minWidth: '180px' }
                     : { width: '115px', minWidth: '105px', flexShrink: 0 };
             case 'status':
                 return { width: '125px', minWidth: '115px', flexShrink: 0 };
             case 'actions':
                 return { width: '95px', minWidth: '90px', flexShrink: 0 };
             case 'poc':
-                return { width: '130px', minWidth: '120px', flexShrink: 0 };
+                return { flex: '1.0 1 140px', minWidth: '120px' };
             case 'createdAt':
                 return { width: '110px', minWidth: '100px', flexShrink: 0 };
             case 'expenses':
                 return { width: '110px', minWidth: '100px', flexShrink: 0 };
             case 'title':
-                return { flex: '1.3 1 190px', minWidth: '160px' };
+                return { flex: '1.4 1 190px', minWidth: '160px' };
             case 'location':
-                return { flex: '1.0 1 160px', minWidth: '140px' };
+                return { flex: '1.1 1 160px', minWidth: '140px' };
             case 'date':
                 return { flex: '1.0 1 155px', minWidth: '140px' };
             default:
@@ -485,9 +488,10 @@ export default function ShootList() {
     };
 
     const toggleColumn = (colId: ColumnKey) => {
+        if (colId === 'shootNumber' || colId === 'title') return;
         setVisibleColumns(prev => {
             const next = prev.includes(colId)
-                ? (prev.length > 1 ? prev.filter(c => c !== colId) : prev)
+                ? (prev.length > 2 ? prev.filter(c => c !== colId) : prev)
                 : [...prev, colId];
             try {
                 localStorage.setItem('shoots_visible_columns_v3', JSON.stringify(next));
@@ -2215,12 +2219,18 @@ export default function ShootList() {
                                                     return null;
                                                 }
                                                 const isChecked = visibleColumns.includes(colKey);
+                                                const isMandatory = colKey === 'shootNumber' || colKey === 'title';
+
                                                 return (
                                                     <div
                                                         key={colKey}
-                                                        onClick={() => toggleColumn(colKey)}
-                                                        className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer select-none ${
-                                                            isChecked ? 'bg-gray-50 dark:bg-gray-800/60' : 'opacity-60 hover:opacity-90'
+                                                        onClick={() => {
+                                                            if (!isMandatory) toggleColumn(colKey);
+                                                        }}
+                                                        className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors select-none ${
+                                                            isMandatory
+                                                                ? 'bg-gray-50/80 dark:bg-gray-800/30 cursor-default opacity-85'
+                                                                : 'cursor-pointer ' + (isChecked ? 'bg-gray-50 dark:bg-gray-800/60' : 'opacity-60 hover:opacity-90')
                                                         }`}
                                                     >
                                                         <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
@@ -2238,6 +2248,11 @@ export default function ShootList() {
                                                             <span className={`font-medium truncate ${isChecked ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                                                                 {colDef.label}
                                                             </span>
+                                                            {isMandatory && (
+                                                                <span className="text-[9px] font-semibold uppercase px-1 py-0.5 rounded bg-gray-200/80 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ml-1">
+                                                                    Required
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         {/* Reorder Buttons */}
                                                         <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
