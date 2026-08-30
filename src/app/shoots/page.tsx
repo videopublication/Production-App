@@ -2218,11 +2218,12 @@ export default function ShootList() {
                                                 return (
                                                     <div
                                                         key={colKey}
-                                                        className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors select-none ${
+                                                        onClick={() => toggleColumn(colKey)}
+                                                        className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer select-none ${
                                                             isChecked ? 'bg-gray-50 dark:bg-gray-800/60' : 'opacity-60 hover:opacity-90'
                                                         }`}
                                                     >
-                                                        <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 pr-2">
+                                                        <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
                                                             <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
                                                                 isChecked
                                                                     ? 'border-primary bg-primary text-white'
@@ -2237,9 +2238,9 @@ export default function ShootList() {
                                                             <span className={`font-medium truncate ${isChecked ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                                                                 {colDef.label}
                                                             </span>
-                                                        </label>
+                                                        </div>
                                                         {/* Reorder Buttons */}
-                                                        <div className="flex items-center gap-0.5 shrink-0">
+                                                        <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
