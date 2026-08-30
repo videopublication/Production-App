@@ -1941,11 +1941,16 @@ export default function ShootList() {
                         })}
                     </div>
                 ) : (
-                    /* List View (Fixed Header + Dedicated Scrollable Body) */
+                    /* List View (Unified Scroll Container with Sticky Header) */
                     <div className="rounded-xl shadow-2xs bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 flex-1 min-h-0 flex flex-col overflow-hidden">
-                        {/* Table Header (Fixed at Top - Scrollbar does NOT go over it!) */}
-                        <div className="bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-stretch w-full min-w-full text-[10px] sm:text-[11px] 2xl:text-xs font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs shrink-0">
-                            <div ref={headerRef} className="flex items-center flex-1 min-w-0 overflow-x-hidden">
+                        <div 
+                            ref={bodyScrollRef}
+                            className="flex-1 min-h-0 overflow-auto custom-scrollbar"
+                        >
+                            <div className="min-w-fit w-full">
+                                {/* Table Header (Sticky at Top) */}
+                                <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-stretch min-w-full text-[10px] sm:text-[11px] 2xl:text-xs font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs">
+                                    <div ref={headerRef} className="flex items-center flex-1 min-w-0">
                                 {orderedVisibleColumns.map((colKey, colIdx) => {
                                     const isLast = colIdx === orderedVisibleColumns.length - 1;
                                     const isDragOver = dragOverCol === colKey;
@@ -2321,18 +2326,9 @@ export default function ShootList() {
                             </div>
                         </div>
 
-                        {/* Table Body Rows (Vertical Scrollbar starts cleanly BELOW header) */}
-                        <div 
-                            ref={bodyScrollRef}
-                            onScroll={(e) => {
-                                if (headerRef.current) {
-                                    headerRef.current.scrollLeft = (e.currentTarget as HTMLElement).scrollLeft;
-                                }
-                            }}
-                            className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar"
-                        >
-                            <div className="divide-y divide-gray-100 dark:divide-gray-800/70 w-full min-w-full">
-                                {paginatedShoots.map((shoot, index) => {
+                        {/* Table Body Rows */}
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800/70 min-w-full">
+                            {paginatedShoots.map((shoot, index) => {
                                     const statusStyle = getStatusStyle(shoot.status);
                                     const crewCount = getCrewCount(shoot.id);
                                     const isSelected = selectedShootIds.includes(shoot.id);
@@ -2681,8 +2677,9 @@ export default function ShootList() {
                     </div>
                 </div>
             </div>
-        )}
-            </div>
+        </div>
+    )}
+</div>
 
                 {/* Modern Pagination Controls (Fixed Footer & Compact) */}
                 {totalShoots > 0 && (
