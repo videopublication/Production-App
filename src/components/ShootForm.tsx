@@ -46,7 +46,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         pocName: '',
         pocContact: '',
         ...initialData,
-        status: initialData.status === 'CANCELLED' ? 'CONFIRMED' : (initialData.status || 'DRAFT'),
+        status: initialData.status === 'CANCELLED' ? 'CONFIRMED' : (initialData.status || (initialCrewIds.length > 0 ? 'READY_FOR_SHOOT' : 'OPEN')),
         startTime: initialData.startTime ? format(new Date(initialData.startTime), "yyyy-MM-dd'T'HH:mm") : '',
         endTime: initialData.endTime ? format(new Date(initialData.endTime), "yyyy-MM-dd'T'HH:mm") : '',
     });
@@ -397,26 +397,28 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                     </div>
 
                     <div className="space-y-5 pt-1">
-                        {/* Jira Ticket Section - High Priority */}
-                        <div className="relative bg-primary/10 dark:bg-primary/20 p-4 rounded-3xl border border-primary/50 dark:border-primary/20">
-                            <label className="block text-sm font-semibold text-primary dark:text-primary mb-2">
-                                Import from Jira
-                            </label>
+                        {/* Jira Ticket Section - Optional */}
+                        <div className="relative bg-gray-50/80 dark:bg-gray-800/40 p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-gray-200/80 dark:border-gray-700/60">
+                            <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
+                                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                    Import from Jira <span className="text-xs text-gray-500 dark:text-gray-400 font-normal">(Optional — leave blank for direct in-app {labels.workPluralLower})</span>
+                                </label>
+                            </div>
                             <div className="relative">
                                 <input
                                     value={formData.jiraTicketId || ''}
                                     onChange={e => setFormData({ ...formData, jiraTicketId: e.target.value })}
-                                    placeholder="Enter Ticket ID (e.g. VP-51638)"
-                                    className="flex h-12 w-full rounded-2xl border-0 bg-white dark:bg-gray-800 px-4 py-2 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-24 shadow-sm"
+                                    placeholder="Enter Ticket ID (e.g. VP-51638) or leave empty"
+                                    className="flex h-11 w-full rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3.5 py-2 text-[14px] sm:text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-24 shadow-2xs"
                                 />
-                                <div className="absolute top-1.5 right-1.5">
+                                <div className="absolute top-1 right-1">
                                     <Button
                                         type="button"
                                         size="sm"
                                         onClick={handleFetchJira}
                                         isLoading={isFetchingJira}
                                         disabled={!formData.jiraTicketId}
-                                        className="h-9 px-4 text-xs bg-primary hover:bg-primary text-white rounded-xl font-medium shadow-sm transition-all"
+                                        className="h-9 px-3.5 text-xs bg-primary hover:bg-primary text-white rounded-lg sm:rounded-xl font-medium shadow-2xs transition-all"
                                     >
                                         Fetch
                                     </Button>

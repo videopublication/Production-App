@@ -41,14 +41,46 @@ export default function NewShootPage() {
     }
 
     const isSubmittingRef = React.useRef(false);
+    const createdShootIdRef = React.useRef<string | null>(null);
 
     const handleSubmit = async (data: Partial<Shoot>, crewIds: string[], inchargeId: string) => {
         if (isSubmittingRef.current || isLoading) return;
 
+        // Guard: Cannot set status to Ready for Shoot without assigned cameramen / crew
+        if ((data.status === 'READY_FOR_SHOOT' || data.status === 'CONFIRMED') && crewIds.length === 0) {
+            alert('Please assign cameramen / crew before setting status to Ready for Shoot.');
+            return;
+        }
+
         isSubmittingRef.current = true;
         setIsLoading(true);
         try {
-            const shootId = generateUUID();
+            // Guard: check if an identical shoot already exists (same title, same date, same department)
+            const normalizedTitle = (data.title || '').trim().toLowerCase();
+            const newStartDate = data.startTime ? data.startTime.split('T')[0] : '';
+            
+            if (!createdShootIdRef.current && normalizedTitle && newStartDate) {
+                const existingShoots = await storage.getShoots(activeDepartmentId || undefined);
+                const duplicate = existingShoots.find(s =>
+                    s.status !== 'CANCELLED' &&
+                    s.title?.trim().toLowerCase() === normalizedTitle &&
+                    s.startTime && s.startTime.split('T')[0] === newStartDate
+                );
+
+                if (duplicate) {
+                    const openExisting = window.confirm(
+                        `A shoot with the title "${data.title}" on this date already exists (#${duplicate.shootNumber || 'Shoot'}).\n\nClick OK to open the existing shoot, or Cancel to continue creating a new one.`
+                    );
+                    if (openExisting) {
+                        router.push(`/shoots/${duplicate.id}`);
+                        return;
+                    }
+                }
+            }
+
+            // Reuse session ID if the user clicks submit again after an initial save
+            const shootId = createdShootIdRef.current || generateUUID();
+            createdShootIdRef.current = shootId;
 
             const newShoot: Shoot = {
                 ...data as Shoot,
@@ -169,7 +201,6 @@ export default function NewShootPage() {
         } catch (error) {
             console.error(`Failed to create ${labels.workLower}:`, error);
             isSubmittingRef.current = false;
-        } finally {
             setIsLoading(false);
         }
     };
