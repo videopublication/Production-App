@@ -252,6 +252,27 @@ function CrewAssignmentModalInner({
 
     const isMultiDay = shootDays.length > 1;
 
+    // Formatted Schedule Range for Header (Always shows full start and end date for multi-day shoots)
+    const scheduleSubtitle = useMemo(() => {
+        if (!shoot?.startTime) return 'Schedule TBD';
+        try {
+            const sDate = parseISO(shoot.startTime);
+            if (!shoot.endTime) return format(sDate, 'EEE, MMM d, yyyy • h:mm a');
+            const eDate = parseISO(shoot.endTime);
+            const sameDay = format(sDate, 'yyyy-MM-dd') === format(eDate, 'yyyy-MM-dd');
+            if (sameDay) {
+                return `${format(sDate, 'EEE, MMM d, yyyy • h:mm a')} – ${format(eDate, 'h:mm a')}`;
+            }
+            const sameYear = sDate.getFullYear() === eDate.getFullYear();
+            if (sameYear) {
+                return `${format(sDate, 'EEE, MMM d • h:mm a')} – ${format(eDate, 'EEE, MMM d, yyyy • h:mm a')}`;
+            }
+            return `${format(sDate, 'EEE, MMM d, yyyy • h:mm a')} – ${format(eDate, 'EEE, MMM d, yyyy • h:mm a')}`;
+        } catch {
+            return shoot.startTime;
+        }
+    }, [shoot?.startTime, shoot?.endTime]);
+
     // Initial member days setup
     useEffect(() => {
         const initialMemberDays: Record<string, string[]> = {};
@@ -303,11 +324,16 @@ function CrewAssignmentModalInner({
             startMs: number;
             endMs: number;
             status?: string;
+            timingStr?: string;
         }[] = [];
         for (const s of (allShoots || [])) {
             if (s.id === shoot?.id || s.status === 'CANCELLED' || s.status === 'CLOSED' || !s.startTime) continue;
             const sStart = new Date(s.startTime).getTime();
             const sEnd = s.endTime ? new Date(s.endTime).getTime() : sStart + 4 * 3600000;
+            let timingStr = '';
+            try {
+                timingStr = `${format(parseISO(s.startTime), 'p')}${s.endTime ? ` – ${format(parseISO(s.endTime), 'p')}` : ''}`;
+            } catch {}
             list.push({
                 id: s.id,
                 title: s.title,
@@ -317,7 +343,8 @@ function CrewAssignmentModalInner({
                 location: s.location,
                 startMs: sStart,
                 endMs: sEnd,
-                status: s.status
+                status: s.status,
+                timingStr
             });
         }
         return list;
@@ -394,12 +421,7 @@ function CrewAssignmentModalInner({
                         const sInfo = otherShootsMap.get(entry.shootId);
                         if (sInfo && sDay.startMs <= sInfo.endMs && sDay.endMs >= sInfo.startMs) {
                             const shootNum = sInfo.shootNumber ? `#${sInfo.shootNumber} ` : '';
-                            let timingStr = '';
-                            if (sInfo.startTime) {
-                                try {
-                                    timingStr = `${format(parseISO(sInfo.startTime), 'p')}${sInfo.endTime ? ` - ${format(parseISO(sInfo.endTime), 'p')}` : ''}`;
-                                } catch {}
-                            }
+                            const timingStr = sInfo.timingStr || '';
 
                             dayBreakdown.push({
                                 dayNumber: sDay.dayNumber,
@@ -630,40 +652,39 @@ function CrewAssignmentModalInner({
 
     // Fast Toggle
     const toggleUser = useCallback((userId: string) => {
-        setSelectedIds(prev => {
-            if (prev.includes(userId)) {
-                if (inchargeId === userId) {
-                    setInchargeId('');
-                }
-                setMemberDays(md => {
-                    const next = { ...md };
-                    delete next[userId];
-                    return next;
-                });
-                setSelectedScopes(s => {
-                    const next = { ...s };
-                    delete next[userId];
-                    return next;
-                });
-                setMemberCustomHours(ch => {
-                    const next = { ...ch };
-                    delete next[userId];
-                    return next;
-                });
-                return prev.filter(id => id !== userId);
-            } else {
-                setSelectedScopes(s => ({
-                    ...s,
-                    [userId]: s[userId] || 'Full Shoot'
-                }));
-                setMemberDays(md => ({
-                    ...md,
-                    [userId]: shootDays.map(d => d.dateStr)
-                }));
-                return [...prev, userId];
+        const isSelected = selectedIdsSet.has(userId);
+        if (isSelected) {
+            if (inchargeId === userId) {
+                setInchargeId('');
             }
-        });
-    }, [inchargeId, shootDays]);
+            setMemberDays(md => {
+                const next = { ...md };
+                delete next[userId];
+                return next;
+            });
+            setSelectedScopes(s => {
+                const next = { ...s };
+                delete next[userId];
+                return next;
+            });
+            setMemberCustomHours(ch => {
+                const next = { ...ch };
+                delete next[userId];
+                return next;
+            });
+            setSelectedIds(prev => prev.filter(id => id !== userId));
+        } else {
+            setSelectedScopes(s => ({
+                ...s,
+                [userId]: s[userId] || 'Full Shoot'
+            }));
+            setMemberDays(md => ({
+                ...md,
+                [userId]: shootDays.map(d => d.dateStr)
+            }));
+            setSelectedIds(prev => [...prev, userId]);
+        }
+    }, [selectedIdsSet, inchargeId, shootDays]);
 
     // Set Scope (Full Shoot, Setup Only, Windup Only, Custom Hours)
     const setMemberScope = useCallback((userId: string, scope: string) => {
@@ -823,7 +844,7 @@ function CrewAssignmentModalInner({
         <div
             id="crew-assignment-modal-backdrop"
             onClick={handleBackdropClick}
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 md:p-6"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-2 sm:p-4 md:p-6"
         >
             <div className="w-full max-w-6xl h-[92vh] max-h-[880px] rounded-2xl bg-white dark:bg-[#121214] border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col">
                 
@@ -854,8 +875,7 @@ function CrewAssignmentModalInner({
                                     )}
                                 </div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                                    {shoot.startTime ? format(parseISO(shoot.startTime), 'EEE, MMM d, yyyy • h:mm a') : 'Schedule TBD'}
-                                    {shoot.endTime && ` – ${format(parseISO(shoot.endTime), 'h:mm a')}`}
+                                    {scheduleSubtitle}
                                 </p>
                             </div>
                         </div>
@@ -964,7 +984,7 @@ function CrewAssignmentModalInner({
                 {/* 3. Single Unified Full-Width Table */}
                 <div className="flex-1 overflow-auto min-h-0 bg-white dark:bg-[#121214] scrollbar-thin">
                     <table className="w-full min-w-[720px] text-left border-collapse">
-                        <thead className="sticky top-0 z-10 bg-gray-50/95 dark:bg-zinc-900/95 backdrop-blur-xs border-b border-gray-200 dark:border-zinc-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             <tr>
                                 <th className="w-12 px-4 py-3 text-center">#</th>
                                 <th className="px-4 py-3">Crew Member</th>
@@ -1156,7 +1176,7 @@ function CrewAssignmentModalInner({
                                                     {activeConflictInfoUserId === u.id && (
                                                         <div
                                                             onClick={(e) => e.stopPropagation()}
-                                                            className={`absolute left-0 ${isNearBottom ? 'bottom-full mb-2' : 'top-full mt-2'} z-40 w-80 p-3.5 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 duration-100 text-left select-none ring-1 ring-black/10 dark:ring-white/10`}
+                                                            className={`absolute left-0 ${isNearBottom ? 'bottom-full mb-2' : 'top-full mt-2'} z-40 w-80 p-3.5 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-3 text-left select-none ring-1 ring-black/10 dark:ring-white/10`}
                                                         >
                                                             {/* Header */}
                                                             <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-zinc-700">
@@ -1294,7 +1314,7 @@ function CrewAssignmentModalInner({
 
                                                         {/* Custom Hours Popover */}
                                                         {activeTimePickerUserId === u.id && (
-                                                            <div className="absolute left-0 top-full mt-1.5 z-30 w-72 p-3.5 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 duration-100">
+                                                            <div className={`absolute left-0 ${isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} z-30 w-72 p-3.5 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-3`}>
                                                                 <div className="flex items-center justify-between text-xs font-bold pb-2 border-b border-gray-150 dark:border-zinc-700 text-gray-800 dark:text-gray-200">
                                                                     <span className="flex items-center gap-1.5">
                                                                         <Clock size={14} className="text-amber-500" />
@@ -1417,7 +1437,7 @@ function CrewAssignmentModalInner({
                                                             {activeDayPickerUserId === u.id && (
                                                                 <div
                                                                     onClick={(e) => e.stopPropagation()}
-                                                                    className="absolute left-0 top-full mt-1.5 z-30 w-64 p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-2 animate-in fade-in zoom-in-95 duration-100"
+                                                                    className={`absolute right-0 ${isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} z-30 w-64 p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-2`}
                                                                 >
                                                                     <div className="flex items-center justify-between text-xs font-bold pb-1.5 border-b border-gray-150 dark:border-zinc-700">
                                                                         <span className="text-gray-700 dark:text-gray-300">Select Days</span>
