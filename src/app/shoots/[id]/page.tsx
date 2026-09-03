@@ -1644,7 +1644,7 @@ export default function ShootDetailsPage() {
     return (
         <div className="max-w-[1600px] mx-auto w-full space-y-3.5 sm:space-y-4 animate-fade-in pb-12 p-2.5 sm:p-4">
             {/* Unified Hero Header & Quick Specs Card */}
-            <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-xs relative z-20 overflow-hidden">
+            <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-xs relative z-20">
                 {/* Main Header Row: Title & Action Toolbar */}
                 <div className="p-3.5 sm:p-4 border-b border-gray-100 dark:border-gray-800 space-y-2.5">
                     {/* Top Row: Metadata Badges (Left) & Actions (Right) */}
@@ -1790,8 +1790,8 @@ export default function ShootDetailsPage() {
                                         </button>
 
                                         {isActionStatusMenuOpen && (
-                                            <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden z-50 p-1.5 animate-in fade-in zoom-in-95 duration-150">
-                                                <div className="px-2.5 py-1 mb-1 border-b border-gray-100 dark:border-gray-800">
+                                            <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-[60] p-1.5 max-h-[80vh] overflow-y-auto scrollbar-thin">
+                                                <div className="px-3 py-1.5 mb-1 border-b border-gray-100 dark:border-gray-800">
                                                     <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Change Status</span>
                                                 </div>
                                                 <div className="space-y-0.5">
@@ -1805,17 +1805,17 @@ export default function ShootDetailsPage() {
                                                                     setIsActionStatusMenuOpen(false);
                                                                     handleUpdateStatus(opt.key);
                                                                 }}
-                                                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                                                className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
                                                                     isActive
                                                                         ? 'bg-primary/10 text-primary font-bold'
                                                                         : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200'
                                                                 }`}
                                                             >
-                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                <div className="flex items-center gap-2.5 min-w-0">
                                                                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: opt.text }} />
                                                                     <p className="font-semibold truncate text-xs">{opt.label}</p>
                                                                 </div>
-                                                                {isActive && <CheckCircle2 size={13} className="text-primary shrink-0 ml-1" />}
+                                                                {isActive && <CheckCircle2 size={14} className="text-primary shrink-0 ml-1" />}
                                                             </button>
                                                         );
                                                     })}
