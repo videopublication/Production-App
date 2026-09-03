@@ -704,7 +704,10 @@ function CrewAssignmentModalInner({
             const isCurrentlySelected = current.includes(dateStr);
             let nextDays: string[];
             if (isCurrentlySelected) {
-                if (current.length === 1) return prev;
+                if (current.length === 1) {
+                    alert('At least one day must be selected for an assigned crew member. To completely remove them from the shoot, uncheck the member in the left checkbox column.');
+                    return prev;
+                }
                 nextDays = current.filter(d => d !== dateStr);
             } else {
                 nextDays = [...current, dateStr];
@@ -1409,7 +1412,10 @@ function CrewAssignmentModalInner({
 
                                                             {/* Day Picker Popover */}
                                                             {activeDayPickerUserId === u.id && (
-                                                                <div className="absolute left-0 top-full mt-1.5 z-30 w-64 p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-2 animate-in fade-in zoom-in-95 duration-100">
+                                                                <div
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="absolute left-0 top-full mt-1.5 z-30 w-64 p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 shadow-2xl space-y-2 animate-in fade-in zoom-in-95 duration-100"
+                                                                >
                                                                     <div className="flex items-center justify-between text-xs font-bold pb-1.5 border-b border-gray-150 dark:border-zinc-700">
                                                                         <span className="text-gray-700 dark:text-gray-300">Select Days</span>
                                                                         <button
@@ -1426,9 +1432,14 @@ function CrewAssignmentModalInner({
                                                                             const dayConflict = avail.conflicts.find(c => c.dateStr === day.dateStr);
 
                                                                             return (
-                                                                                <label
+                                                                                <button
                                                                                     key={day.dateStr}
-                                                                                    className="flex items-center justify-between gap-2 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700/50 cursor-pointer text-xs transition-colors"
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        toggleMemberDay(u.id, day.dateStr);
+                                                                                    }}
+                                                                                    className="w-full flex items-center justify-between gap-2 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700/50 cursor-pointer text-xs transition-colors text-left select-none"
                                                                                 >
                                                                                     <div className="flex items-center gap-2 min-w-0">
                                                                                         <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
@@ -1451,9 +1462,18 @@ function CrewAssignmentModalInner({
                                                                                             ⚠️ {dayConflict.title || dayConflict.type}
                                                                                         </span>
                                                                                     )}
-                                                                                </label>
+                                                                                </button>
                                                                             );
                                                                         })}
+                                                                    </div>
+                                                                    <div className="pt-1 border-t border-gray-100 dark:border-zinc-700">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setActiveDayPickerUserId(null)}
+                                                                            className="w-full py-1 text-center text-xs font-semibold text-primary hover:bg-primary/10 rounded-lg cursor-pointer transition-colors"
+                                                                        >
+                                                                            Done
+                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             )}
