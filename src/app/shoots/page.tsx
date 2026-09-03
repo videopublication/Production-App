@@ -172,17 +172,17 @@ export default function ShootList() {
     ];
 
     const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
-        shootNumber: 110,
-        title: 210,
-        jiraTicket: 105,
-        date: 160,
-        location: 165,
-        crew: 115,
-        status: 125,
-        actions: 95,
-        poc: 130,
-        createdAt: 110,
-        expenses: 110,
+        shootNumber: 85,
+        title: 220,
+        jiraTicket: 95,
+        date: 155,
+        location: 160,
+        crew: 90,
+        status: 120,
+        actions: 90,
+        poc: 120,
+        createdAt: 95,
+        expenses: 95,
     };
 
     const getDefaultColumnWidths = (customAvailableWidth?: number): Record<ColumnKey, number> => {
@@ -193,13 +193,13 @@ export default function ShootList() {
             const isSidebarCollapsed = localStorage.getItem('sidebar_is_collapsed') === 'true' || screenW < 1360;
             const sidebarW = isSidebarCollapsed ? (screenW >= 1536 ? 70 : 62) : (screenW >= 1536 ? 255 : 228);
             const availableWidth = customAvailableWidth || Math.max(900, screenW - sidebarW - (screenW >= 1536 ? 48 : 32));
-            const defaultTotal = 110 + 210 + 105 + 160 + 165 + 115 + 125 + 95; // 1085
+            const defaultTotal = 85 + 220 + 95 + 155 + 160 + 90 + 120 + 90; // 1015
 
             if (availableWidth > defaultTotal) {
                 const diff = availableWidth - defaultTotal;
-                base.title = Math.round(base.title + diff * 0.40);
-                base.location = Math.round(base.location + diff * 0.32);
-                base.date = Math.round(base.date + diff * 0.28);
+                base.title = Math.min(380, Math.round(base.title + diff * 0.45));
+                base.location = Math.min(300, Math.round(base.location + diff * 0.35));
+                base.date = Math.min(175, Math.round(base.date + diff * 0.20));
             }
         }
         return base;
@@ -246,7 +246,7 @@ export default function ShootList() {
     // Flag to know if user has customized column widths manually
     const [hasUserCustomWidths, setHasUserCustomWidths] = useState<boolean>(() => {
         if (typeof window !== 'undefined') {
-            return !!localStorage.getItem('shoots_table_col_widths_v9');
+            return !!localStorage.getItem('shoots_table_col_widths_v10');
         }
         return false;
     });
@@ -255,9 +255,14 @@ export default function ShootList() {
     const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
         if (typeof window !== 'undefined') {
             try {
-                const saved = localStorage.getItem('shoots_table_col_widths_v9');
+                const saved = localStorage.getItem('shoots_table_col_widths_v10');
                 if (saved) {
                     const parsed = JSON.parse(saved);
+                    // Discard oversized corrupted widths
+                    if (parsed.title && parsed.title > 500) {
+                        localStorage.removeItem('shoots_table_col_widths_v10');
+                        return getDefaultColumnWidths();
+                    }
                     const merged = { ...getDefaultColumnWidths(), ...parsed };
                     return merged as Record<ColumnKey, number>;
                 }
@@ -299,7 +304,7 @@ export default function ShootList() {
                     if (currentWidth < 200) {
                         const updated = { ...curr, crew: 240 };
                         try {
-                            localStorage.setItem('shoots_table_col_widths_v8', JSON.stringify(updated));
+                            localStorage.setItem('shoots_table_col_widths_v10', JSON.stringify(updated));
                         } catch {}
                         return updated;
                     }
@@ -309,7 +314,7 @@ export default function ShootList() {
                 setColWidths(curr => {
                     const updated = { ...curr, crew: DEFAULT_COLUMN_WIDTHS.crew };
                     try {
-                        localStorage.setItem('shoots_table_col_widths_v8', JSON.stringify(updated));
+                        localStorage.setItem('shoots_table_col_widths_v10', JSON.stringify(updated));
                     } catch {}
                     return updated;
                 });
@@ -339,34 +344,34 @@ export default function ShootList() {
             };
         }
 
-        // Fluid 100% Fit Mode: Harmonious, proportional, generous right columns, zero cut-off
+        // Fluid 100% Fit Mode: Harmonious, compact, capped so no column stretches into giant voids
         switch (colKey) {
             case 'shootNumber':
-                return { width: '105px', minWidth: '100px', flexShrink: 0 };
+                return { width: '85px', minWidth: '80px', maxWidth: '95px', flexShrink: 0 };
             case 'jiraTicket':
-                return { width: '110px', minWidth: '100px', flexShrink: 0 };
+                return { width: '95px', minWidth: '90px', maxWidth: '105px', flexShrink: 0 };
             case 'crew':
                 return crewDisplayMode === 'full'
-                    ? { flex: '1.2 1 200px', minWidth: '180px' }
-                    : { width: '115px', minWidth: '105px', flexShrink: 0 };
+                    ? { width: '160px', minWidth: '140px', maxWidth: '200px', flexShrink: 0 }
+                    : { width: '90px', minWidth: '80px', maxWidth: '100px', flexShrink: 0 };
             case 'status':
-                return { width: '125px', minWidth: '115px', flexShrink: 0 };
+                return { width: '120px', minWidth: '110px', maxWidth: '130px', flexShrink: 0 };
             case 'actions':
-                return { width: '95px', minWidth: '90px', flexShrink: 0 };
+                return { width: '90px', minWidth: '85px', maxWidth: '95px', flexShrink: 0 };
             case 'poc':
-                return { flex: '1.0 1 140px', minWidth: '120px' };
+                return { flex: '1 1 120px', minWidth: '100px', maxWidth: '180px' };
             case 'createdAt':
-                return { width: '110px', minWidth: '100px', flexShrink: 0 };
+                return { width: '95px', minWidth: '90px', maxWidth: '105px', flexShrink: 0 };
             case 'expenses':
-                return { width: '110px', minWidth: '100px', flexShrink: 0 };
-            case 'title':
-                return { flex: '1.4 1 190px', minWidth: '160px' };
-            case 'location':
-                return { flex: '1.1 1 160px', minWidth: '140px' };
+                return { width: '95px', minWidth: '90px', maxWidth: '105px', flexShrink: 0 };
             case 'date':
-                return { flex: '1.0 1 155px', minWidth: '140px' };
+                return { width: '155px', minWidth: '145px', maxWidth: '175px', flexShrink: 0 };
+            case 'title':
+                return { flex: '1.4 1 200px', minWidth: '160px', maxWidth: '380px' };
+            case 'location':
+                return { flex: '1.1 1 140px', minWidth: '120px', maxWidth: '300px' };
             default:
-                return { flex: '1 1 110px', minWidth: '90px' };
+                return { flex: '1 1 100px', minWidth: '80px', maxWidth: '160px' };
         }
     };
 
@@ -404,7 +409,7 @@ export default function ShootList() {
             setColWidths(prev => {
                 const updated = { ...prev, [colKey]: newWidth };
                 try {
-                    localStorage.setItem('shoots_table_col_widths_v9', JSON.stringify(updated));
+                    localStorage.setItem('shoots_table_col_widths_v10', JSON.stringify(updated));
                 } catch {}
                 return updated;
             });
@@ -510,6 +515,7 @@ export default function ShootList() {
             localStorage.removeItem('shoots_visible_columns_v3');
             localStorage.removeItem('shoots_visible_columns');
             localStorage.removeItem('shoots_column_order');
+            localStorage.removeItem('shoots_table_col_widths_v10');
             localStorage.removeItem('shoots_table_col_widths_v9');
             localStorage.removeItem('shoots_table_col_widths_v8');
             localStorage.removeItem('shoots_table_col_widths_v6');
@@ -1947,7 +1953,7 @@ export default function ShootList() {
                             ref={bodyScrollRef}
                             className="flex-1 min-h-0 overflow-auto custom-scrollbar"
                         >
-                            <div className="min-w-fit w-full">
+                            <div className="w-full min-w-[960px]">
                                 {/* Table Header (Sticky at Top) */}
                                 <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-stretch min-w-full text-[10px] sm:text-[11px] 2xl:text-xs font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs">
                                     <div ref={headerRef} className="flex items-center flex-1 min-w-0">
