@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { createPortal } from 'react-dom';
 import { User, Shoot, ShootStatus, Assignment, Leave } from '@/types';
 import { Button } from '@/components/Button';
@@ -559,6 +559,9 @@ function CrewAssignmentModalInner({
         };
     }, [availabilityMap]);
 
+    const selectedIdsSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+    const deferredSearch = useDeferredValue(search);
+
     // Smart Sorting: Available -> Partial -> Busy -> Leave
     const sortedUsers = useMemo(() => {
         const orderWeight: Record<string, number> = {
@@ -569,8 +572,8 @@ function CrewAssignmentModalInner({
         };
 
         return [...assignableUsers].sort((a, b) => {
-            const isSelA = selectedIds.includes(a.id);
-            const isSelB = selectedIds.includes(b.id);
+            const isSelA = selectedIdsSet.has(a.id);
+            const isSelB = selectedIdsSet.has(b.id);
             if (isSelA && !isSelB) return -1;
             if (!isSelA && isSelB) return 1;
 
@@ -580,13 +583,13 @@ function CrewAssignmentModalInner({
             if (diff !== 0) return diff;
             return a.name.localeCompare(b.name);
         });
-    }, [assignableUsers, selectedIds, availabilityMap]);
+    }, [assignableUsers, selectedIdsSet, availabilityMap]);
 
     // Filtered Crew Members
     const filteredUsers = useMemo(() => {
-        const q = search.trim().toLowerCase();
+        const q = deferredSearch.trim().toLowerCase();
         return sortedUsers.filter(u => {
-            const isSelected = selectedIds.includes(u.id);
+            const isSelected = selectedIdsSet.has(u.id);
             const avail = getAvailability(u.id);
 
             if (filter === 'ASSIGNED' && !isSelected) return false;
@@ -603,7 +606,7 @@ function CrewAssignmentModalInner({
                 (avail.primaryConflictTitle?.toLowerCase().includes(q) ?? false)
             );
         });
-    }, [sortedUsers, search, filter, selectedIds, getAvailability]);
+    }, [sortedUsers, deferredSearch, filter, selectedIdsSet, getAvailability]);
 
     // Filter Badges Counts
     const counts = useMemo(() => {
@@ -982,7 +985,7 @@ function CrewAssignmentModalInner({
                                 </tr>
                             ) : (
                                 filteredUsers.map((u, uIdx) => {
-                                    const isSelected = selectedIds.includes(u.id);
+                                    const isSelected = selectedIdsSet.has(u.id);
                                     const avail = getAvailability(u.id);
                                     const currentScope = selectedScopes[u.id] || 'Full Shoot';
                                     const customTiming = memberCustomHours[u.id] || defaultShootTime;

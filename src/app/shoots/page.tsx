@@ -4,7 +4,7 @@ import { useShoots } from '@/hooks/useShoots';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useUsers } from '@/hooks/useUsers';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useDeferredValue } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -661,33 +661,59 @@ export default function ShootList() {
         }
     }, [viewMode, searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, categoryFilter, expenseFilter, sortField, sortDirection, showFilters, pageSize, currentPage]);
 
-    // Get crew details (strictly deduplicated by userId)
-    const getShootCrew = (shootId: string) => {
-        const shootAssignments = assignments.filter(a => a.shootId === shootId);
-        const seenUsers = new Set<string>();
-        const uniqueCrew: { id: string; name: string; role: string; userId: string }[] = [];
-
-        for (const a of shootAssignments) {
-            if (!seenUsers.has(a.userId)) {
-                seenUsers.add(a.userId);
-                const u = users.find(user => user.id === a.userId);
-                uniqueCrew.push({
-                    id: a.id,
-                    name: u?.name || u?.email || 'Unknown',
-                    role: a.role,
-                    userId: a.userId
-                });
-            }
+    // Pre-indexed users and assignments
+    const usersById = useMemo(() => {
+        const map = new Map<string, (typeof users)[0]>();
+        for (const u of users) {
+            map.set(u.id, u);
         }
-        return uniqueCrew;
-    };
+        return map;
+    }, [users]);
 
-    // Get crew count for a shoot (unique users)
-    const getCrewCount = (shootId: string) => {
-        const shootAssignments = assignments.filter(a => a.shootId === shootId);
-        const uniqueUserIds = new Set(shootAssignments.map(a => a.userId));
-        return uniqueUserIds.size;
-    };
+    const assignmentsByShootId = useMemo(() => {
+        const map = new Map<string, (typeof assignments)[0][]>();
+        for (const a of assignments) {
+            const list = map.get(a.shootId) || [];
+            list.push(a);
+            map.set(a.shootId, list);
+        }
+        return map;
+    }, [assignments]);
+
+    // O(1) shoot crew details cache
+    const shootCrewCache = useMemo(() => {
+        const cache = new Map<string, { id: string; name: string; role: string; userId: string }[]>();
+        for (const [shootId, shootAssignments] of assignmentsByShootId.entries()) {
+            const seenUsers = new Set<string>();
+            const uniqueCrew: { id: string; name: string; role: string; userId: string }[] = [];
+            for (const a of shootAssignments) {
+                if (!seenUsers.has(a.userId)) {
+                    seenUsers.add(a.userId);
+                    const u = usersById.get(a.userId);
+                    uniqueCrew.push({
+                        id: a.id,
+                        name: u?.name || u?.email || 'Unknown',
+                        role: a.role,
+                        userId: a.userId
+                    });
+                }
+            }
+            cache.set(shootId, uniqueCrew);
+        }
+        return cache;
+    }, [assignmentsByShootId, usersById]);
+
+    // Get crew details (strictly deduplicated by userId) - O(1) instantaneous lookup
+    const getShootCrew = useCallback((shootId: string) => {
+        return shootCrewCache.get(shootId) || [];
+    }, [shootCrewCache]);
+
+    // Get crew count for a shoot (unique users) - O(1) lookup
+    const getCrewCount = useCallback((shootId: string) => {
+        return (shootCrewCache.get(shootId) || []).length;
+    }, [shootCrewCache]);
+
+    const deferredSearchQuery = useDeferredValue(searchQuery);
 
     // Filtered shoots
     const filteredShoots = useMemo(() => {
@@ -696,17 +722,15 @@ export default function ShootList() {
         return shoots.filter(shoot => {
             // Role-based access control
             if (user.role === 'CREW') {
-                const isAssigned = assignments.some(a => a.shootId === shoot.id && a.userId === user.id);
+                const shootAssignments = assignmentsByShootId.get(shoot.id) || [];
+                const isAssigned = shootAssignments.some(a => a.userId === user.id);
                 if (!isAssigned) return false;
             }
 
-            // Search filter
-            const query = searchQuery.toLowerCase().trim();
-            const shootCrew = assignments.filter(a => a.shootId === shoot.id);
-            const matchesCrewName = query ? shootCrew.some(a => {
-                const u = users.find(user => user.id === a.userId);
-                return u?.name?.toLowerCase().includes(query);
-            }) : false;
+            // Search filter (O(1) crew lookup + deferred query)
+            const query = deferredSearchQuery.toLowerCase().trim();
+            const shootCrew = shootCrewCache.get(shoot.id) || [];
+            const matchesCrewName = query ? shootCrew.some(c => c.name.toLowerCase().includes(query)) : false;
 
             const matchesSearch = !query ||
                 shoot.title.toLowerCase().includes(query) ||
@@ -779,7 +803,7 @@ export default function ShootList() {
 
             return matchesSearch && matchesStatus && matchesTime && matchesCrew && matchesCategory && matchesExpense;
         });
-    }, [shoots, searchQuery, statusFilter, timeFilter, crewFilter, categoryFilter, expenseFilter, user, assignments, customDateRange]);
+    }, [shoots, deferredSearchQuery, statusFilter, timeFilter, crewFilter, categoryFilter, expenseFilter, user, assignmentsByShootId, shootCrewCache, customDateRange]);
 
     // Extract unique categories for the filter
     const availableCategories = useMemo(() => {

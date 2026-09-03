@@ -410,18 +410,11 @@ export default function ShootDetailsPage() {
     }, [jiraComments, jiraHistory, logs, commentSortOrder]);
 
     useEffect(() => {
+        if (!shoot?.jiraTicketId) return;
         refreshJiraDetails();
         fetchJiraComments();
         fetchJiraHistory();
-        // Auto-refresh when user switches tabs back to this page
-        const handleFocus = () => {
-            refreshJiraDetails();
-            fetchJiraComments();
-            fetchJiraHistory();
-        };
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, [refreshJiraDetails, fetchJiraComments, fetchJiraHistory]);
+    }, [shoot?.jiraTicketId, refreshJiraDetails, fetchJiraComments, fetchJiraHistory]);
     
     const FIXED_EXPENSE_TYPES = ['Boarding', 'Travel', 'Equipment', 'Manpower', 'Other'] as const;
     const [expenseAmounts, setExpenseAmounts] = useState<Record<string, string>>({});
