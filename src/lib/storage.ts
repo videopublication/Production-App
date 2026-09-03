@@ -1114,7 +1114,7 @@ class StorageService {
 
         const { error } = await supabase
             .from('planner_draft_assignments')
-            .upsert(dbAssignments, { onConflict: 'shoot_id,user_id' });
+            .upsert(dbAssignments, { onConflict: 'id' });
 
         if (error) {
             console.error('Error saving planner draft assignments:', error);
