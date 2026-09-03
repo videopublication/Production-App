@@ -45,6 +45,7 @@ const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
     const [message, setMessage] = useState(initialMessage || '');
     const [isSending, setIsSending] = useState(false);
     const [resolvedGroupName, setResolvedGroupName] = useState<string>(targetName || 'VP Media Production Group');
+    const [gatewayStatus, setGatewayStatus] = useState<{ connected: boolean; state?: string } | null>(null);
 
     // Keep message synced when modal opens or initialMessage changes
     useEffect(() => {
@@ -75,6 +76,12 @@ const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
                 if (statusRes.ok) {
                     const statusData = await statusRes.json();
                     targetJid = statusData.groupJid || '';
+                    setGatewayStatus({
+                        connected: Boolean(statusData.connected),
+                        state: statusData.state || statusData.status
+                    });
+                } else {
+                    setGatewayStatus({ connected: false, state: 'offline' });
                 }
 
                 // 2. Fetch groups list from API to resolve target group subject name
@@ -124,14 +131,10 @@ const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
                 if (onSuccess) onSuccess();
                 onClose();
             } else {
-                showToast(data.error || 'Gateway offline. Opening WhatsApp App...', 'warning');
-                window.open(`https://wa.me/${targetPhone ? targetPhone.replace(/[^\d]/g, '') : ''}?text=${encodeURIComponent(message)}`, '_blank');
-                onClose();
+                showToast(data.error || 'Failed to dispatch via WhatsApp Gateway. Please verify WhatsApp connection.', 'error');
             }
         } catch {
-            showToast('Gateway connection error. Opening WhatsApp App...', 'warning');
-            window.open(`https://wa.me/${targetPhone ? targetPhone.replace(/[^\d]/g, '') : ''}?text=${encodeURIComponent(message)}`, '_blank');
-            onClose();
+            showToast('Gateway connection error. Please verify the WhatsApp Gateway service.', 'error');
         } finally {
             setIsSending(false);
         }
@@ -157,11 +160,30 @@ const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
                         </div>
                         <div className="min-w-0 flex-1">
                             <h3 className="text-base font-bold text-foreground tracking-tight truncate">{title}</h3>
-                            <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                                <span className="text-xs text-muted-foreground shrink-0">Destination Group:</span>
-                                <span className="inline-flex items-center text-xs font-semibold text-[#25d366] bg-[#25d366]/10 px-2.5 py-0.5 rounded-full border border-[#25d366]/20 truncate max-w-[280px]">
+                            <div className="flex items-center gap-1.5 mt-0.5 min-w-0 flex-wrap">
+                                <span className="text-xs text-muted-foreground shrink-0">Destination:</span>
+                                <span className="inline-flex items-center text-xs font-semibold text-[#25d366] bg-[#25d366]/10 px-2.5 py-0.5 rounded-full border border-[#25d366]/20 truncate max-w-[220px]">
                                     {resolvedGroupName}
                                 </span>
+                                {gatewayStatus && (
+                                    gatewayStatus.connected ? (
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                            Live
+                                        </span>
+                                    ) : (
+                                        <a
+                                            href="https://vp-whatsapp-gateway.onrender.com/qr"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700 hover:underline shrink-0"
+                                            title="WhatsApp Gateway is waiting for QR code scan. Click to scan QR code."
+                                        >
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                            Scan QR to Pair
+                                        </a>
+                                    )
+                                )}
                             </div>
                         </div>
                     </div>
