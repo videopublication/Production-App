@@ -269,16 +269,17 @@ export default function CheckoutPage() {
         }
     }, [user, router, authLoading]);
 
-    // Keep all active shoots in the dropdown (don't strictly hide if they just ended)
+    // Keep all active shoots in the dropdown (exclude cancelled and closed shoots)
     const availableShoots = useMemo(() => {
         return shoots.filter(shoot => {
-            // Exclude cancelled shoots
-            if (shoot.status === 'CANCELLED') return false;
+            const status = shoot.status?.toUpperCase();
+            // Exclude cancelled and closed shoots
+            if (status === 'CANCELLED' || status === 'CLOSED') return false;
             return true;
         }).sort(compareShootsByDateDesc);
     }, [shoots]);
 
-    // Ensure selected shoot is always in options even if hidden from main list
+    // Ensure selected shoot is in options only if active (not cancelled or closed)
     const activeShootOptions = useMemo(() => {
         const optionShoots = [...availableShoots];
 
@@ -286,7 +287,8 @@ export default function CheckoutPage() {
             const selectedInAvailable = availableShoots.find(s => s.id === selectedShootId);
             if (!selectedInAvailable) {
                 const shoot = shoots.find(s => s.id === selectedShootId);
-                if (shoot) {
+                const status = shoot?.status?.toUpperCase();
+                if (shoot && status !== 'CANCELLED' && status !== 'CLOSED') {
                     optionShoots.push(shoot);
                 }
             }
@@ -382,6 +384,19 @@ export default function CheckoutPage() {
         if (selectedShootId) sessionStorage.setItem('checkout-shoot', selectedShootId);
         else sessionStorage.removeItem('checkout-shoot');
     }, [selectedShootId]);
+
+    // If selected shoot is closed or cancelled, auto-clear it
+    useEffect(() => {
+        if (selectedShootId && shoots.length > 0) {
+            const currentShoot = shoots.find(s => s.id === selectedShootId);
+            const status = currentShoot?.status?.toUpperCase();
+            if (currentShoot && (status === 'CLOSED' || status === 'CANCELLED')) {
+                setSelectedShootId('');
+                setProject('');
+                sessionStorage.removeItem('checkout-shoot');
+            }
+        }
+    }, [selectedShootId, shoots]);
 
     // Auto-select users based on shoot assignments
     useEffect(() => {
