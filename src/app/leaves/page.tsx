@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useLeaves } from '@/hooks/useLeaves';
 import { useUsers } from '@/hooks/useUsers';
+import { useShoots } from '@/hooks/useShoots';
+import { useAssignments } from '@/hooks/useAssignments';
 import { useDepartment } from '@/lib/department-context';
 import {
     format, parseISO, differenceInCalendarDays,
@@ -14,38 +16,23 @@ import {
 import {
     Plus, CheckCircle, XCircle, Calendar,
     Download, Search, ExternalLink, Check, X,
-    Pencil, Filter, RotateCcw,
+    Pencil, Filter, RotateCcw, ChevronRight,
+    AlertTriangle, CheckCircle2, Clock, Eye,
+    Users, UserCheck, ShieldAlert
 } from 'lucide-react';
 import { Button } from '@/components/Button';
-import { Leave } from '@/types';
+import { Leave, Shoot, Assignment } from '@/types';
 import { storage } from '@/lib/storage';
 import { useToast } from '@/lib/toast-context';
 import { AdminLeaveModal } from '@/components/AdminLeaveModal';
+import { LeaveDetailDrawer } from '@/components/LeaveDetailDrawer';
 import { sendPushNotification } from '@/lib/push-notifications';
+import { initials, roleAvatarClass, roleLabel } from '@/lib/user-display';
 
 type LeaveStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
 function leaveDays(startDate: string, endDate: string) {
     return differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
-}
-
-function getInitials(name?: string | null, email?: string | null) {
-    if (name) {
-        const parts = name.trim().split(/\s+/);
-        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-        return parts[0].slice(0, 2).toUpperCase();
-    }
-    return (email || '??').slice(0, 2).toUpperCase();
-}
-
-const AVATAR_COLORS = [
-    'bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500',
-    'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-red-500',
-];
-function avatarColor(id: string) {
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) & 0xffffffff;
-    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 const EMPTY_STATES: Record<LeaveStatus, { title: string; subtitle: string }> = {
@@ -59,7 +46,9 @@ export default function LeavesPage() {
     const { user } = useAuth();
     const { leaves, isLoading, isRefetching, addLeave, updateLeave, deleteLeave, refetch } = useLeaves();
     const { data: users = [] } = useUsers();
-    const { department } = useDepartment();
+    const { data: shoots = [] } = useShoots();
+    const { data: assignments = [] } = useAssignments();
+    const { department, allDepartments } = useDepartment();
     const { showToast } = useToast();
 
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
@@ -77,12 +66,8 @@ export default function LeavesPage() {
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-    // Inline edit state
-    const [editingLeaveId, setEditingLeaveId] = useState<string | null>(null);
-    const [editStart, setEditStart] = useState('');
-    const [editEnd, setEditEnd] = useState('');
-    const [editReason, setEditReason] = useState('');
-    const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+    // Detail Drawer state
+    const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
 
     // Pull-to-refresh
     const [pullStart, setPullStart] = useState(0);
@@ -144,6 +129,29 @@ export default function LeavesPage() {
         return { daysThisYear, pending };
     }, [leaves, user, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Shoot conflict calculation helper
+    const getShootConflictsForLeave = useMemo(() => {
+        return (leave: Leave): Shoot[] => {
+            const userAssignments = assignments.filter(
+                a => a.userId === leave.userId && a.status !== 'DECLINED'
+            );
+            if (userAssignments.length === 0) return [];
+
+            const leaveStart = startOfDay(parseISO(leave.startDate));
+            const leaveEnd = endOfDay(parseISO(leave.endDate));
+
+            return shoots.filter(s => {
+                if (s.status === 'CLOSED' || s.status === 'CANCELLED') return false;
+                const hasAssignment = userAssignments.some(a => a.shootId === s.id);
+                if (!hasAssignment) return false;
+
+                const shootStart = startOfDay(parseISO(s.startTime));
+                const shootEnd = endOfDay(parseISO(s.endTime || s.startTime));
+                return shootStart <= leaveEnd && shootEnd >= leaveStart;
+            });
+        };
+    }, [assignments, shoots]);
+
     const filteredLeaves = useMemo(() => {
         return leaves.filter((leave: Leave) => {
             if (!isAdmin && leave.userId !== user?.id) return false;
@@ -152,7 +160,9 @@ export default function LeavesPage() {
             if (searchQuery && isAdmin) {
                 const employee = users.find(u => u.id === leave.userId);
                 const name = (employee?.name || employee?.email || '').toLowerCase();
-                if (!name.includes(searchQuery.toLowerCase())) return false;
+                const reasonText = (leave.reason || '').toLowerCase();
+                const q = searchQuery.toLowerCase();
+                if (!name.includes(q) && !reasonText.includes(q)) return false;
             }
 
             if (monthFilter) {
@@ -168,6 +178,27 @@ export default function LeavesPage() {
         });
     }, [leaves, isAdmin, user, statusFilter, searchQuery, monthFilter, users]);
 
+    // Active selected leave for drawer
+    const selectedLeave = useMemo(() => {
+        if (!selectedLeaveId) return null;
+        return leaves.find(l => l.id === selectedLeaveId) || null;
+    }, [leaves, selectedLeaveId]);
+
+    const selectedLeaveApplicant = useMemo(() => {
+        if (!selectedLeave) return null;
+        return users.find(u => u.id === selectedLeave.userId) || null;
+    }, [selectedLeave, users]);
+
+    const selectedLeaveApprover = useMemo(() => {
+        if (!selectedLeave || !selectedLeave.approverId) return null;
+        return users.find(u => u.id === selectedLeave.approverId) || null;
+    }, [selectedLeave, users]);
+
+    const selectedLeaveConflicts = useMemo(() => {
+        if (!selectedLeave) return [];
+        return getShootConflictsForLeave(selectedLeave);
+    }, [selectedLeave, getShootConflictsForLeave]);
+
     const handleExport = () => {
         const rows = filteredLeaves.map(leave => {
             const employee = users.find(u => u.id === leave.userId);
@@ -177,7 +208,7 @@ export default function LeavesPage() {
                 leave.startDate,
                 leave.endDate,
                 leaveDays(leave.startDate, leave.endDate),
-                `"${leave.reason.replace(/"/g, '""')}"`,
+                `"${(leave.reason || '').replace(/"/g, '""')}"`,
                 leave.status,
                 approver?.name || approver?.email || '',
                 leave.createdAt ? format(parseISO(leave.createdAt), 'yyyy-MM-dd') : '',
@@ -306,29 +337,10 @@ export default function LeavesPage() {
         }
     };
 
-    const startEdit = (leave: Leave) => {
-        setEditingLeaveId(leave.id);
-        setEditStart(leave.startDate);
-        setEditEnd(leave.endDate);
-        setEditReason(leave.reason);
-    };
-
-    const cancelEdit = () => {
-        setEditingLeaveId(null);
-        setEditStart('');
-        setEditEnd('');
-        setEditReason('');
-    };
-
-    const handleEditSubmit = async (leave: Leave) => {
-        if (!editStart || !editEnd || !editReason) return;
-
-        // Overlap check excluding this leave, scoped to the leave's OWNER (not the
-        // signed-in user) so an admin editing someone else's absence is checked
-        // against that person's other leaves.
+    const handleEditSubmit = async (leave: Leave, updates: { startDate: string; endDate: string; reason: string }) => {
         const ownerId = leave.userId;
-        const newStart = new Date(editStart);
-        const newEnd = new Date(editEnd);
+        const newStart = new Date(updates.startDate);
+        const newEnd = new Date(updates.endDate);
         newStart.setHours(0, 0, 0, 0);
         newEnd.setHours(23, 59, 59, 999);
 
@@ -342,19 +354,21 @@ export default function LeavesPage() {
 
         if (hasOverlap) {
             showToast('These dates overlap with another leave request.', 'error');
-            return;
+            throw new Error('Overlap detected');
         }
 
-        // When an admin edits a leave they don't own, RLS blocks the browser
-        // client, so route through the service-role admin endpoint.
         const isOwnLeave = leave.userId === user?.id;
-        setIsEditSubmitting(true);
         try {
             if (isAdmin && !isOwnLeave) {
                 const res = await fetch('/api/admin/leaves', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: leave.id, startDate: editStart, endDate: editEnd, reason: editReason }),
+                    body: JSON.stringify({
+                        id: leave.id,
+                        startDate: updates.startDate,
+                        endDate: updates.endDate,
+                        reason: updates.reason
+                    }),
                 });
                 if (!res.ok) {
                     const b = await res.json().catch(() => ({}));
@@ -362,15 +376,20 @@ export default function LeavesPage() {
                 }
                 refetch();
             } else {
-                await updateLeave({ id: leave.id, updates: { startDate: editStart, endDate: editEnd, reason: editReason } });
+                await updateLeave({
+                    id: leave.id,
+                    updates: {
+                        startDate: updates.startDate,
+                        endDate: updates.endDate,
+                        reason: updates.reason
+                    }
+                });
             }
             showToast('Leave request updated', 'success');
-            cancelEdit();
         } catch (error) {
             console.error('Failed to update leave:', error);
             showToast('Failed to update leave request', 'error');
-        } finally {
-            setIsEditSubmitting(false);
+            throw error;
         }
     };
 
@@ -379,6 +398,7 @@ export default function LeavesPage() {
         try {
             await deleteLeave(id);
             showToast('Leave request cancelled', 'success');
+            if (selectedLeaveId === id) setSelectedLeaveId(null);
         } catch (error) {
             console.error('Failed to cancel leave:', error);
             showToast('Failed to cancel leave request', 'error');
@@ -387,8 +407,6 @@ export default function LeavesPage() {
         }
     };
 
-    // Admin delete of any leave (e.g. wrongly-recorded absence). Routed through
-    // the service-role endpoint since RLS blocks deleting another user's row.
     const handleAdminDeleteLeave = async (leave: Leave) => {
         const who = users.find(u => u.id === leave.userId)?.name || 'this member';
         if (!window.confirm(`Delete this leave/absence for ${who}? This cannot be undone.`)) return;
@@ -400,6 +418,7 @@ export default function LeavesPage() {
                 throw new Error(b.error || 'Failed to delete leave');
             }
             showToast('Leave deleted', 'success');
+            if (selectedLeaveId === leave.id) setSelectedLeaveId(null);
             refetch();
         } catch (error) {
             console.error('Failed to delete leave:', error);
@@ -410,11 +429,8 @@ export default function LeavesPage() {
     };
 
     const handleStatusUpdate = async (id: string, status: 'APPROVED' | 'REJECTED' | 'PENDING', applicantId: string) => {
-        // Wording per target status (also covers reopening a decided leave back to Pending)
         const verb = status === 'APPROVED' ? 'Approved' : status === 'REJECTED' ? 'Rejected' : 'Reopened';
         try {
-            // Admin changing another member's leave is blocked by the owner-only RLS
-            // update policy, so route through the service-role admin endpoint.
             const isOwnLeave = applicantId === user?.id;
             if (isAdmin && !isOwnLeave) {
                 const res = await fetch('/api/admin/leaves', {
@@ -471,492 +487,626 @@ export default function LeavesPage() {
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'APPROVED':
-                return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">Approved</span>;
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
+                        Approved
+                    </span>
+                );
             case 'REJECTED':
-                return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">Rejected</span>;
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                        <XCircle size={11} className="text-rose-600 dark:text-rose-400" />
+                        Rejected
+                    </span>
+                );
             default:
-                return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">Pending</span>;
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        <Clock size={11} className="text-amber-600 dark:text-amber-400" />
+                        Pending
+                    </span>
+                );
         }
     };
 
     if (isLoading) {
         return (
-            <div className="px-2 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-24 md:pb-6">
-                <div className="flex flex-col sm:flex-row justify-between gap-4">
-                    <div className="space-y-3">
-                        <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded-md w-32 animate-pulse" />
-                        <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded-md w-48 animate-pulse" />
+            <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 py-4 space-y-4">
+                <div className="flex justify-between items-center">
+                    <div className="space-y-2">
+                        <div className="h-7 bg-gray-200 dark:bg-gray-800 rounded-lg w-36 animate-pulse" />
+                        <div className="h-3.5 bg-gray-200 dark:bg-gray-800 rounded-md w-52 animate-pulse" />
                     </div>
-                    <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded-md w-36 animate-pulse hidden sm:block" />
+                    <div className="h-9 bg-gray-200 dark:bg-gray-800 rounded-xl w-32 animate-pulse hidden sm:block" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
-                    {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-200 dark:bg-gray-800 rounded-xl animate-pulse" />)}
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="h-16 bg-gray-200 dark:bg-gray-800 rounded-2xl animate-pulse" />
+                    ))}
                 </div>
-                <div className="bg-white dark:bg-[#1c1c1e] rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-                        <div className="flex gap-2">
-                            {[1, 2, 3, 4].map(i => (
-                                <div key={i} className="h-9 w-24 bg-gray-200 dark:bg-gray-800 rounded-md animate-pulse" />
-                            ))}
-                        </div>
-                    </div>
-                    <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="p-4 sm:p-5 space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <div className="flex gap-3 items-center">
-                                        <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-800 animate-pulse" />
-                                        <div className="space-y-2">
-                                            <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded-md w-32 animate-pulse" />
-                                            <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded-md w-24 animate-pulse" />
-                                        </div>
-                                    </div>
-                                    <div className="h-6 w-20 bg-gray-200 dark:bg-gray-800 rounded-full animate-pulse" />
-                                </div>
-                                <div className="h-16 bg-gray-100 dark:bg-gray-900 rounded-lg animate-pulse" />
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                <div className="h-96 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200 dark:border-gray-800 animate-pulse" />
             </div>
         );
     }
 
     return (
         <div
-            className="px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] pb-28 md:pb-6 relative transition-transform duration-200 ease-out"
+            className="w-full max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 py-2.5 sm:py-4 space-y-3.5 sm:space-y-4 pb-24 md:pb-6 relative transition-transform duration-200 ease-out"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             style={pullDistance !== 0 ? { transform: `translateY(${pullDistance}px)` } : undefined}
         >
             {/* Pull-to-refresh indicator */}
-            <div className="absolute top-0 left-0 right-0 flex justify-center -mt-12 transition-opacity duration-200" style={{ opacity: pullDistance > 10 ? 1 : 0 }}>
+            <div className="absolute top-0 left-0 right-0 flex justify-center -mt-10 transition-opacity duration-200" style={{ opacity: pullDistance > 10 ? 1 : 0 }}>
                 {isRefetching || isRefreshing ? (
                     <div className="bg-white dark:bg-gray-800 shadow-md rounded-full p-2 flex items-center justify-center animate-spin">
-                        <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
                     </div>
                 ) : (
                     <div className="bg-white dark:bg-gray-800 shadow-md rounded-full p-2 flex items-center justify-center">
-                        <svg className={`w-5 h-5 text-gray-500 transition-transform ${pullDistance > 50 ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className={`w-4 h-4 text-gray-500 transition-transform ${pullDistance > 50 ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                         </svg>
                     </div>
                 )}
             </div>
 
-            {/* Header */}
-            <div className="space-y-3 sm:flex sm:items-end sm:justify-between sm:gap-4 sm:space-y-0">
-                <div className="min-w-0">
-                    <h1 className="text-3xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Leaves</h1>
-                    <p className="mt-1 text-[15px] text-gray-500 dark:text-gray-400">Manage your time off requests</p>
+            {/* Top Executive Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <div className="flex items-center gap-2.5">
+                        <h1 className="text-2xl sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white">
+                            Leaves & Team Time Off
+                        </h1>
+                        <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                            {filteredLeaves.length} {filteredLeaves.length === 1 ? 'Request' : 'Requests'}
+                        </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                        Review leave applications, manage employee availability, and prevent shoot schedule conflicts.
+                    </p>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:flex-wrap">
+
+                {/* Top Actions */}
+                <div className="flex items-center flex-wrap gap-2 shrink-0">
                     <Link
                         href="/calendar"
-                        className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-gray-300 px-3 text-[14px] font-semibold text-gray-600 transition-colors hover:border-primary hover:text-primary dark:border-gray-700 dark:text-gray-300 dark:hover:border-primary dark:hover:text-primary"
+                        className="h-9 px-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:border-primary hover:text-primary transition-colors flex items-center gap-1.5 shadow-2xs"
                     >
-                        <Calendar size={17} />
+                        <Calendar size={14} className="text-gray-400" />
                         <span>Calendar</span>
-                        <ExternalLink size={13} className="hidden sm:block" />
+                        <ExternalLink size={12} className="opacity-60" />
                     </Link>
+
                     {isAdmin && (
                         <>
-                            <Button onClick={handleExport} variant="outline" className="h-11 rounded-2xl gap-2 shrink-0 px-3 sm:px-5">
-                                <Download size={16} /> Export CSV
-                            </Button>
-                            <Button
-                                onClick={() => setIsAdminModalOpen(true)}
-                                className="col-span-2 h-12 rounded-2xl gap-2 shrink-0 bg-amber-600 hover:bg-amber-700 text-white border-none dark:bg-amber-700/80 dark:hover:bg-amber-600 sm:col-span-1"
+                            <button
+                                onClick={handleExport}
+                                className="h-9 px-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors flex items-center gap-1.5 shadow-2xs"
                             >
-                                <Plus size={18} /> Record Absence
-                            </Button>
+                                <Download size={14} className="text-gray-400" />
+                                <span>Export CSV</span>
+                            </button>
+                            <button
+                                onClick={() => setIsAdminModalOpen(true)}
+                                className="h-9 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
+                            >
+                                <Plus size={15} />
+                                <span>Record Absence</span>
+                            </button>
                         </>
                     )}
+
                     {!isAdmin && (
-                        <Button onClick={() => setIsApplying(!isApplying)} className="col-span-2 h-12 rounded-2xl gap-2 shrink-0 sm:col-span-1">
-                            {isApplying ? <XCircle size={18} /> : <Plus size={18} />}
-                            {isApplying ? 'Cancel' : 'Apply for Leave'}
+                        <Button
+                            onClick={() => setIsApplying(!isApplying)}
+                            className="h-9 rounded-xl px-4 text-xs font-bold gap-1.5 shadow-xs"
+                        >
+                            {isApplying ? <XCircle size={15} /> : <Plus size={15} />}
+                            {isApplying ? 'Cancel Form' : 'Apply for Leave'}
                         </Button>
                     )}
                 </div>
             </div>
 
-            {/* Stats bar */}
+            {/* KPI Ribbon (Compact, Refined Heights) */}
             {isAdmin ? (
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                    <div className="min-w-0 rounded-2xl border border-yellow-500/10 bg-yellow-500/5 p-3 dark:bg-[#1c1c1e] sm:p-4">
-                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">Pending</p>
-                        <p className="mt-1 text-3xl font-bold leading-none text-yellow-500 dark:text-yellow-400">{statsData.pending}</p>
-                        <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-500 sm:text-xs">awaiting review</p>
+                <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+                    <div
+                        onClick={() => setStatusFilter('PENDING')}
+                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                            statusFilter === 'PENDING'
+                                ? 'border-amber-400/80 bg-amber-500/10 shadow-xs ring-1 ring-amber-400/40'
+                                : 'border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 dark:bg-[#1c1c1e]'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                                <Clock size={12} /> Pending Review
+                            </span>
+                            {statsData.pending > 0 && (
+                                <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                            )}
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-black text-amber-700 dark:text-amber-400">
+                                {statsData.pending}
+                            </span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                awaiting action
+                            </span>
+                        </div>
                     </div>
-                    <div className="min-w-0 rounded-2xl border border-red-500/10 bg-red-500/5 p-3 dark:bg-[#1c1c1e] sm:p-4">
-                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">On Leave</p>
-                        <p className="mt-1 text-3xl font-bold leading-none text-red-500 dark:text-red-400">{statsData.onLeaveToday}</p>
-                        <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-500 sm:text-xs">today</p>
+
+                    <div className="p-3 sm:p-3.5 rounded-2xl border border-rose-500/20 bg-rose-500/5 dark:bg-[#1c1c1e]">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 flex items-center gap-1">
+                                <Users size={12} /> Out Today
+                            </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-black text-rose-700 dark:text-rose-400">
+                                {statsData.onLeaveToday}
+                            </span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                staff member{statsData.onLeaveToday === 1 ? '' : 's'}
+                            </span>
+                        </div>
                     </div>
-                    <div className="min-w-0 rounded-2xl border border-green-500/10 bg-green-500/5 p-3 dark:bg-[#1c1c1e] sm:p-4">
-                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">This Month</p>
-                        <p className="mt-1 text-3xl font-bold leading-none text-green-500 dark:text-green-400">{statsData.approvedThisMonth}</p>
-                        <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-500 sm:text-xs">approved</p>
+
+                    <div
+                        onClick={() => setStatusFilter('APPROVED')}
+                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                            statusFilter === 'APPROVED'
+                                ? 'border-emerald-400/80 bg-emerald-500/10 shadow-xs ring-1 ring-emerald-400/40'
+                                : 'border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 dark:bg-[#1c1c1e]'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 size={12} /> This Month
+                            </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
+                                {statsData.approvedThisMonth}
+                            </span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                approved leaves
+                            </span>
+                        </div>
                     </div>
                 </div>
             ) : myStats && (
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-primary/10 bg-primary/5 p-4 dark:bg-[#1c1c1e]">
-                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Days Taken</p>
-                        <p className="mt-1 text-3xl font-bold leading-none text-primary">{myStats.daysThisYear}</p>
-                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">this year</p>
+                    <div className="p-3.5 rounded-2xl border border-primary/20 bg-primary/5 dark:bg-[#1c1c1e]">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
+                            <Calendar size={12} /> Days Taken This Year
+                        </span>
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-black text-primary">{myStats.daysThisYear}</span>
+                            <span className="text-[11px] text-gray-500">approved days</span>
+                        </div>
                     </div>
-                    <div className="rounded-2xl border border-yellow-500/10 bg-yellow-500/5 p-4 dark:bg-[#1c1c1e]">
-                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Pending</p>
-                        <p className="mt-1 text-3xl font-bold leading-none text-yellow-500 dark:text-yellow-400">{myStats.pending}</p>
-                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">awaiting approval</p>
+                    <div
+                        onClick={() => setStatusFilter('PENDING')}
+                        className="p-3.5 rounded-2xl border border-amber-500/20 bg-amber-500/5 dark:bg-[#1c1c1e] cursor-pointer hover:bg-amber-500/10 transition-colors"
+                    >
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <Clock size={12} /> Pending Approvals
+                        </span>
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-black text-amber-700 dark:text-amber-400">{myStats.pending}</span>
+                            <span className="text-[11px] text-gray-500">awaiting manager</span>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* Apply form */}
+            {/* Apply Form (Slide down when triggered) */}
             {isApplying && (
-                <div className="bg-white dark:bg-[#1c1c1e] p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 animate-in fade-in slide-in-from-top-4">
-                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">New Leave Application</h2>
-                    <form onSubmit={handleApplySubmit} className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#1c1c1e] shadow-sm border border-gray-200 dark:border-gray-800 animate-in fade-in slide-in-from-top-3">
+                    <div className="flex items-center justify-between mb-3.5">
+                        <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <Calendar size={16} className="text-primary" />
+                            Submit Leave Application
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={() => setIsApplying(false)}
+                            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleApplySubmit} className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                    Start Date
+                                </label>
                                 <input
                                     type="date"
                                     required
                                     value={startDate}
                                     onChange={(e) => setStartDate(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    className="w-full px-3 py-1.5 text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                    End Date
+                                </label>
                                 <input
                                     type="date"
                                     required
                                     min={startDate}
                                     value={endDate}
                                     onChange={(e) => setEndDate(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    className="w-full px-3 py-1.5 text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                 />
                             </div>
                         </div>
+
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Reason for Absence
+                            </label>
                             <textarea
                                 required
                                 value={reason}
                                 onChange={(e) => setReason(e.target.value)}
-                                rows={3}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                                placeholder="Please provide your reason for leave..."
+                                rows={2}
+                                className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                                placeholder="Explain reason for leave and handoff coverage if applicable..."
                             />
                         </div>
-                        <div className="flex justify-end gap-3">
-                            <Button variant="outline" type="button" onClick={() => setIsApplying(false)} disabled={isSubmitting}>Cancel</Button>
-                            <Button variant="primary" type="submit" disabled={isSubmitting}>
-                                {isSubmitting ? 'Submitting...' : 'Submit Application'}
-                            </Button>
+
+                        <div className="flex justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setIsApplying(false)}
+                                disabled={isSubmitting}
+                                className="px-3.5 py-1.5 text-xs font-semibold rounded-xl border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting || !startDate || !endDate || !reason.trim()}
+                                className="px-4 py-1.5 text-xs font-bold rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs"
+                            >
+                                {isSubmitting ? 'Submitting...' : 'Submit Request'}
+                            </button>
                         </div>
                     </form>
                 </div>
             )}
 
-            {/* List + filters */}
-            <div className="overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-[#1c1c1e]">
-                <div className="space-y-3 border-b border-gray-200 p-3 dark:border-gray-800 sm:p-4">
-                    {/* Status tabs */}
-                    <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
-                        {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as LeaveStatus[]).map(status => (
-                            <button
-                                key={status}
-                                onClick={() => setStatusFilter(status)}
-                                className={`flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border px-3 text-[14px] font-bold transition-all active:scale-[0.98] ${statusFilter === status
-                                    ? 'border-primary/25 bg-primary text-white shadow-lg shadow-primary/20'
-                                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300 hover:bg-gray-100 hover:text-gray-800 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200'
+            {/* Unified High-Density Filter & Search Toolbar */}
+            <div className="p-2 sm:p-2.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs space-y-2">
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2">
+                    {/* Status segmented tabs */}
+                    <div className="inline-flex p-1 bg-gray-100 dark:bg-gray-800/80 rounded-xl overflow-x-auto shrink-0">
+                        {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as LeaveStatus[]).map(status => {
+                            const isSelected = statusFilter === status;
+                            return (
+                                <button
+                                    key={status}
+                                    onClick={() => setStatusFilter(status)}
+                                    className={`h-8 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                                        isSelected
+                                            ? 'bg-white dark:bg-[#252528] text-gray-900 dark:text-white shadow-2xs'
+                                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                                     }`}
-                            >
-                                <span className="min-w-0 truncate">
-                                    {status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}
-                                </span>
-                                {status === 'PENDING' && statsData.pending > 0 && (
-                                    <span className={`flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 text-[12px] font-black ${statusFilter === status
-                                        ? 'bg-white/20 text-white'
-                                        : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+                                >
+                                    <span>{status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}</span>
+                                    {status === 'PENDING' && statsData.pending > 0 && (
+                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                            isSelected
+                                                ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'
+                                                : 'bg-amber-200/70 text-amber-900'
                                         }`}>
-                                        {statsData.pending}
-                                    </span>
-                                )}
-                            </button>
-                        ))}
+                                            {statsData.pending}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
 
-                    {/* Search + month filter (admin only) - visually separated from the
-                        "Record Absence" action above so it can't be mistaken for it */}
-                    {isAdmin && (
-                        <div className="rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3">
-                            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                                <Filter size={13} />
-                                Filter list
-                            </div>
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                <div className="relative flex-1">
-                                    <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search by name..."
-                                        value={searchQuery}
-                                        onChange={e => setSearchQuery(e.target.value)}
-                                        className="h-11 w-full rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                                    />
-                                </div>
-                                <div
-                                    className="relative cursor-pointer shrink-0 sm:w-[180px]"
-                                    onClick={() => {
-                                        const el = monthInputRef.current;
-                                        if (!el) return;
-                                        if (typeof el.showPicker === 'function') el.showPicker();
-                                        else el.focus();
-                                    }}
+                    {/* Search & Month Picker (Admin or General search) */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 lg:max-w-xl lg:justify-end">
+                        <div className="relative flex-1">
+                            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder={isAdmin ? "Search employee name or reason..." : "Search reason..."}
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="h-8.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-8.5 pr-7 text-xs text-gray-900 dark:text-white outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    aria-label="Clear search"
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                                 >
-                                    <Calendar size={18} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
-                                    <input
-                                        ref={monthInputRef}
-                                        type="month"
-                                        value={monthFilter}
-                                        onChange={e => setMonthFilter(e.target.value)}
-                                        aria-label="Filter by month"
-                                        className={`h-11 w-full cursor-pointer rounded-2xl border border-gray-300 bg-white pl-10 pr-3 text-[15px] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 ${monthFilter ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}
-                                    />
-                                </div>
-                                {(searchQuery || monthFilter) && (
-                                    <button
-                                        onClick={() => { setSearchQuery(''); setMonthFilter(''); }}
-                                        className="h-11 shrink-0 rounded-2xl border border-gray-300 px-4 text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                                    >
-                                        Clear
-                                    </button>
-                                )}
+                                    <X size={13} />
+                                </button>
+                            )}
+                        </div>
+
+                        {isAdmin && (
+                            <div
+                                className="relative cursor-pointer shrink-0 sm:w-[155px]"
+                                onClick={() => {
+                                    const el = monthInputRef.current;
+                                    if (!el) return;
+                                    if (typeof el.showPicker === 'function') el.showPicker();
+                                    else el.focus();
+                                }}
+                            >
+                                <Calendar size={13} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    ref={monthInputRef}
+                                    type="month"
+                                    value={monthFilter}
+                                    onChange={e => setMonthFilter(e.target.value)}
+                                    aria-label="Filter by month"
+                                    className={`h-8.5 w-full cursor-pointer rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-8 pr-2.5 text-xs outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary ${
+                                        monthFilter ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-400'
+                                    }`}
+                                />
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                        {(searchQuery || monthFilter) && (
+                            <button
+                                onClick={() => { setSearchQuery(''); setMonthFilter(''); }}
+                                className="h-8.5 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
                 </div>
+            </div>
 
-                <div className="space-y-3 p-3 sm:space-y-0 sm:p-0 sm:divide-y sm:divide-gray-200 sm:dark:divide-gray-800">
-                    {filteredLeaves.length === 0 ? (
-                        <div className="p-10 text-center">
-                            <Calendar className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
-                            <p className="font-medium text-gray-700 dark:text-gray-300">{EMPTY_STATES[statusFilter].title}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{EMPTY_STATES[statusFilter].subtitle}</p>
+            {/* List & High-Density Table Area */}
+            <div className="rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs overflow-hidden">
+                {filteredLeaves.length === 0 ? (
+                    <div className="p-12 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-3 text-gray-400">
+                            <Calendar size={22} />
                         </div>
-                    ) : (
-                        filteredLeaves.map((leave: Leave) => {
-                            const employee = users.find(u => u.id === leave.userId);
-                            const approver = users.find(u => u.id === leave.approverId);
-                            const days = leaveDays(leave.startDate, leave.endDate);
-                            // Compact range: drop repeated year on the start, collapse single-day to one date
-                            const sameYear = parseISO(leave.startDate).getFullYear() === parseISO(leave.endDate).getFullYear();
-                            const endFmt = format(parseISO(leave.endDate), 'MMM d, yyyy');
-                            const rangeLabel = leave.startDate === leave.endDate
-                                ? endFmt
-                                : `${format(parseISO(leave.startDate), sameYear ? 'MMM d' : 'MMM d, yyyy')} – ${endFmt}`;
-                            const canCancel = leave.userId === user?.id && leave.status === 'PENDING';
-                            // Admins can edit/delete any leave (fix a wrong date or remove a
-                            // wrongly-recorded absence); crew can still edit their own pending ones.
-                            const canEdit = (leave.userId === user?.id && leave.status === 'PENDING') || isAdmin;
-                            const canAdminDelete = isAdmin;
-                            const isEditing = editingLeaveId === leave.id;
+                        <h3 className="font-bold text-sm text-gray-900 dark:text-white">{EMPTY_STATES[statusFilter].title}</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
+                            {EMPTY_STATES[statusFilter].subtitle}
+                        </p>
+                    </div>
+                ) : (
+                    <>
+                        {/* Desktop / Laptop High-Density Table Header */}
+                        <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-gray-50/75 dark:bg-[#18181a] border-b border-gray-100 dark:border-gray-800 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider items-center">
+                            <div className="col-span-3">Team Member</div>
+                            <div className="col-span-3">Dates & Duration</div>
+                            <div className="col-span-2">Shoot Conflicts</div>
+                            <div className="col-span-2">Reason Preview</div>
+                            <div className="col-span-1">Status</div>
+                            <div className="col-span-1 text-right">Actions</div>
+                        </div>
 
-                            return (
-                                <div key={leave.id} className="rounded-2xl border border-gray-200 bg-white/70 p-3 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-[#242426] dark:hover:bg-gray-800/60 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-4 sm:py-3 sm:shadow-none sm:hover:bg-gray-50/70 sm:dark:hover:bg-gray-800/40">
-                                    {/* Inline edit form */}
-                                    {isEditing ? (
-                                        <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 rounded-xl p-4 space-y-3">
-                                            <div className="flex items-center gap-2.5">
-                                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${avatarColor(leave.userId)}`}>
-                                                    {getInitials(employee?.name, employee?.email)}
-                                                </div>
-                                                <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
-                                                    Editing — {employee?.name || employee?.email || 'Unknown Employee'}
-                                                </p>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div>
-                                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
-                                                    <input
-                                                        type="date"
-                                                        value={editStart}
-                                                        onChange={e => setEditStart(e.target.value)}
-                                                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End Date</label>
-                                                    <input
-                                                        type="date"
-                                                        min={editStart}
-                                                        value={editEnd}
-                                                        onChange={e => setEditEnd(e.target.value)}
-                                                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Reason</label>
-                                                <textarea
-                                                    value={editReason}
-                                                    onChange={e => setEditReason(e.target.value)}
-                                                    rows={2}
-                                                    className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
-                                                />
-                                            </div>
-                                            <div className="flex gap-2 justify-end">
-                                                <button
-                                                    onClick={cancelEdit}
-                                                    disabled={isEditSubmitting}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        {/* Leave Rows */}
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800/70">
+                            {filteredLeaves.map((leave: Leave) => {
+                                const employee = users.find(u => u.id === leave.userId);
+                                const approver = users.find(u => u.id === leave.approverId);
+                                const days = leaveDays(leave.startDate, leave.endDate);
+                                const sameYear = parseISO(leave.startDate).getFullYear() === parseISO(leave.endDate).getFullYear();
+                                const endFmt = format(parseISO(leave.endDate), 'MMM d, yyyy');
+                                const rangeLabel = leave.startDate === leave.endDate
+                                    ? endFmt
+                                    : `${format(parseISO(leave.startDate), sameYear ? 'MMM d' : 'MMM d, yyyy')} – ${endFmt}`;
+
+                                const conflicts = getShootConflictsForLeave(leave);
+                                const hasConflicts = conflicts.length > 0;
+                                const isSelected = selectedLeaveId === leave.id;
+
+                                return (
+                                    <div
+                                        key={leave.id}
+                                        onClick={() => setSelectedLeaveId(leave.id)}
+                                        className={`transition-all cursor-pointer group ${
+                                            isSelected
+                                                ? 'bg-blue-50/60 dark:bg-blue-950/20'
+                                                : 'hover:bg-gray-50/70 dark:hover:bg-gray-800/40'
+                                        }`}
+                                    >
+                                        {/* Desktop / Laptop Grid Row */}
+                                        <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-3 items-center">
+                                            {/* Col 1: Member (3 cols) */}
+                                            <div className="col-span-3 flex items-center gap-3 min-w-0">
+                                                <div
+                                                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-xs shrink-0 shadow-2xs ${roleAvatarClass(employee?.role)}`}
                                                 >
-                                                    <X size={14} /> Discard
-                                                </button>
-                                                <button
-                                                    onClick={() => handleEditSubmit(leave)}
-                                                    disabled={isEditSubmitting || !editStart || !editEnd || !editReason}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                                                >
-                                                    <Check size={14} /> {isEditSubmitting ? 'Saving...' : 'Save Changes'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
-                                            {/* Identity */}
-                                            <div className="flex min-w-0 items-center gap-3 sm:w-56 sm:shrink-0">
-                                                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${avatarColor(leave.userId)}`}>
-                                                    {getInitials(employee?.name, employee?.email)}
+                                                    {initials(employee?.name || employee?.email)}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <span className="block truncate text-[15px] font-semibold leading-tight text-gray-900 dark:text-white">
-                                                        {employee?.name || employee?.email || 'Unknown Employee'}
+                                                    <span className="block text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-primary transition-colors">
+                                                        {employee?.name || employee?.email || 'Unknown User'}
                                                     </span>
-                                                    <span className="block text-[11px] text-gray-400">
-                                                        Applied {format(parseISO(leave.createdAt || new Date().toISOString()), 'MMM d, yyyy')}
+                                                    <span className="block text-[11px] text-gray-400 truncate">
+                                                        {roleLabel(employee?.role)}
                                                     </span>
                                                 </div>
                                             </div>
 
-                                            {/* Dates + reason (single line, reason truncates) */}
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-                                                    <span className="inline-flex items-center gap-1.5 font-semibold text-gray-900 dark:text-white">
-                                                        <Calendar size={14} className="shrink-0 text-gray-400" />
+                                            {/* Col 2: Dates & Duration (3 cols) */}
+                                            <div className="col-span-3 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                                                        <Calendar size={13} className="text-gray-400 shrink-0" />
                                                         {rangeLabel}
                                                     </span>
-                                                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 shrink-0 border border-blue-100 dark:border-blue-900/30">
                                                         {days} {days === 1 ? 'day' : 'days'}
                                                     </span>
-                                                    <span className="min-w-0 truncate text-gray-500 dark:text-gray-400" title={leave.reason}>
-                                                        · {leave.reason}
-                                                    </span>
                                                 </div>
+                                                <span className="block text-[11px] text-gray-400 mt-0.5">
+                                                    Applied {format(parseISO(leave.createdAt || new Date().toISOString()), 'MMM d')}
+                                                </span>
+                                            </div>
+
+                                            {/* Col 3: Shoot Conflicts (2 cols) */}
+                                            <div className="col-span-2 min-w-0">
+                                                {hasConflicts ? (
+                                                    <span
+                                                        title={`${conflicts.length} active shoot conflict(s) detected`}
+                                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                                    >
+                                                        <AlertTriangle size={12} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                                                        <span>{conflicts.length} Conflict{conflicts.length > 1 ? 's' : ''}</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                        <CheckCircle2 size={12} className="shrink-0" />
+                                                        <span>No Conflicts</span>
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Col 4: Reason Preview (2 cols) */}
+                                            <div className="col-span-2 min-w-0">
+                                                <p className="text-xs text-gray-600 dark:text-gray-300 truncate" title={leave.reason}>
+                                                    {leave.reason || '—'}
+                                                </p>
                                                 {leave.status !== 'PENDING' && approver && (
-                                                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-400">
-                                                        <CheckCircle size={12} className={leave.status === 'APPROVED' ? 'text-green-500' : 'text-red-500'} />
+                                                    <p className="text-[10px] text-gray-400 truncate mt-0.5">
                                                         {leave.status === 'APPROVED' ? 'Approved' : 'Rejected'} by {approver.name || approver.email}
                                                     </p>
                                                 )}
                                             </div>
 
-                                            {/* Status + actions */}
-                                            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+                                            {/* Col 5: Status (1 col) */}
+                                            <div className="col-span-1 shrink-0">
                                                 {getStatusBadge(leave.status)}
+                                            </div>
 
-                                                {/* Status controls — admin can set any leave to the states it
-                                                    isn't already in (approve/reject a pending one, flip a decision,
-                                                    or reopen a decided one back to pending for review). */}
-                                                {isAdmin && (
+                                            {/* Col 6: Actions (1 col) */}
+                                            <div className="col-span-1 flex items-center justify-end gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                                                {isAdmin && leave.status === 'PENDING' && (
                                                     <>
-                                                        {leave.status !== 'APPROVED' && (
-                                                            <button
-                                                                onClick={() => handleStatusUpdate(leave.id, 'APPROVED', leave.userId)}
-                                                                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-green-500 px-2.5 text-xs font-bold text-white transition-colors hover:bg-green-600"
-                                                            >
-                                                                <Check size={13} /> Approve
-                                                            </button>
-                                                        )}
-                                                        {leave.status !== 'REJECTED' && (
-                                                            <button
-                                                                onClick={() => handleStatusUpdate(leave.id, 'REJECTED', leave.userId)}
-                                                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-300 px-2.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10"
-                                                            >
-                                                                <X size={13} /> Reject
-                                                            </button>
-                                                        )}
-                                                        {leave.status !== 'PENDING' && (
-                                                            <button
-                                                                onClick={() => handleStatusUpdate(leave.id, 'PENDING', leave.userId)}
-                                                                title="Reopen for review (set back to pending)"
-                                                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                                                            >
-                                                                <RotateCcw size={13} /> Reopen
-                                                            </button>
-                                                        )}
+                                                        <button
+                                                            onClick={() => handleStatusUpdate(leave.id, 'APPROVED', leave.userId)}
+                                                            title="Approve Leave"
+                                                            aria-label="Approve leave"
+                                                            className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors shadow-2xs"
+                                                        >
+                                                            <Check size={13} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleStatusUpdate(leave.id, 'REJECTED', leave.userId)}
+                                                            title="Reject Leave"
+                                                            aria-label="Reject leave"
+                                                            className="w-7 h-7 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center justify-center transition-colors"
+                                                        >
+                                                            <X size={13} />
+                                                        </button>
                                                     </>
                                                 )}
-
-                                                {canEdit && (
-                                                    <button
-                                                        onClick={() => startEdit(leave)}
-                                                        title="Edit"
-                                                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                                                    >
-                                                        <Pencil size={13} /> Edit
-                                                    </button>
-                                                )}
-                                                {canCancel && (
-                                                    <button
-                                                        onClick={() => handleCancelLeave(leave.id)}
-                                                        disabled={cancellingId === leave.id}
-                                                        title="Cancel request"
-                                                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-red-400"
-                                                    >
-                                                        <XCircle size={13} /> {cancellingId === leave.id ? 'Cancelling…' : 'Cancel'}
-                                                    </button>
-                                                )}
-                                                {canAdminDelete && !canCancel && (
-                                                    <button
-                                                        onClick={() => handleAdminDeleteLeave(leave)}
-                                                        disabled={cancellingId === leave.id}
-                                                        title="Delete"
-                                                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-red-400"
-                                                    >
-                                                        <XCircle size={13} /> {cancellingId === leave.id ? 'Deleting…' : 'Delete'}
-                                                    </button>
-                                                )}
-                                                {isAdmin && (
-                                                    <Link
-                                                        href={`/calendar?user=${leave.userId}`}
-                                                        title="View on Calendar"
-                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-primary dark:hover:bg-gray-800"
-                                                    >
-                                                        <Calendar size={15} />
-                                                    </Link>
-                                                )}
+                                                <button
+                                                    onClick={() => setSelectedLeaveId(leave.id)}
+                                                    title="View Leave Details"
+                                                    aria-label="View leave details"
+                                                    className="w-7 h-7 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
+                                                >
+                                                    <ChevronRight size={15} />
+                                                </button>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
+
+                                        {/* Mobile Card Layout (<768px) */}
+                                        <div className="md:hidden p-3.5 space-y-2.5">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div
+                                                        className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs shrink-0 ${roleAvatarClass(employee?.role)}`}
+                                                    >
+                                                        {initials(employee?.name || employee?.email)}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <span className="block text-xs font-bold text-gray-900 dark:text-white truncate">
+                                                            {employee?.name || employee?.email || 'Unknown User'}
+                                                        </span>
+                                                        <span className="block text-[10px] text-gray-400">
+                                                            {roleLabel(employee?.role)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="shrink-0">
+                                                    {getStatusBadge(leave.status)}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                <span className="font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                                                    <Calendar size={13} className="text-gray-400" />
+                                                    {rangeLabel}
+                                                </span>
+                                                <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300">
+                                                    {days} {days === 1 ? 'day' : 'days'}
+                                                </span>
+                                                {hasConflicts && (
+                                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                                        <AlertTriangle size={11} />
+                                                        {conflicts.length} Shoot Conflict{conflicts.length > 1 ? 's' : ''}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {leave.reason && (
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                                                    {leave.reason}
+                                                </p>
+                                            )}
+
+                                            <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800/70 text-[11px] text-gray-400">
+                                                <span>Tap to view complete details</span>
+                                                <ChevronRight size={14} className="text-gray-400" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
             </div>
 
+            {/* Leave Detail Slide-over Drawer */}
+            <LeaveDetailDrawer
+                isOpen={!!selectedLeave}
+                leave={selectedLeave}
+                onClose={() => setSelectedLeaveId(null)}
+                applicant={selectedLeaveApplicant}
+                approver={selectedLeaveApprover}
+                currentUser={user}
+                isAdmin={isAdmin}
+                conflictingShoots={selectedLeaveConflicts}
+                onStatusUpdate={handleStatusUpdate}
+                onEditSubmit={handleEditSubmit}
+                onDelete={handleAdminDeleteLeave}
+                onCancel={handleCancelLeave}
+            />
+
+            {/* Admin Record Absence Modal */}
             <AdminLeaveModal
                 isOpen={isAdminModalOpen}
                 onClose={() => setIsAdminModalOpen(false)}
