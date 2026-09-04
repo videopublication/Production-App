@@ -14,14 +14,12 @@ import {
     startOfMonth, endOfMonth,
 } from 'date-fns';
 import {
-    Plus, CheckCircle, XCircle, Calendar,
-    Download, Search, ExternalLink, Check, X,
-    Pencil, Filter, RotateCcw, ChevronRight,
-    AlertTriangle, CheckCircle2, Clock, Eye,
-    Users, UserCheck, ShieldAlert
+    Plus, Calendar, Download, Search, ExternalLink, X,
+    ChevronRight, AlertTriangle, CheckCircle2, Clock,
+    Users, CalendarCheck2, ArrowUpRight
 } from 'lucide-react';
 import { Button } from '@/components/Button';
-import { Leave, Shoot, Assignment } from '@/types';
+import { Leave, Shoot } from '@/types';
 import { storage } from '@/lib/storage';
 import { useToast } from '@/lib/toast-context';
 import { AdminLeaveModal } from '@/components/AdminLeaveModal';
@@ -48,7 +46,7 @@ export default function LeavesPage() {
     const { data: users = [] } = useUsers();
     const { data: shoots = [] } = useShoots();
     const { data: assignments = [] } = useAssignments();
-    const { department, allDepartments } = useDepartment();
+    const { department } = useDepartment();
     const { showToast } = useToast();
 
     const activeDepartmentId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : user?.departmentId;
@@ -64,7 +62,6 @@ export default function LeavesPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-    const [cancellingId, setCancellingId] = useState<string | null>(null);
 
     // Detail Drawer state
     const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
@@ -394,7 +391,6 @@ export default function LeavesPage() {
     };
 
     const handleCancelLeave = async (id: string) => {
-        setCancellingId(id);
         try {
             await deleteLeave(id);
             showToast('Leave request cancelled', 'success');
@@ -402,15 +398,12 @@ export default function LeavesPage() {
         } catch (error) {
             console.error('Failed to cancel leave:', error);
             showToast('Failed to cancel leave request', 'error');
-        } finally {
-            setCancellingId(null);
         }
     };
 
     const handleAdminDeleteLeave = async (leave: Leave) => {
         const who = users.find(u => u.id === leave.userId)?.name || 'this member';
         if (!window.confirm(`Delete this leave/absence for ${who}? This cannot be undone.`)) return;
-        setCancellingId(leave.id);
         try {
             const res = await fetch(`/api/admin/leaves?id=${encodeURIComponent(leave.id)}`, { method: 'DELETE' });
             if (!res.ok) {
@@ -423,8 +416,6 @@ export default function LeavesPage() {
         } catch (error) {
             console.error('Failed to delete leave:', error);
             showToast('Failed to delete leave', 'error');
-        } finally {
-            setCancellingId(null);
         }
     };
 
@@ -488,22 +479,22 @@ export default function LeavesPage() {
         switch (status) {
             case 'APPROVED':
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                        <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+                        <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />
                         Approved
                     </span>
                 );
             case 'REJECTED':
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                        <XCircle size={11} className="text-rose-600 dark:text-rose-400" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
+                        <X size={12} className="text-rose-600 dark:text-rose-400" />
                         Rejected
                     </span>
                 );
             default:
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                        <Clock size={11} className="text-amber-600 dark:text-amber-400" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
+                        <Clock size={12} className="text-amber-600 dark:text-amber-400" />
                         Pending
                     </span>
                 );
@@ -560,15 +551,15 @@ export default function LeavesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <div className="flex items-center gap-2.5">
-                        <h1 className="text-2xl sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white">
+                        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
                             Leaves & Team Time Off
                         </h1>
-                        <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
-                            {filteredLeaves.length} {filteredLeaves.length === 1 ? 'Request' : 'Requests'}
+                        <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                            {filteredLeaves.length} {filteredLeaves.length === 1 ? 'request' : 'requests'}
                         </span>
                     </div>
                     <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                        Review leave applications, manage employee availability, and prevent shoot schedule conflicts.
+                        Review leave applications, manage team availability, and check for shoot conflicts.
                     </p>
                 </div>
 
@@ -594,7 +585,7 @@ export default function LeavesPage() {
                             </button>
                             <button
                                 onClick={() => setIsAdminModalOpen(true)}
-                                className="h-9 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
+                                className="h-9 px-3.5 rounded-xl bg-gray-900 hover:bg-black text-white dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
                             >
                                 <Plus size={15} />
                                 <span>Record Absence</span>
@@ -607,53 +598,63 @@ export default function LeavesPage() {
                             onClick={() => setIsApplying(!isApplying)}
                             className="h-9 rounded-xl px-4 text-xs font-bold gap-1.5 shadow-xs"
                         >
-                            {isApplying ? <XCircle size={15} /> : <Plus size={15} />}
+                            {isApplying ? <X size={15} /> : <Plus size={15} />}
                             {isApplying ? 'Cancel Form' : 'Apply for Leave'}
                         </Button>
                     )}
                 </div>
             </div>
 
-            {/* KPI Ribbon (Compact, Refined Heights) */}
+            {/* KPI Ribbon (Clean, modern Apple-style cards) */}
             {isAdmin ? (
                 <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
                     <div
                         onClick={() => setStatusFilter('PENDING')}
-                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] ${
                             statusFilter === 'PENDING'
-                                ? 'border-amber-400/80 bg-amber-500/10 shadow-xs ring-1 ring-amber-400/40'
-                                : 'border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 dark:bg-[#1c1c1e]'
+                                ? 'border-amber-400 dark:border-amber-500 shadow-xs ring-1 ring-amber-400/40'
+                                : 'border-gray-200/80 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 shadow-2xs'
                         }`}
                     >
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                                <Clock size={12} /> Pending Review
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
+                                    <Clock size={14} />
+                                </div>
+                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                    Pending Review
+                                </span>
+                            </div>
                             {statsData.pending > 0 && (
                                 <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                             )}
                         </div>
-                        <div className="flex items-baseline gap-2 mt-1">
-                            <span className="text-2xl font-black text-amber-700 dark:text-amber-400">
+                        <div className="flex items-baseline gap-2 mt-2">
+                            <span className="text-2xl font-black text-gray-900 dark:text-white">
                                 {statsData.pending}
                             </span>
-                            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                            <span className="text-[11px] text-gray-400">
                                 awaiting action
                             </span>
                         </div>
                     </div>
 
-                    <div className="p-3 sm:p-3.5 rounded-2xl border border-rose-500/20 bg-rose-500/5 dark:bg-[#1c1c1e]">
+                    <div className="p-3 sm:p-3.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs">
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 flex items-center gap-1">
-                                <Users size={12} /> Out Today
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                                    <Users size={14} />
+                                </div>
+                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                    Out Today
+                                </span>
+                            </div>
                         </div>
-                        <div className="flex items-baseline gap-2 mt-1">
-                            <span className="text-2xl font-black text-rose-700 dark:text-rose-400">
+                        <div className="flex items-baseline gap-2 mt-2">
+                            <span className="text-2xl font-black text-gray-900 dark:text-white">
                                 {statsData.onLeaveToday}
                             </span>
-                            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                            <span className="text-[11px] text-gray-400">
                                 staff member{statsData.onLeaveToday === 1 ? '' : 's'}
                             </span>
                         </div>
@@ -661,22 +662,27 @@ export default function LeavesPage() {
 
                     <div
                         onClick={() => setStatusFilter('APPROVED')}
-                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] ${
                             statusFilter === 'APPROVED'
-                                ? 'border-emerald-400/80 bg-emerald-500/10 shadow-xs ring-1 ring-emerald-400/40'
-                                : 'border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 dark:bg-[#1c1c1e]'
+                                ? 'border-emerald-400 dark:border-emerald-500 shadow-xs ring-1 ring-emerald-400/40'
+                                : 'border-gray-200/80 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 shadow-2xs'
                         }`}
                     >
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                                <CheckCircle2 size={12} /> This Month
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                                    <CalendarCheck2 size={14} />
+                                </div>
+                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                    Approved This Month
+                                </span>
+                            </div>
                         </div>
-                        <div className="flex items-baseline gap-2 mt-1">
-                            <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
+                        <div className="flex items-baseline gap-2 mt-2">
+                            <span className="text-2xl font-black text-gray-900 dark:text-white">
                                 {statsData.approvedThisMonth}
                             </span>
-                            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                            <span className="text-[11px] text-gray-400">
                                 approved leaves
                             </span>
                         </div>
@@ -684,25 +690,35 @@ export default function LeavesPage() {
                 </div>
             ) : myStats && (
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3.5 rounded-2xl border border-primary/20 bg-primary/5 dark:bg-[#1c1c1e]">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                            <Calendar size={12} /> Days Taken This Year
-                        </span>
-                        <div className="flex items-baseline gap-2 mt-1">
-                            <span className="text-2xl font-black text-primary">{myStats.daysThisYear}</span>
-                            <span className="text-[11px] text-gray-500">approved days</span>
+                    <div className="p-3.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                                <Calendar size={14} />
+                            </div>
+                            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                Days Taken This Year
+                            </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-2">
+                            <span className="text-2xl font-black text-gray-900 dark:text-white">{myStats.daysThisYear}</span>
+                            <span className="text-[11px] text-gray-400">approved days</span>
                         </div>
                     </div>
                     <div
                         onClick={() => setStatusFilter('PENDING')}
-                        className="p-3.5 rounded-2xl border border-amber-500/20 bg-amber-500/5 dark:bg-[#1c1c1e] cursor-pointer hover:bg-amber-500/10 transition-colors"
+                        className="p-3.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs cursor-pointer hover:border-gray-300 transition-colors"
                     >
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                            <Clock size={12} /> Pending Approvals
-                        </span>
-                        <div className="flex items-baseline gap-2 mt-1">
-                            <span className="text-2xl font-black text-amber-700 dark:text-amber-400">{myStats.pending}</span>
-                            <span className="text-[11px] text-gray-500">awaiting manager</span>
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
+                                <Clock size={14} />
+                            </div>
+                            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                Pending Approvals
+                            </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-2">
+                            <span className="text-2xl font-black text-gray-900 dark:text-white">{myStats.pending}</span>
+                            <span className="text-[11px] text-gray-400">awaiting manager</span>
                         </div>
                     </div>
                 </div>
@@ -793,14 +809,14 @@ export default function LeavesPage() {
             <div className="p-2 sm:p-2.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs space-y-2">
                 <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2">
                     {/* Status segmented tabs */}
-                    <div className="inline-flex p-1 bg-gray-100 dark:bg-gray-800/80 rounded-xl overflow-x-auto shrink-0">
+                    <div className="inline-flex p-1 bg-gray-100/90 dark:bg-gray-800/80 rounded-xl overflow-x-auto shrink-0">
                         {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as LeaveStatus[]).map(status => {
                             const isSelected = statusFilter === status;
                             return (
                                 <button
                                     key={status}
                                     onClick={() => setStatusFilter(status)}
-                                    className={`h-8 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                                    className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                                         isSelected
                                             ? 'bg-white dark:bg-[#252528] text-gray-900 dark:text-white shadow-2xs'
                                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -808,7 +824,7 @@ export default function LeavesPage() {
                                 >
                                     <span>{status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}</span>
                                     {status === 'PENDING' && statsData.pending > 0 && (
-                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                                             isSelected
                                                 ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'
                                                 : 'bg-amber-200/70 text-amber-900'
@@ -821,13 +837,13 @@ export default function LeavesPage() {
                         })}
                     </div>
 
-                    {/* Search & Month Picker (Admin or General search) */}
+                    {/* Search & Month Picker */}
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 lg:max-w-xl lg:justify-end">
                         <div className="relative flex-1">
                             <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder={isAdmin ? "Search employee name or reason..." : "Search reason..."}
+                                placeholder={isAdmin ? "Search member or reason..." : "Search reason..."}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 className="h-8.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-8.5 pr-7 text-xs text-gray-900 dark:text-white outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary"
@@ -845,7 +861,7 @@ export default function LeavesPage() {
 
                         {isAdmin && (
                             <div
-                                className="relative cursor-pointer shrink-0 sm:w-[155px]"
+                                className="relative cursor-pointer shrink-0 sm:w-[150px]"
                                 onClick={() => {
                                     const el = monthInputRef.current;
                                     if (!el) return;
@@ -894,13 +910,13 @@ export default function LeavesPage() {
                 ) : (
                     <>
                         {/* Desktop / Laptop High-Density Table Header */}
-                        <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-gray-50/75 dark:bg-[#18181a] border-b border-gray-100 dark:border-gray-800 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider items-center">
+                        <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-gray-50/75 dark:bg-[#18181a] border-b border-gray-100 dark:border-gray-800 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider items-center">
                             <div className="col-span-3">Team Member</div>
                             <div className="col-span-3">Dates & Duration</div>
-                            <div className="col-span-2">Shoot Conflicts</div>
-                            <div className="col-span-2">Reason Preview</div>
+                            <div className="col-span-3">Reason</div>
+                            <div className="col-span-1">Conflicts</div>
                             <div className="col-span-1">Status</div>
-                            <div className="col-span-1 text-right">Actions</div>
+                            <div className="col-span-1 text-right">Details</div>
                         </div>
 
                         {/* Leave Rows */}
@@ -925,8 +941,8 @@ export default function LeavesPage() {
                                         onClick={() => setSelectedLeaveId(leave.id)}
                                         className={`transition-all cursor-pointer group ${
                                             isSelected
-                                                ? 'bg-blue-50/60 dark:bg-blue-950/20'
-                                                : 'hover:bg-gray-50/70 dark:hover:bg-gray-800/40'
+                                                ? 'bg-blue-50/50 dark:bg-blue-950/20'
+                                                : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/40'
                                         }`}
                                     >
                                         {/* Desktop / Laptop Grid Row */}
@@ -951,11 +967,11 @@ export default function LeavesPage() {
                                             {/* Col 2: Dates & Duration (3 cols) */}
                                             <div className="col-span-3 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                                                    <span className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
                                                         <Calendar size={13} className="text-gray-400 shrink-0" />
                                                         {rangeLabel}
                                                     </span>
-                                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 shrink-0 border border-blue-100 dark:border-blue-900/30">
+                                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 shrink-0 border border-blue-100 dark:border-blue-900/30">
                                                         {days} {days === 1 ? 'day' : 'days'}
                                                     </span>
                                                 </div>
@@ -964,26 +980,8 @@ export default function LeavesPage() {
                                                 </span>
                                             </div>
 
-                                            {/* Col 3: Shoot Conflicts (2 cols) */}
-                                            <div className="col-span-2 min-w-0">
-                                                {hasConflicts ? (
-                                                    <span
-                                                        title={`${conflicts.length} active shoot conflict(s) detected`}
-                                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                                                    >
-                                                        <AlertTriangle size={12} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                                                        <span>{conflicts.length} Conflict{conflicts.length > 1 ? 's' : ''}</span>
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                                        <CheckCircle2 size={12} className="shrink-0" />
-                                                        <span>No Conflicts</span>
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* Col 4: Reason Preview (2 cols) */}
-                                            <div className="col-span-2 min-w-0">
+                                            {/* Col 3: Reason Preview (3 cols - generous reading room) */}
+                                            <div className="col-span-3 min-w-0 pr-2">
                                                 <p className="text-xs text-gray-600 dark:text-gray-300 truncate" title={leave.reason}>
                                                     {leave.reason || '—'}
                                                 </p>
@@ -994,41 +992,35 @@ export default function LeavesPage() {
                                                 )}
                                             </div>
 
+                                            {/* Col 4: Shoot Conflicts (1 col) */}
+                                            <div className="col-span-1 min-w-0">
+                                                {hasConflicts ? (
+                                                    <span
+                                                        title={`${conflicts.length} active shoot conflict(s) detected`}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                                    >
+                                                        <AlertTriangle size={11} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                                                        <span>{conflicts.length} Conflict{conflicts.length > 1 ? 's' : ''}</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                        <CheckCircle2 size={12} className="shrink-0" />
+                                                        <span>Clear</span>
+                                                    </span>
+                                                )}
+                                            </div>
+
                                             {/* Col 5: Status (1 col) */}
                                             <div className="col-span-1 shrink-0">
                                                 {getStatusBadge(leave.status)}
                                             </div>
 
-                                            {/* Col 6: Actions (1 col) */}
-                                            <div className="col-span-1 flex items-center justify-end gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                                                {isAdmin && leave.status === 'PENDING' && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleStatusUpdate(leave.id, 'APPROVED', leave.userId)}
-                                                            title="Approve Leave"
-                                                            aria-label="Approve leave"
-                                                            className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors shadow-2xs"
-                                                        >
-                                                            <Check size={13} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleStatusUpdate(leave.id, 'REJECTED', leave.userId)}
-                                                            title="Reject Leave"
-                                                            aria-label="Reject leave"
-                                                            className="w-7 h-7 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center justify-center transition-colors"
-                                                        >
-                                                            <X size={13} />
-                                                        </button>
-                                                    </>
-                                                )}
-                                                <button
-                                                    onClick={() => setSelectedLeaveId(leave.id)}
-                                                    title="View Leave Details"
-                                                    aria-label="View leave details"
-                                                    className="w-7 h-7 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
-                                                >
-                                                    <ChevronRight size={15} />
-                                                </button>
+                                            {/* Col 6: Review Detail Button (1 col - Clean, no noisy raw buttons) */}
+                                            <div className="col-span-1 flex items-center justify-end shrink-0">
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-gray-50 dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 group-hover:bg-primary group-hover:text-white transition-all shadow-2xs">
+                                                    <span>Review</span>
+                                                    <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+                                                </span>
                                             </div>
                                         </div>
 
@@ -1078,7 +1070,7 @@ export default function LeavesPage() {
                                             )}
 
                                             <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800/70 text-[11px] text-gray-400">
-                                                <span>Tap to view complete details</span>
+                                                <span>Tap to review details</span>
                                                 <ChevronRight size={14} className="text-gray-400" />
                                             </div>
                                         </div>
