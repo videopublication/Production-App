@@ -36,25 +36,45 @@ const AUTH_DIR = process.env.AUTH_DIR || path.join(os.tmpdir(), 'vp_whatsapp_aut
 async function restoreSessionFromSupabase() {
     if (!supabase) return;
     try {
-        if (!fs.existsSync(AUTH_DIR)) {
-            fs.mkdirSync(AUTH_DIR, { recursive: true });
-        } else {
-            const existingFiles = fs.readdirSync(AUTH_DIR);
-            if (existingFiles.length > 0) {
-                console.log('[WhatsApp Gateway] Active local session files found. Skipping restore to preserve live keys.');
-                return;
+        const credsFile = path.join(AUTH_DIR, 'creds.json');
+        if (fs.existsSync(credsFile)) {
+            try {
+                const creds = JSON.parse(fs.readFileSync(credsFile, 'utf8'));
+                if (creds && creds.me) {
+                    console.log('[WhatsApp Gateway] Active registered creds.json found locally. Skipping restore to preserve live keys.');
+                    return;
+                }
+            } catch {
+                console.warn('[WhatsApp Gateway] Local creds.json invalid, restoring from Supabase...');
             }
         }
 
-        const { data, error } = await supabase.from('whatsapp_sessions').select('id, data');
-        if (error) {
-            console.warn('[WhatsApp Gateway] Failed to fetch session backup from Supabase:', error.message);
-            return;
+        if (!fs.existsSync(AUTH_DIR)) {
+            fs.mkdirSync(AUTH_DIR, { recursive: true });
         }
 
-        if (data && data.length > 0) {
-            console.log(`[WhatsApp Gateway] Restoring ${data.length} auth session files from Supabase DB...`);
-            for (const row of data) {
+        console.log('[WhatsApp Gateway] Fetching session backup from Supabase with pagination...');
+        let allRows = [];
+        let page = 0;
+        const pageSize = 500;
+        while (true) {
+            const { data, error } = await supabase
+                .from('whatsapp_sessions')
+                .select('id, data')
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+            if (error) {
+                console.warn('[WhatsApp Gateway] Failed to fetch session backup from Supabase:', error.message);
+                break;
+            }
+            if (!data || data.length === 0) break;
+            allRows = allRows.concat(data);
+            if (data.length < pageSize) break;
+            page++;
+        }
+
+        if (allRows.length > 0) {
+            console.log(`[WhatsApp Gateway] Restoring ${allRows.length} auth session files from Supabase DB...`);
+            for (const row of allRows) {
                 const filePath = path.join(AUTH_DIR, row.id);
                 const fileContent = typeof row.data === 'string' ? row.data : JSON.stringify(row.data);
                 fs.writeFileSync(filePath, fileContent);
@@ -69,6 +89,15 @@ async function restoreSessionFromSupabase() {
 async function backupSessionToSupabase() {
     if (!supabase || !fs.existsSync(AUTH_DIR)) return;
     try {
+        const credsFile = path.join(AUTH_DIR, 'creds.json');
+        if (!fs.existsSync(credsFile)) return;
+        try {
+            const creds = JSON.parse(fs.readFileSync(credsFile, 'utf8'));
+            if (!creds || !creds.me) return;
+        } catch {
+            return;
+        }
+
         const files = fs.readdirSync(AUTH_DIR);
         const rows = [];
 
@@ -86,12 +115,15 @@ async function backupSessionToSupabase() {
         }
 
         if (rows.length > 0) {
-            const { error } = await supabase.from('whatsapp_sessions').upsert(rows);
-            if (error) {
-                console.warn('[WhatsApp Gateway] Failed to back up session files to Supabase:', error.message);
-            } else {
-                console.log(`[WhatsApp Gateway] Backed up ${rows.length} session files to Supabase DB!`);
+            const chunkSize = 100;
+            for (let i = 0; i < rows.length; i += chunkSize) {
+                const chunk = rows.slice(i, i + chunkSize);
+                const { error } = await supabase.from('whatsapp_sessions').upsert(chunk);
+                if (error) {
+                    console.warn(`[WhatsApp Gateway] Failed to back up session chunk (${i}-${i + chunk.length}):`, error.message);
+                }
             }
+            console.log(`[WhatsApp Gateway] Backed up ${rows.length} session files to Supabase DB!`);
         }
     } catch (err) {
         console.error('[WhatsApp Gateway] Error backing up session to Supabase:', err.message);
@@ -425,23 +457,28 @@ app.get(['/groups', '/group/list'], async (req, res) => {
     }
 });
 
-// Send Group Message API
-app.post(['/send-group-message', '/message/sendText/vp-app-1'], async (req, res) => {
+// Send Group / Direct Message API (supports Custom Gateway and Evolution API formats)
+app.post(['/send-group-message', '/send-direct-message', '/message/sendText', '/message/sendText/:instance'], async (req, res) => {
     try {
         if (BOT_SECRET && req.headers['x-bot-secret'] !== BOT_SECRET) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        const { groupJid, number, message, text, mentions } = req.body;
-        const targetJid = groupJid || number || process.env.WHATSAPP_GROUP_JID || '120363424310845566@g.us';
+        const { groupJid, number, message, text, mentions, options } = req.body;
+        let targetJid = groupJid || number || process.env.WHATSAPP_GROUP_JID || '120363424310845566@g.us';
+        // Auto-format phone number to JID if plain number
+        if (targetJid && !targetJid.includes('@')) {
+            const clean = targetJid.replace(/[^\d]/g, '');
+            targetJid = clean.length === 10 ? `91${clean}@s.whatsapp.net` : `${clean}@s.whatsapp.net`;
+        }
         const msgText = message || text;
 
         if (!msgText) {
             return res.status(400).json({ error: 'Message content is required' });
         }
 
-        const options = {};
-        let finalMentions = Array.isArray(mentions) ? [...mentions] : [];
+        const sendOptions = {};
+        let finalMentions = Array.isArray(mentions) ? [...mentions] : (Array.isArray(options?.mentions) ? [...options.mentions] : []);
 
         // Auto-extract any @phone tags in text for live WhatsApp group tagging
         if (msgText) {
@@ -456,7 +493,7 @@ app.post(['/send-group-message', '/message/sendText/vp-app-1'], async (req, res)
         }
 
         if (finalMentions.length > 0) {
-            options.mentions = finalMentions;
+            sendOptions.mentions = finalMentions;
         }
 
         let sent = false;
@@ -471,7 +508,7 @@ app.post(['/send-group-message', '/message/sendText/vp-app-1'], async (req, res)
                 }
 
                 if (sock) {
-                    await sock.sendMessage(targetJid, { text: msgText, ...options });
+                    await sock.sendMessage(targetJid, { text: msgText, ...sendOptions });
                     sent = true;
                     console.log(`[WhatsApp Gateway] Dispatched message on attempt ${attempt} to target JID: ${targetJid}`);
                     break;

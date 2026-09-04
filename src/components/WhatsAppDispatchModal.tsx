@@ -45,7 +45,7 @@ const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
     const [message, setMessage] = useState(initialMessage || '');
     const [isSending, setIsSending] = useState(false);
     const [resolvedGroupName, setResolvedGroupName] = useState<string>(targetName || 'VP Media Production Group');
-    const [gatewayStatus, setGatewayStatus] = useState<{ connected: boolean; state?: string } | null>(null);
+    const [gatewayStatus, setGatewayStatus] = useState<{ connected: boolean; state?: string; gatewayUrl?: string } | null>(null);
 
     // Keep message synced when modal opens or initialMessage changes
     useEffect(() => {
@@ -78,7 +78,8 @@ const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
                     targetJid = statusData.groupJid || '';
                     setGatewayStatus({
                         connected: Boolean(statusData.connected),
-                        state: statusData.state || statusData.status
+                        state: statusData.state || statusData.status,
+                        gatewayUrl: statusData.gatewayUrl
                     });
                 } else {
                     setGatewayStatus({ connected: false, state: 'offline' });
@@ -173,7 +174,7 @@ const WhatsAppDispatchModalInner: React.FC<WhatsAppDispatchModalProps> = ({
                                         </span>
                                     ) : (
                                         <a
-                                            href="https://vp-whatsapp-gateway.onrender.com/qr"
+                                            href={`${gatewayStatus?.gatewayUrl || 'http://localhost:3001'}/qr`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700 hover:underline shrink-0"

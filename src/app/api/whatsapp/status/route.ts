@@ -14,68 +14,86 @@ const getSupabaseAdmin = () => {
 };
 
 export async function GET() {
-    const gatewayUrl = (process.env.WHATSAPP_GATEWAY_URL || 'http://localhost:3001').replace(/\/$/, '');
+    const configuredUrl = process.env.WHATSAPP_GATEWAY_URL || 'http://localhost:3001';
     const groupJid = process.env.WHATSAPP_GROUP_JID || '120363424310845566@g.us';
     const instanceName = process.env.WHATSAPP_EVOLUTION_INSTANCE || 'vp-app-1';
 
-    try {
-        // 1. Health check from local microservice or gateway
-        const healthRes = await fetch(`${gatewayUrl}/health`, {
-            cache: 'no-store',
-            headers: {
-                'apikey': process.env.WHATSAPP_EVOLUTION_API_KEY || ''
-            }
-        });
+    const candidateUrls = Array.from(new Set([
+        configuredUrl.replace(/\/$/, ''),
+        'http://localhost:3001',
+        'https://vp-whatsapp-gateway.onrender.com'
+    ])).filter(Boolean);
 
-        if (!healthRes.ok) {
-            return NextResponse.json({
-                status: 'offline',
-                connected: false,
-                gatewayUrl,
-                groupJid,
-                instanceName,
-                error: `Gateway returned status ${healthRes.status}`
+    let lastStatusResult: any = null;
+
+    for (const gatewayUrl of candidateUrls) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3000);
+            const healthRes = await fetch(`${gatewayUrl}/health`, {
+                cache: 'no-store',
+                headers: {
+                    'apikey': process.env.WHATSAPP_EVOLUTION_API_KEY || ''
+                },
+                signal: controller.signal
             });
-        }
+            clearTimeout(timeout);
 
-        const healthData = await healthRes.json();
+            if (healthRes.ok) {
+                const healthData = await healthRes.json();
+                let qrDataUrl = null;
 
-        // 2. Fetch QR if available
-        let qrDataUrl = null;
-        if (!healthData.connected) {
-            try {
-                const qrRes = await fetch(`${gatewayUrl}/qr`, { cache: 'no-store' });
-                if (qrRes.ok) {
-                    const html = await qrRes.text();
-                    const match = html.match(/src="(data:image\/png;base64,[^"]+)"/);
-                    if (match && match[1]) {
-                        qrDataUrl = match[1];
+                if (!healthData.connected) {
+                    try {
+                        const qrRes = await fetch(`${gatewayUrl}/qr`, { cache: 'no-store' });
+                        if (qrRes.ok) {
+                            const html = await qrRes.text();
+                            const match = html.match(/src="(data:image\/png;base64,[^"]+)"/);
+                            if (match && match[1]) {
+                                qrDataUrl = match[1];
+                            }
+                        }
+                    } catch (qrErr) {
+                        console.warn('[WhatsApp Status API] Could not fetch QR HTML:', qrErr);
                     }
                 }
-            } catch (qrErr) {
-                console.warn('[WhatsApp Status API] Could not fetch QR HTML:', qrErr);
-            }
-        }
 
-        return NextResponse.json({
-            status: healthData.connected ? 'connected' : (healthData.state || 'qr_ready'),
-            connected: Boolean(healthData.connected),
-            gatewayUrl,
-            groupJid,
-            instanceName,
-            qrDataUrl,
-            lastChecked: new Date().toISOString()
-        });
-    } catch (err: any) {
-        return NextResponse.json({
-            status: 'offline',
-            connected: false,
-            gatewayUrl,
-            groupJid,
-            instanceName,
-            error: err.message || 'Connection refused'
-        });
+                const result = {
+                    status: healthData.connected ? 'connected' : (healthData.state || 'qr_ready'),
+                    connected: Boolean(healthData.connected),
+                    gatewayUrl,
+                    groupJid,
+                    instanceName,
+                    qrDataUrl,
+                    lastChecked: new Date().toISOString()
+                };
+
+                // If this candidate is connected, immediately choose it
+                if (healthData.connected) {
+                    return NextResponse.json(result);
+                }
+
+                if (!lastStatusResult) {
+                    lastStatusResult = result;
+                }
+            }
+        } catch {
+            // Keep trying other candidates
+        }
     }
+
+    if (lastStatusResult) {
+        return NextResponse.json(lastStatusResult);
+    }
+
+    return NextResponse.json({
+        status: 'offline',
+        connected: false,
+        gatewayUrl: configuredUrl,
+        groupJid,
+        instanceName,
+        error: 'WhatsApp Gateway offline. Please start local gateway or verify network.'
+    });
 }
 
 // DELETE Handler to Disconnect / Reset WhatsApp Session

@@ -75,25 +75,37 @@ export async function POST(req: Request) {
             const jid = `${cleanNumber}@s.whatsapp.net`;
             recipientLabel = `Direct (${cleanNumber})`;
 
-            // Dispatch direct message to gateway
-            const endpoint = `${gatewayUrl}/message/sendText/vp-app-1`;
-            const res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ number: jid, text: message, mentions })
-            });
+            // Dispatch direct message to active gateway
+            const candidateUrls = Array.from(new Set([
+                gatewayUrl,
+                'http://localhost:3001',
+                'https://vp-whatsapp-gateway.onrender.com'
+            ])).filter(Boolean);
 
-            if (res.ok) {
-                success = true;
-            } else {
-                errorMsg = await res.text();
-                // Fallback to custom gateway format
-                const altRes = await fetch(`${gatewayUrl}/send-group-message`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ groupJid: jid, message, mentions })
-                });
-                if (altRes.ok) success = true;
+            for (const url of candidateUrls) {
+                try {
+                    const res = await fetch(`${url}/send-group-message`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ groupJid: jid, message, mentions })
+                    });
+                    if (res.ok) {
+                        success = true;
+                        break;
+                    }
+                    const altRes = await fetch(`${url}/message/sendText/vp-app-1`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ number: jid, text: message, mentions })
+                    });
+                    if (altRes.ok) {
+                        success = true;
+                        break;
+                    }
+                    errorMsg = await res.text();
+                } catch (cErr: any) {
+                    errorMsg = cErr.message;
+                }
             }
         } else {
             // Group Dispatch

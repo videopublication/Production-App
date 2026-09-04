@@ -3,30 +3,41 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    const gatewayUrl = (process.env.WHATSAPP_GATEWAY_URL || 'http://localhost:3001').replace(/\/$/, '');
+    const configuredUrl = process.env.WHATSAPP_GATEWAY_URL || 'http://localhost:3001';
+    const candidateUrls = Array.from(new Set([
+        configuredUrl.replace(/\/$/, ''),
+        'http://localhost:3001',
+        'https://vp-whatsapp-gateway.onrender.com'
+    ])).filter(Boolean);
 
-    try {
-        const res = await fetch(`${gatewayUrl}/groups`, {
-            cache: 'no-store',
-            headers: {
-                'apikey': process.env.WHATSAPP_EVOLUTION_API_KEY || ''
-            }
-        });
+    let lastError: string = '';
 
-        if (!res.ok) {
-            if (res.status === 404) {
-                return NextResponse.json({
-                    error: 'The live Render gateway is running an older build without /groups endpoint. Please push to update Render!'
-                }, { status: 404 });
+    for (const gatewayUrl of candidateUrls) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 4000);
+            const res = await fetch(`${gatewayUrl}/groups`, {
+                cache: 'no-store',
+                headers: {
+                    'apikey': process.env.WHATSAPP_EVOLUTION_API_KEY || ''
+                },
+                signal: controller.signal
+            });
+            clearTimeout(timeout);
+
+            if (res.ok) {
+                const data = await res.json();
+                return NextResponse.json(data);
+            } else {
+                const errText = await res.text();
+                lastError = `Gateway (${gatewayUrl}) returned status ${res.status}: ${errText}`;
             }
-            const errText = await res.text();
-            return NextResponse.json({ error: `Gateway returned status ${res.status}: ${errText}` }, { status: res.status });
+        } catch (err: any) {
+            lastError = err.message || 'Connection failed';
         }
-
-        const data = await res.json();
-        return NextResponse.json(data);
-    } catch (err: any) {
-        console.error('[WhatsApp Groups Proxy] Error:', err);
-        return NextResponse.json({ error: err.message || 'Failed to fetch groups from gateway' }, { status: 500 });
     }
+
+    return NextResponse.json({
+        error: lastError || 'Failed to fetch groups from any available WhatsApp gateway'
+    }, { status: 500 });
 }

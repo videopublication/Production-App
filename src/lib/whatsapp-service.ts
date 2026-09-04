@@ -55,13 +55,37 @@ export async function sendWhatsAppGroupMessage(
         return false;
     }
 
-    try {
-        const baseUrl = gatewayUrl.replace(/\/$/, '');
+    const candidateUrls = Array.from(new Set([
+        gatewayUrl?.replace(/\/$/, ''),
+        'http://localhost:3001',
+        'https://vp-whatsapp-gateway.onrender.com'
+    ])).filter(Boolean) as string[];
 
-        // 1. Evolution API Format
-        if (isEvolution) {
-            const endpoint = `${baseUrl}/message/sendText/${instanceName}`;
+    for (const baseUrl of candidateUrls) {
+        try {
+            // 1. Try Custom Gateway format
+            const endpoint = `${baseUrl}/send-group-message`;
             const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    groupJid,
+                    message,
+                    mentions,
+                    secret: apiKey || '',
+                }),
+            });
+
+            if (response.ok) {
+                console.log(`[WhatsApp Service] Message successfully dispatched via ${baseUrl}.`);
+                return true;
+            }
+
+            // 2. Try Evolution API format
+            const evoEndpoint = `${baseUrl}/message/sendText/${instanceName}`;
+            const evoResponse = await fetch(evoEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -74,43 +98,17 @@ export async function sendWhatsAppGroupMessage(
                 }),
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[WhatsApp Service] Evolution API returned error:', response.status, errorText);
-                return false;
+            if (evoResponse.ok) {
+                console.log(`[WhatsApp Service] Message successfully dispatched via Evolution API (${baseUrl}).`);
+                return true;
             }
-
-            console.log('[WhatsApp Service] Message successfully dispatched via Evolution API.');
-            return true;
+        } catch (error: any) {
+            console.warn(`[WhatsApp Service] Candidate ${baseUrl} failed:`, error.message);
         }
-
-        // 2. Custom Gateway Format (Default Fallback)
-        const endpoint = `${baseUrl}/send-group-message`;
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                groupJid,
-                message,
-                mentions,
-                secret: apiKey || '',
-            }),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[WhatsApp Service] Custom Gateway returned error:', response.status, errorText);
-            return false;
-        }
-
-        console.log('[WhatsApp Service] Message successfully dispatched via Custom Gateway.');
-        return true;
-    } catch (error) {
-        console.error('[WhatsApp Service] Failed to send message to WhatsApp group:', error);
-        return false;
     }
+
+    console.error('[WhatsApp Service] Failed to send message via all available gateways.');
+    return false;
 }
 
 /**
@@ -157,31 +155,36 @@ export async function sendWhatsAppPoll(
         return false;
     }
 
-    try {
-        const baseUrl = gatewayUrl.replace(/\/$/, '');
-        const endpoint = `${baseUrl}/send-poll`;
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                groupJid,
-                pollName,
-                options,
-                selectableCount,
-                secret: apiKey || '',
-            }),
-        });
+    const candidateUrls = Array.from(new Set([
+        gatewayUrl?.replace(/\/$/, ''),
+        'http://localhost:3001',
+        'https://vp-whatsapp-gateway.onrender.com'
+    ])).filter(Boolean) as string[];
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[WhatsApp Service] Poll dispatch returned error:', response.status, errorText);
-            return false;
+    for (const baseUrl of candidateUrls) {
+        try {
+            const endpoint = `${baseUrl}/send-poll`;
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    groupJid,
+                    pollName,
+                    options,
+                    selectableCount,
+                    secret: apiKey || '',
+                }),
+            });
+
+            if (response.ok) {
+                console.log(`[WhatsApp Service] Native WhatsApp Poll dispatched successfully via ${baseUrl}.`);
+                return true;
+            }
+        } catch (error: any) {
+            console.warn(`[WhatsApp Service] Poll candidate ${baseUrl} failed:`, error.message);
         }
-
-        console.log('[WhatsApp Service] Native WhatsApp Poll dispatched successfully.');
-        return true;
-    } catch (error) {
-        console.error('[WhatsApp Service] Failed to send WhatsApp Poll:', error);
-        return false;
     }
+
+    console.error('[WhatsApp Service] Failed to send WhatsApp Poll via all available gateways.');
+    return false;
 }
