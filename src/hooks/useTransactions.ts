@@ -52,6 +52,7 @@ export function useCheckOut() {
             id,
             departmentId,
             performerId,
+            performerName,
             targetUserName
         }: {
             items: Equipment[],
@@ -66,6 +67,7 @@ export function useCheckOut() {
             displayId?: string,
             departmentId?: string,
             performerId?: string,
+            performerName?: string,
             targetUserName?: string
         }) => {
 
@@ -135,25 +137,32 @@ export function useCheckOut() {
                 departmentId
             });
 
-            // 4. Notify the user
-            if (userId !== performerId) {
+            // 4. Notify all assigned crew members (primary + additional, except the performer)
+            const crewRecipients = Array.from(new Set([userId, ...(additionalUsers || [])]))
+                .filter((id): id is string => Boolean(id) && id !== performerId);
+
+            if (crewRecipients.length > 0) {
+                const performerLabel = performerName ? `${performerName}` : 'Admin';
+                const behalfPrefix = isBehalf ? `${performerLabel} has checked out` : 'Checked out';
                 const title = 'Equipment Checked Out';
-                const message = `Admin has checked out ${itemSummary} to you for ${project}.`;
-                
-                await storage.addNotification({
-                    userId,
-                    title,
-                    message,
-                    link: '/transactions',
-                    departmentId
-                });
+                const message = `${behalfPrefix} ${itemSummary} for ${project}.`;
+
+                await Promise.all(crewRecipients.map(recipientId =>
+                    storage.addNotification({
+                        userId: recipientId,
+                        title,
+                        message,
+                        link: `/transactions/${transactionId}`,
+                        departmentId
+                    })
+                ));
 
                 sendPushNotification({
-                    userId,
+                    userIds: crewRecipients,
                     title,
                     message,
                     link: `/transactions/${transactionId}`
-                }).catch(e => console.error('Push notification failed', e));
+                }).catch(e => console.error('Push notification failed for crew', e));
             }
 
             try {
@@ -194,11 +203,13 @@ export function useCheckOut() {
             // 5. Dispatch automated WhatsApp Group notification
             try {
                 const notificationDepartmentId = departmentId || items[0]?.departmentId;
-                const [allUsers, allShoots] = await Promise.all([
+                const [allUsers, allShoots, departments] = await Promise.all([
                     storage.getUsers(notificationDepartmentId),
-                    storage.getShoots(notificationDepartmentId)
+                    storage.getShoots(notificationDepartmentId),
+                    storage.getDepartments()
                 ]);
-                const labels = getDepartmentLabels(notificationDepartmentId ? { id: notificationDepartmentId } as any : null);
+                const currentDept = departments.find(d => d.id === notificationDepartmentId) || null;
+                const labels = getDepartmentLabels(currentDept);
 
                 const waMessage = buildCheckoutMessage({
                     transaction,
@@ -206,9 +217,10 @@ export function useCheckOut() {
                     users: allUsers,
                     shoots: allShoots,
                     labels,
+                    performerId,
                 });
 
-                sendWhatsAppGroupMessage(waMessage).catch(e =>
+                sendWhatsAppGroupMessage(waMessage, undefined, notificationDepartmentId).catch(e =>
                     console.error('WhatsApp group dispatch failed for checkout transaction', e)
                 );
             } catch (waErr) {

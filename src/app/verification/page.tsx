@@ -163,7 +163,7 @@ export default function VerificationPage() {
     const parseVerificationScanCode = (decodedText: string) => {
         try {
             const data = JSON.parse(decodedText);
-            return String(data.barcode || data.id || decodedText).trim();
+            return String(data.id || data.barcode || decodedText).trim();
         } catch {
             return decodedText.trim();
         }
@@ -189,6 +189,7 @@ export default function VerificationPage() {
         const activeIssue = getEquipmentIssue(item);
 
         return textMatchesSearch(query, [
+            item.id,
             item.name,
             item.barcode,
             item.serialNumber,

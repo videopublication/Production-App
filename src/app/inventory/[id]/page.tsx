@@ -141,8 +141,10 @@ export default function ItemDetailsPage() {
                     storage.getShoots(effectiveDeptId || undefined)
                 ]);
 
-                // Filter transactions that include this item
-                const relatedTxns = txns.filter(t => t.items.includes(item.id));
+                // Filter transactions that include this item, sorted most-recent first
+                const relatedTxns = txns
+                    .filter(t => t.items.includes(item.id))
+                    .sort((a, b) => new Date(b.timestampOut).getTime() - new Date(a.timestampOut).getTime());
                 setItemTransactions(relatedTxns);
 
                 // Also fetch logs from each related transaction (checkout/return logs use transactionId as entityId)
@@ -151,26 +153,35 @@ export default function ItemDetailsPage() {
                 const txnLogsArrays = await Promise.all(txnLogPromises);
                 const allTxnLogs = txnLogsArrays.flat();
 
-                // Collect all known barcodes for this item (current barcode + any historical barcodes found in logs)
+                // Collect only actual barcodes and serial numbers for this specific item
                 const knownBarcodes = new Set<string>();
-                if (item.barcode) knownBarcodes.add(item.barcode.toLowerCase());
+                if (item.barcode) knownBarcodes.add(item.barcode.trim().toLowerCase());
+                if (item.serialNumber) knownBarcodes.add(item.serialNumber.trim().toLowerCase());
 
-                // Scan equipment logs for old barcodes (e.g. Generated barcode: "OLD"→"NEW" or Bulk edit "..." (OLD): ...)
+                // Scan equipment logs ONLY for actual barcode renames/regenerations (not name changes or parenthetical notes)
                 equipmentLogs.forEach(l => {
                     const details = l.details || '';
-                    const arrowMatch = details.match(/"([^"]+)"\s*→\s*"([^"]+)"/);
-                    if (arrowMatch) {
-                        const b1 = arrowMatch[1].trim().toLowerCase();
-                        const b2 = arrowMatch[2].trim().toLowerCase();
-                        if (b1) knownBarcodes.add(b1);
-                        if (b2) knownBarcodes.add(b2);
+                    if (details.toLowerCase().includes('generated barcode')) {
+                        const arrowMatch = details.match(/"([^"]+)"\s*→\s*"([^"]+)"/);
+                        if (arrowMatch) {
+                            const b1 = arrowMatch[1].trim().toLowerCase();
+                            const b2 = arrowMatch[2].trim().toLowerCase();
+                            if (b1) knownBarcodes.add(b1);
+                            if (b2) knownBarcodes.add(b2);
+                        }
                     }
-                    const parenMatch = details.match(/\(([a-zA-Z0-9_-]+)\)/g);
-                    if (parenMatch) {
-                        parenMatch.forEach(p => {
-                            const code = p.slice(1, -1).trim().toLowerCase();
-                            if (code && code.length >= 3) knownBarcodes.add(code);
-                        });
+                    const bcChangeMatch = details.match(/barcode[^:]*:\s*"([^"]+)"\s*→\s*"([^"]+)"/i);
+                    if (bcChangeMatch) {
+                        if (bcChangeMatch[1]) knownBarcodes.add(bcChangeMatch[1].trim().toLowerCase());
+                        if (bcChangeMatch[2]) knownBarcodes.add(bcChangeMatch[2].trim().toLowerCase());
+                    }
+                    if (l.oldValue && typeof l.oldValue === 'object' && 'barcode' in l.oldValue && typeof (l.oldValue as Record<string, unknown>).barcode === 'string') {
+                        const bc = ((l.oldValue as Record<string, unknown>).barcode as string).trim().toLowerCase();
+                        if (bc) knownBarcodes.add(bc);
+                    }
+                    if (l.newValue && typeof l.newValue === 'object' && 'barcode' in l.newValue && typeof (l.newValue as Record<string, unknown>).barcode === 'string') {
+                        const bc = ((l.newValue as Record<string, unknown>).barcode as string).trim().toLowerCase();
+                        if (bc) knownBarcodes.add(bc);
                     }
                 });
 
@@ -181,7 +192,18 @@ export default function ItemDetailsPage() {
                 const itemIdLower = item.id.toLowerCase();
 
                 const txnLogs = allTxnLogs.filter(log => {
-                    if (log.action === 'CHECKOUT') return true;
+                    // 1. Transaction CHECKOUT where this item was part of the checkout
+                    if (log.action === 'CHECKOUT') {
+                        const loggedItemIds = log.newValue && typeof log.newValue === 'object' && 'itemIds' in log.newValue
+                            ? (log.newValue as Record<string, unknown>).itemIds
+                            : null;
+                        if (Array.isArray(loggedItemIds) && loggedItemIds.length > 0) {
+                            return loggedItemIds.includes(item.id);
+                        }
+                        return true;
+                    }
+
+                    // 2. Transaction logs specifically mentioning this item's ID, barcode, or serial number
                     const details = (log.details || '').toLowerCase();
                     if (details.includes(itemIdLower)) return true;
                     if (barcodeRegexes.some(rx => rx.test(details))) return true;

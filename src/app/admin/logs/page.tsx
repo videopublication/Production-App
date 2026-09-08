@@ -5,13 +5,24 @@ import { useRouter } from 'next/navigation';
 import { storage } from '@/lib/storage';
 import { logActionVariant } from '@/lib/log-display';
 import { Log, User } from '@/types';
-import { Card } from '@/components/Card';
-import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
 import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
 import { Badge } from '@/components/Badge';
 import { PullToRefresh } from '@/components/PullToRefresh';
+
+const ACTION_FILTERS = [
+    { id: 'ALL', label: 'All' },
+    { id: 'CHECKOUT', label: 'Checkout' },
+    { id: 'RETURN', label: 'Return' },
+    { id: 'EDIT', label: 'Edit' },
+    { id: 'CREATE', label: 'Create' },
+    { id: 'DELETE', label: 'Delete' },
+    { id: 'VERIFY', label: 'Verify' },
+    { id: 'LOGIN', label: 'Login' },
+    { id: 'SIGNUP', label: 'Signup' },
+    { id: 'LOGOUT', label: 'Logout' },
+    { id: 'LOGIN_FAILED', label: 'Login Failed' },
+];
 
 export default function AdminLogsPage() {
     const router = useRouter();
@@ -93,15 +104,42 @@ export default function AdminLogsPage() {
         await loadData(1, true);
     };
 
+    const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set());
+
+    const toggleExpand = (logId: string) => {
+        setExpandedLogIds(prev => {
+            const next = new Set(prev);
+            if (next.has(logId)) next.delete(logId);
+            else next.add(logId);
+            return next;
+        });
+    };
+
+    const getLogItems = (log: Log): string[] => {
+        if (!log.newValue || typeof log.newValue !== 'object') return [];
+        const nv = log.newValue as Record<string, unknown>;
+        const items: string[] = [];
+        if (Array.isArray(nv.itemNames)) {
+            items.push(...nv.itemNames.filter((n): n is string => typeof n === 'string'));
+        }
+        if (Array.isArray(nv.addedItemNames)) {
+            items.push(...nv.addedItemNames.filter((n): n is string => typeof n === 'string'));
+        }
+        if (Array.isArray(nv.manualItems)) {
+            nv.manualItems.forEach((m: any) => {
+                if (m && typeof m.name === 'string') {
+                    items.push(`${m.name} (Qty: ${m.quantity || 1})`);
+                }
+            });
+        }
+        return items;
+    };
+
     const getUserName = (userId?: string) => {
         if (!userId) return 'System / Guest';
         const found = users.find(u => u.id === userId);
         return found?.name || found?.email || 'Unknown User';
     };
-
-    // Filtering is now done server-side via the action parameter in getLogs.
-    // No client-side filter needed.
-    const filteredLogs = logs;
 
     const getActionVariant = logActionVariant;
 
@@ -110,88 +148,180 @@ export default function AdminLogsPage() {
     }
 
     return (
-        <div className="space-y-6 animate-fade-in pb-12">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="space-y-3.5 max-w-[1400px] xl:max-w-[1600px] mx-auto animate-fade-in pb-10">
+            {/* Compact Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Activity Logs</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Activity Logs</h1>
+                    <p className="text-[12.5px] text-muted-foreground mt-0.5">
                         Audit trail of all system activities
                     </p>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
+                <button
+                    type="button"
                     onClick={() => handleRefresh()}
-                    className="bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                    className="h-8 px-2.5 rounded-lg border border-border bg-card text-foreground hover:bg-muted text-xs font-medium inline-flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all shrink-0"
+                    title="Refresh activity logs"
                 >
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                     Refresh
-                </Button>
+                </button>
             </div>
 
-            <div className="bg-white dark:bg-[#1c1c1e] p-4 rounded-2xl border border-gray-200/60 dark:border-gray-800 shadow-sm">
-                <div className="flex flex-col gap-4">
-                    <Input
-                        placeholder="Search by user, action or details..."
+            {/* Filter and Search Bar */}
+            <div className="bg-card p-3 rounded-xl border border-border shadow-2xs space-y-2.5">
+                {/* Compact Search Input */}
+                <div className="relative">
+                    <svg className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Search logs by keyword, item name, barcode, serial number, project, user..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:bg-white dark:focus:bg-gray-800 transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                        className="w-full h-8.5 rounded-lg border border-border bg-background/50 focus:bg-background pl-8.5 pr-8 text-[12.5px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1.5 focus:ring-primary shadow-2xs transition-all"
                     />
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-2 px-2">
-                        {['ALL', 'CHECKOUT', 'RETURN', 'EDIT', 'CREATE', 'DELETE', 'VERIFY', 'LOGIN', 'SIGNUP', 'LOGOUT', 'LOGIN_FAILED'].map(action => (
-                            <Button
-                                key={action}
-                                variant={filterAction === action ? 'primary' : 'outline'}
-                                size="sm"
-                                onClick={() => setFilterAction(action)}
-                                className={`whitespace-nowrap shrink-0 ${filterAction !== action ? 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white' : ''}`}
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded-full hover:bg-muted"
+                            title="Clear search"
+                        >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+
+                {/* Sleek Action Filter Badges */}
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden py-0.5">
+                    {ACTION_FILTERS.map(({ id, label }) => {
+                        const active = filterAction === id;
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                onClick={() => setFilterAction(id)}
+                                className={`whitespace-nowrap shrink-0 h-6.5 px-2.5 rounded-md text-[11.5px] font-medium transition-all ${
+                                    active
+                                        ? 'bg-primary text-primary-foreground shadow-2xs font-semibold'
+                                        : 'bg-secondary/70 text-muted-foreground hover:text-foreground hover:bg-secondary border border-border/40'
+                                }`}
                             >
-                                {action === 'ALL' ? 'All' : action}
-                            </Button>
-                        ))}
-                    </div>
+                                {label}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
             <PullToRefresh onRefresh={handleRefresh}>
-                {/* Desktop View Table */}
-                <div className="hidden md:block bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 overflow-hidden shadow-sm">
+                {/* Desktop / Laptop View Table (Compact & Proportional) */}
+                <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden shadow-2xs">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50/50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-100 dark:border-gray-800">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-muted/40 text-muted-foreground font-semibold border-b border-border text-[11px] uppercase tracking-wider">
                                 <tr>
-                                    <th className="px-5 py-3 min-w-[150px] font-semibold text-xs uppercase tracking-wider">Date & Time</th>
-                                    <th className="px-5 py-3 font-semibold text-xs uppercase tracking-wider">User</th>
-                                    <th className="px-5 py-3 font-semibold text-xs uppercase tracking-wider">Action</th>
-                                    <th className="px-5 py-3 w-full font-semibold text-xs uppercase tracking-wider">Details</th>
+                                    <th className="px-3.5 py-2 min-w-[140px]">Date & Time</th>
+                                    <th className="px-3.5 py-2 min-w-[120px]">User</th>
+                                    <th className="px-3.5 py-2 min-w-[90px]">Action</th>
+                                    <th className="px-3.5 py-2 w-full">Details</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                {filteredLogs.length === 0 && !loading ? (
+                            <tbody className="divide-y divide-border/60">
+                                {logs.length === 0 && !loading ? (
                                     <tr>
-                                        <td colSpan={4} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">No logs found</td>
+                                        <td colSpan={4} className="px-4 py-8 text-center text-xs text-muted-foreground">No logs found</td>
                                     </tr>
                                 ) : (
-                                    filteredLogs.map((log, index) => (
-                                        <tr key={`${log.id}-${index}`} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors">
-                                            <td className="px-5 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                                                {new Date(log.timestamp).toLocaleString()}
-                                            </td>
-                                            <td className="px-5 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">
-                                                {getUserName(log.userId)}
-                                            </td>
-                                            <td className="px-5 py-4 whitespace-nowrap">
-                                                <Badge variant={getActionVariant(log.action)}>
-                                                    {log.action}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-5 py-4 text-gray-600 dark:text-gray-400 italic text-xs">
-                                                {log.details || '-'}
-                                            </td>
-                                        </tr>
-                                    ))
+                                    logs.map((log, index) => {
+                                        const items = getLogItems(log);
+                                        const hasItems = items.length > 0;
+                                        const isExpanded = expandedLogIds.has(log.id);
+                                        const matchedItems = debouncedSearch.trim()
+                                            ? items.filter(item => item.toLowerCase().includes(debouncedSearch.toLowerCase().trim()))
+                                            : [];
+
+                                        return (
+                                            <tr key={`${log.id}-${index}`} className="hover:bg-muted/30 transition-colors align-top">
+                                                <td className="px-3.5 py-2.5 whitespace-nowrap text-[11.5px] text-muted-foreground">
+                                                    {new Date(log.timestamp).toLocaleString()}
+                                                </td>
+                                                <td className="px-3.5 py-2.5 whitespace-nowrap font-medium text-[12.5px] text-foreground">
+                                                    {getUserName(log.userId)}
+                                                </td>
+                                                <td className="px-3.5 py-2.5 whitespace-nowrap">
+                                                    <Badge variant={getActionVariant(log.action)} className="text-[10px] px-2 py-0 rounded-md font-semibold tracking-wide">
+                                                        {log.action}
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-3.5 py-2.5">
+                                                    <div className="space-y-1">
+                                                        <p className="text-foreground/90 text-[12px] leading-relaxed font-normal">
+                                                            {log.details || '-'}
+                                                        </p>
+
+                                                        {/* Matched items indicator when searching */}
+                                                        {matchedItems.length > 0 && !isExpanded && (
+                                                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                                                <span className="text-[9.5px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                                                                    Matched:
+                                                                </span>
+                                                                {matchedItems.slice(0, 3).map((item, i) => (
+                                                                    <span key={i} className="inline-flex items-center text-[10.5px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-1.5 py-0.5 rounded-md">
+                                                                        {item}
+                                                                    </span>
+                                                                ))}
+                                                                {matchedItems.length > 3 && (
+                                                                    <span className="text-[10px] text-muted-foreground">+{matchedItems.length - 3} more</span>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Toggle button to see all items */}
+                                                        {hasItems && (
+                                                            <div className="pt-0.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleExpand(log.id)}
+                                                                    className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary hover:text-primary/80 transition-colors"
+                                                                >
+                                                                    <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                                    </svg>
+                                                                    {isExpanded ? 'Hide items' : `View ${items.length} item${items.length === 1 ? '' : 's'}`}
+                                                                </button>
+
+                                                                {isExpanded && (
+                                                                    <div className="mt-1.5 flex flex-wrap gap-1 p-2 bg-muted/30 rounded-lg border border-border/50 max-h-48 overflow-y-auto">
+                                                                        {items.map((item, i) => {
+                                                                            const isMatch = debouncedSearch.trim() && item.toLowerCase().includes(debouncedSearch.toLowerCase().trim());
+                                                                            return (
+                                                                                <span
+                                                                                    key={i}
+                                                                                    className={`text-[10.5px] px-1.5 py-0.5 rounded border ${isMatch
+                                                                                        ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-semibold'
+                                                                                        : 'bg-card text-foreground border-border/70'
+                                                                                    }`}
+                                                                                >
+                                                                                    {item}
+                                                                                </span>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
@@ -199,50 +329,111 @@ export default function AdminLogsPage() {
                 </div>
 
                 {/* Mobile View List */}
-                <div className="md:hidden space-y-3">
-                    {filteredLogs.length === 0 && !loading ? (
-                        <div className="text-center py-10 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/60 dark:border-gray-800 text-gray-500 dark:text-gray-400">
+                <div className="md:hidden space-y-2.5">
+                    {logs.length === 0 && !loading ? (
+                        <div className="text-center py-8 bg-card rounded-xl border border-border text-xs text-muted-foreground">
                             No logs found
                         </div>
                     ) : (
-                        filteredLogs.map((log, index) => (
-                            <div key={`${log.id}-${index}`} className="bg-white dark:bg-[#1c1c1e] p-4 rounded-2xl border border-gray-200/60 dark:border-gray-800 shadow-sm space-y-3">
-                                <div className="flex justify-between items-start">
-                                    <div className="space-y-1">
-                                        <p className="font-semibold text-[15px] text-gray-900 dark:text-white">{getUserName(log.userId)}</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                                            {new Date(log.timestamp).toLocaleString()}
-                                        </p>
+                        logs.map((log, index) => {
+                            const items = getLogItems(log);
+                            const hasItems = items.length > 0;
+                            const isExpanded = expandedLogIds.has(log.id);
+                            const matchedItems = debouncedSearch.trim()
+                                ? items.filter(item => item.toLowerCase().includes(debouncedSearch.toLowerCase().trim()))
+                                : [];
+
+                            return (
+                                <div key={`${log.id}-${index}`} className="bg-card p-3 rounded-xl border border-border shadow-2xs space-y-2">
+                                    <div className="flex justify-between items-start gap-2">
+                                        <div className="space-y-0.5 min-w-0">
+                                            <p className="font-semibold text-[13px] text-foreground truncate">{getUserName(log.userId)}</p>
+                                            <p className="text-[11px] text-muted-foreground">
+                                                {new Date(log.timestamp).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <Badge variant={getActionVariant(log.action)} className="text-[10px] px-1.5 py-0 rounded shrink-0">
+                                            {log.action}
+                                        </Badge>
                                     </div>
-                                    <Badge variant={getActionVariant(log.action)} className="text-[10px] px-2 py-0">
-                                        {log.action}
-                                    </Badge>
+                                    <div className="bg-muted/30 p-2 rounded-lg border border-border/40 space-y-1.5">
+                                        <p className="text-[12px] text-foreground/90 leading-snug">
+                                            {log.details || 'No details provided'}
+                                        </p>
+
+                                        {matchedItems.length > 0 && !isExpanded && (
+                                            <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-border/40">
+                                                <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-1 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                                                    Matched:
+                                                </span>
+                                                {matchedItems.slice(0, 2).map((item, i) => (
+                                                    <span key={i} className="text-[10.5px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-1.5 py-0.5 rounded">
+                                                        {item}
+                                                    </span>
+                                                ))}
+                                                {matchedItems.length > 2 && (
+                                                    <span className="text-[10px] text-muted-foreground">+{matchedItems.length - 2} more</span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {hasItems && (
+                                            <div className="pt-0.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleExpand(log.id)}
+                                                    className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary hover:text-primary/80 transition-colors"
+                                                >
+                                                    <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                    {isExpanded ? 'Hide items' : `View ${items.length} item${items.length === 1 ? '' : 's'}`}
+                                                </button>
+
+                                                {isExpanded && (
+                                                    <div className="mt-1.5 flex flex-wrap gap-1 p-1.5 bg-background/80 dark:bg-background/50 rounded-md border border-border/50 max-h-40 overflow-y-auto">
+                                                        {items.map((item, i) => {
+                                                            const isMatch = debouncedSearch.trim() && item.toLowerCase().includes(debouncedSearch.toLowerCase().trim());
+                                                            return (
+                                                                <span
+                                                                    key={i}
+                                                                    className={`text-[10.5px] px-1.5 py-0.5 rounded border ${isMatch
+                                                                        ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 font-semibold'
+                                                                        : 'bg-muted/40 text-foreground border-border/70'
+                                                                    }`}
+                                                                >
+                                                                    {item}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
-                                    {log.details || 'No details provided'}
-                                </p>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
 
                 {/* Load More & Loading State */}
-                <div className="pt-4 flex justify-center">
+                <div className="pt-3 flex justify-center">
                     {loading ? (
-                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
-                            <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
-                            Loading more logs...
+                        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                            <div className="animate-spin w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full"></div>
+                            Loading logs...
                         </div>
                     ) : hasMore ? (
-                        <Button
-                            variant="outline"
+                        <button
+                            type="button"
                             onClick={handleLoadMore}
-                            className="bg-white dark:bg-[#1c1c1e] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            className="h-8 px-4 rounded-lg border border-border bg-card text-foreground hover:bg-muted text-xs font-semibold shadow-2xs active:scale-95 transition-all"
                         >
                             Load More
-                        </Button>
+                        </button>
                     ) : logs.length > 0 ? (
-                        <p className="text-xs text-gray-400 dark:text-gray-500">No more logs to load</p>
+                        <p className="text-[11px] text-muted-foreground">No more logs to load</p>
                     ) : null}
                 </div>
             </PullToRefresh>

@@ -157,6 +157,7 @@ export const Header = () => {
             '/admin/users': 'Users',
             '/admin/departments': 'Departments',
             '/admin/whatsapp-hub': 'WhatsApp Hub',
+            '/admin/logs': 'Activity Logs',
             '/admin/activity-logs': 'Activity Logs',
             '/profile': 'Profile',
         };

@@ -248,7 +248,8 @@ export default function CheckoutPage() {
         return [...allUsers].sort(compareByName);
     }, [user, allUsers, department?.id]);
 
-    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [collectorUserId, setCollectorUserId] = useState<string>('');
+    const [additionalUserIds, setAdditionalUserIds] = useState<string[]>([]);
     const sortedCart = useMemo(() => [...cart].sort(compareByName), [cart]);
 
     // Combine loading states
@@ -330,32 +331,27 @@ export default function CheckoutPage() {
         const savedShootId = sessionStorage.getItem('checkout-shoot');
         if (savedShootId) setSelectedShootId(savedShootId);
 
-        const savedUsers = sessionStorage.getItem('checkout-users');
-        if (savedUsers) {
+        const savedCollector = sessionStorage.getItem('checkout-collector');
+        if (savedCollector) {
+            setCollectorUserId(savedCollector);
+        } else if (user) {
+            setCollectorUserId(user.id);
+        }
+
+        const savedAdditional = sessionStorage.getItem('checkout-additional-users');
+        if (savedAdditional) {
             try {
-                const parsed = JSON.parse(savedUsers);
-                // If user is Admin/Manager and the saved selection is just themselves, clear it (don't default select)
-                if (user && ['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role) && parsed.length === 1 && parsed[0] === user.id) {
-                    setSelectedUserIds([]);
-                    sessionStorage.removeItem('checkout-users');
-                } else {
-                    setSelectedUserIds(parsed);
-                }
+                const parsed = JSON.parse(savedAdditional);
+                if (Array.isArray(parsed)) setAdditionalUserIds(parsed);
             } catch { }
-        } else if (user && !['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role)) {
-            // Only auto-select for Crew who can't change it
-            setSelectedUserIds([user.id]);
         }
     }, [user]);
 
     useEffect(() => {
-        if (user && selectedUserIds.length === 0 && !sessionStorage.getItem('checkout-users')) {
-            // Only auto-select for Crew who can't change it
-            if (!['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role)) {
-                setSelectedUserIds([user.id]);
-            }
+        if (user && !collectorUserId) {
+            setCollectorUserId(user.id);
         }
-    }, [user]);
+    }, [user, collectorUserId]);
 
     // Save state to session storage
     useEffect(() => {
@@ -377,8 +373,14 @@ export default function CheckoutPage() {
     }, [manualItems]);
 
     useEffect(() => {
-        if (selectedUserIds.length > 0) sessionStorage.setItem('checkout-users', JSON.stringify(selectedUserIds));
-    }, [selectedUserIds]);
+        if (collectorUserId) sessionStorage.setItem('checkout-collector', collectorUserId);
+        else sessionStorage.removeItem('checkout-collector');
+    }, [collectorUserId]);
+
+    useEffect(() => {
+        if (additionalUserIds.length > 0) sessionStorage.setItem('checkout-additional-users', JSON.stringify(additionalUserIds));
+        else sessionStorage.removeItem('checkout-additional-users');
+    }, [additionalUserIds]);
 
     useEffect(() => {
         if (selectedShootId) sessionStorage.setItem('checkout-shoot', selectedShootId);
@@ -398,7 +400,7 @@ export default function CheckoutPage() {
         }
     }, [selectedShootId, shoots]);
 
-    // Auto-select users based on shoot assignments
+    // Auto-populate additional shoot crew when a shoot is selected, WITHOUT overwriting the physical collector
     useEffect(() => {
         if (selectedShootId && assignments.length > 0) {
             const linkedAssignments = assignments.filter(a => a.shootId === selectedShootId);
@@ -406,17 +408,20 @@ export default function CheckoutPage() {
                 const userIds = linkedAssignments.map(a => a.userId);
                 const uniqueIds = Array.from(new Set(userIds));
 
+                // Shoot crew consists of the assigned users excluding the current collector
+                const effectiveAdditional = uniqueIds.filter(id => id !== collectorUserId);
+
                 // Only update if different to avoid redundant toasts and renders
-                const isSame = selectedUserIds.length === uniqueIds.length &&
-                    selectedUserIds.every(id => uniqueIds.includes(id));
+                const isSame = additionalUserIds.length === effectiveAdditional.length &&
+                    additionalUserIds.every(id => effectiveAdditional.includes(id));
 
                 if (!isSame) {
-                    setSelectedUserIds(uniqueIds);
-                    showToast(`Auto-selected ${uniqueIds.length} ${labels.teamPluralLower} members`, 'info');
+                    setAdditionalUserIds(effectiveAdditional);
+                    showToast(`Linked ${uniqueIds.length} ${labels.teamPluralLower} members to ${labels.workSingular}`, 'info');
                 }
             }
         }
-    }, [selectedShootId, assignments, selectedUserIds, showToast, labels.teamPluralLower]);
+    }, [selectedShootId, assignments, collectorUserId, additionalUserIds, showToast, labels.teamPluralLower, labels.workSingular]);
 
     const lastProcessedRef = React.useRef<{ code: string; time: number } | null>(null);
 
@@ -472,7 +477,8 @@ export default function CheckoutPage() {
 
         const item = equipmentList.find(i =>
             i.barcode.toLowerCase() === normalizedBarcode.toLowerCase() ||
-            i.id === normalizedBarcode
+            i.id === normalizedBarcode ||
+            (i.serialNumber && i.serialNumber.toLowerCase() === normalizedBarcode.toLowerCase())
         );
 
         if (!item) {
@@ -576,7 +582,7 @@ export default function CheckoutPage() {
     const handleQRScan = (decodedText: string) => {
         try {
             const data = JSON.parse(decodedText);
-            processBarcode(data.barcode || data.id || decodedText);
+            processBarcode(data.id || data.barcode || decodedText);
         } catch {
             processBarcode(decodedText);
         }
@@ -641,15 +647,19 @@ export default function CheckoutPage() {
     const transactionIdRef = React.useRef<string | null>(null);
 
     const handleSuccess = () => {
+        isSubmittingRef.current = false;
         cartRef.current = [];
         setCart([]);
         setManualItems([]);
         setSelectedShootId('');
+        setAdditionalUserIds([]);
         sessionStorage.removeItem('checkout-cart');
         sessionStorage.removeItem('checkout-manual-items');
         sessionStorage.removeItem('checkout-project');
         sessionStorage.removeItem('checkout-notes');
         sessionStorage.removeItem('checkout-users');
+        sessionStorage.removeItem('checkout-collector');
+        sessionStorage.removeItem('checkout-additional-users');
         sessionStorage.removeItem('checkout-shoot');
         transactionIdRef.current = null; // Clear ID so next checkout gets a new one
 
@@ -666,8 +676,9 @@ export default function CheckoutPage() {
             playErrorSound();
             return;
         }
-        if (selectedUserIds.length === 0) {
-            showToast('Select at least one user', 'error');
+        const effectiveCollectorId = collectorUserId || user.id;
+        if (!effectiveCollectorId) {
+            showToast('Please specify who is collecting the equipment', 'error');
             playErrorSound();
             return;
         }
@@ -681,21 +692,26 @@ export default function CheckoutPage() {
         setIsLoading(true);
 
         try {
-            const filterDeptId = user?.role === 'SUPER_ADMIN' ? department?.id : user?.departmentId;
-            const targetUser = users.find(u => u.id === selectedUserIds[0]);
-            
+            const filterDeptId = user?.role === 'SUPER_ADMIN' ? (department?.id || null) : (user?.departmentId || null);
+            const targetUser = users.find(u => u.id === effectiveCollectorId);
+            const selectedShoot = shoots.find(s => s.id === selectedShootId);
+
+            const effectiveAdditional = additionalUserIds.filter(id => id !== effectiveCollectorId);
+
             await checkout({
                 id: transactionIdRef.current, // Pass the idempotent ID
                 items: cart,
                 manualItems,
                 shootId: selectedShootId || undefined,
-                userId: selectedUserIds[0], // Primary user
-                additionalUsers: selectedUserIds.slice(1), // All other selected users
+                userId: effectiveCollectorId, // Primary custodian
+                additionalUsers: effectiveAdditional, // Working crew
+                location: selectedShoot?.location || undefined, // Forward shoot location
                 notes: notes.trim(),
                 project: project.trim(),
                 displayId: transactionIdRef.current, // The readable TXN ID
-                departmentId: filterDeptId,
+                departmentId: filterDeptId || undefined,
                 performerId: user?.id,
+                performerName: user?.name,
                 targetUserName: targetUser?.name
             });
 
@@ -737,6 +753,126 @@ export default function CheckoutPage() {
             setIsLoading(false);
             isSubmittingRef.current = false; // Reset lock on failure to allow retry
         }
+    };
+
+    const renderCustodySelector = (isMobile = false) => {
+        const isAdminOrManager = user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
+
+        if (!isAdminOrManager) {
+            // CREW VIEW: Fully transparent custody attribution
+            return (
+                <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">
+                                Physical Custody / Picked Up By
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold">
+                                    {user?.name?.charAt(0) || 'U'}
+                                </div>
+                                <span className="text-sm font-semibold text-foreground">
+                                    {user?.name} <span className="text-xs font-normal text-muted-foreground">(Myself)</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Primary Collector
+                        </div>
+                    </div>
+
+                    {/* Verbal / Last-Minute Swap Indicator */}
+                    {selectedShootId && assignments.length > 0 && !assignments.some(a => a.shootId === selectedShootId && a.userId === user?.id) && (
+                        <div className="mt-2.5 pt-2.5 border-t border-border/50 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Checking out as on-set collector (verbal/last-minute swap)</span>
+                        </div>
+                    )}
+
+                    {/* Linked shoot crew summary */}
+                    {additionalUserIds.length > 0 && (
+                        <div className="mt-2.5 pt-2.5 border-t border-border/50">
+                            <span className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                                Linked {labels.workSingular} Team ({additionalUserIds.length}):
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                                {additionalUserIds.map(id => {
+                                    const u = users.find(userItem => userItem.id === id);
+                                    return (
+                                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-muted text-muted-foreground font-medium">
+                                            {u?.name || 'Unknown'}
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ADMIN / MANAGER VIEW: Explicit Primary Custodian + Additional Crew
+        const userOptions = [
+            { value: user.id, label: `${user.name} (Myself)` },
+            ...users
+                .filter(u => u.id !== user.id && u.status !== 'SUSPENDED')
+                .map(u => ({
+                    value: u.id,
+                    label: `${u.name} (${getRoleLabel(u.role)})`
+                }))
+                .sort(compareByLabel)
+        ];
+
+        return (
+            <div className="space-y-3.5">
+                <div>
+                    <label className="text-[13px] font-semibold text-muted-foreground mb-1.5 block">
+                        Primary Custodian (Equipment Handed To) <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                        value={collectorUserId}
+                        onChange={(val: string) => {
+                            setCollectorUserId(val);
+                            setAdditionalUserIds(prev => prev.filter(id => id !== val));
+                        }}
+                        placeholder="Select who receives the equipment..."
+                        options={userOptions}
+                        className="w-full"
+                        onOpenChange={isMobile ? setIsDropdownOpen : undefined}
+                    />
+                    {collectorUserId && collectorUserId !== user.id && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1.5">
+                            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Checking out on behalf of this crew member. Equipment custody will be assigned to them.
+                        </p>
+                    )}
+                </div>
+
+                <div className="relative z-20">
+                    <MultiSelect
+                        label={`Additional ${labels.workSingular} Crew (Context & Notifications)`}
+                        value={additionalUserIds}
+                        onChange={setAdditionalUserIds}
+                        searchPlaceholder="Search additional crew members…"
+                        options={users
+                            .filter(u => u.id !== collectorUserId && u.status !== 'SUSPENDED')
+                            .map(u => ({
+                                value: u.id,
+                                label: `${u.name} (${getRoleLabel(u.role)})`
+                            }))
+                            .sort(compareByLabel)}
+                        onOpenChange={isMobile ? setIsDropdownOpen : undefined}
+                    />
+                </div>
+            </div>
+        );
     };
 
 
@@ -1140,8 +1276,7 @@ export default function CheckoutPage() {
                                                     }
                                                 } else {
                                                     setProject('');
-                                                    if (user) setSelectedUserIds([user.id]);
-                                                    else setSelectedUserIds([]);
+                                                    setAdditionalUserIds([]);
                                                 }
                                             }}
                                             options={activeShootOptions}
@@ -1153,8 +1288,7 @@ export default function CheckoutPage() {
                                                 onClick={() => {
                                                     setSelectedShootId('');
                                                     setProject('');
-                                                    if (user) setSelectedUserIds([user.id]);
-                                                    else setSelectedUserIds([]);
+                                                    setAdditionalUserIds([]);
                                                 }}
                                                 className="absolute top-4 right-4 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
                                                 title="Clear selection"
@@ -1179,21 +1313,7 @@ export default function CheckoutPage() {
                                         )}
                                     </div>
 
-                                    {user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
-                                        <MultiSelect
-                                            label="Checkout For"
-                                            value={selectedUserIds}
-                                            onChange={setSelectedUserIds}
-                                            searchPlaceholder="Search people…"
-                                            options={users
-                                                .filter(u => u.status !== 'SUSPENDED')
-                                                .map(u => ({
-                                                    value: u.id,
-                                                    label: `${u.name} (${getRoleLabel(u.role)})`
-                                                }))
-                                                .sort(compareByLabel)}
-                                        />
-                                    )}
+                                    {renderCustodySelector(false)}
 
                                     <div>
                                         <label className="text-[13px] font-semibold text-muted-foreground mb-2 block">Project Name *</label>
@@ -1281,8 +1401,7 @@ export default function CheckoutPage() {
                                                     }
                                                 } else {
                                                     setProject('');
-                                                    if (user) setSelectedUserIds([user.id]);
-                                                    else setSelectedUserIds([]);
+                                                    setAdditionalUserIds([]);
                                                 }
                                             }}
                                             options={activeShootOptions}
@@ -1296,8 +1415,7 @@ export default function CheckoutPage() {
                                                 onClick={() => {
                                                     setSelectedShootId('');
                                                     setProject('');
-                                                    if (user) setSelectedUserIds([user.id]);
-                                                    else setSelectedUserIds([]);
+                                                    setAdditionalUserIds([]);
                                                 }}
                                                 className="absolute top-1/2 right-10 -translate-y-1/2 p-1 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground transition-colors z-20"
                                                 title="Clear selection"
@@ -1310,26 +1428,9 @@ export default function CheckoutPage() {
                                     </div>
                                 </div>
 
-                                {user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
-                                    <div className="mb-4">
-                                        <div className="relative z-20">
-                                            <MultiSelect
-                                                label="Checkout For"
-                                                value={selectedUserIds}
-                                                onChange={setSelectedUserIds}
-                                                searchPlaceholder="Search people…"
-                                                options={users
-                                                    .filter(u => u.status !== 'SUSPENDED')
-                                                    .map(u => ({
-                                                        value: u.id,
-                                                        label: `${u.name} (${getRoleLabel(u.role)})`
-                                                    }))
-                                                    .sort(compareByLabel)}
-                                                onOpenChange={setIsDropdownOpen}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
+                                <div className="mb-4">
+                                    {renderCustodySelector(true)}
+                                </div>
 
                                 <label className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-2 block pl-1">
                                     Project / {labels.workSingular} Name <span className="text-red-500">*</span>

@@ -12,6 +12,7 @@ import { Badge } from '@/components/Badge';
 import { QRScanner, MobileScanner } from '@/components/QRScanner';
 import { ItemIdentity } from '@/components/ItemIdentity';
 import { Select } from '@/components/Select';
+import { MultiSelect } from '@/components/MultiSelect';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
 import { useDepartment } from '@/lib/department-context';
@@ -19,6 +20,7 @@ import Link from 'next/link';
 import { areManualItemsComplete, decodeTransactionNotes } from '@/lib/transaction-manual-items';
 import { getDepartmentLabels } from '@/lib/department-labels';
 import { getEquipmentIssue, isEquipmentIssueBlocking, getIssueSummary } from '@/lib/equipment-issues';
+import { getRoleLabel } from '@/lib/roles';
 
 const compareByName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
@@ -191,6 +193,8 @@ export default function TransactionDetailPage() {
     const [isEditingDetails, setIsEditingDetails] = useState(false);
     const [editProject, setEditProject] = useState('');
     const [editShootId, setEditShootId] = useState('');
+    const [editUserId, setEditUserId] = useState('');
+    const [editAdditionalUsers, setEditAdditionalUsers] = useState<string[]>([]);
     const [editingManualItemId, setEditingManualItemId] = useState<string | null>(null);
     const [manualItemDraft, setManualItemDraft] = useState({
         name: '',
@@ -624,7 +628,18 @@ export default function TransactionDetailPage() {
     };
 
     const handleQRScan = async (decodedText: string) => {
-        const item = equipment.find(e => e.barcode === decodedText || e.id === decodedText);
+        let lookupKey = decodedText.trim();
+        try {
+            const data = JSON.parse(decodedText);
+            lookupKey = String(data.id || data.barcode || decodedText).trim();
+        } catch {
+            lookupKey = decodedText.trim();
+        }
+        const item = equipment.find(e =>
+            e.id === lookupKey ||
+            e.barcode.toLowerCase() === lookupKey.toLowerCase() ||
+            (e.serialNumber && e.serialNumber.toLowerCase() === lookupKey.toLowerCase())
+        );
         if (item) {
             if (isEquipmentIssueBlocking(item) || item.condition === 'NOT_FUNCTIONING') {
                 const issue = getEquipmentIssue(item);
@@ -730,7 +745,7 @@ export default function TransactionDetailPage() {
                 await storage.updateTransaction(transaction.id, txnUpdates);
             }
 
-            // 3. Log the force return
+            // 3. Log the force return on the transaction and directly on the item
             await storage.addLog({
                 id: crypto.randomUUID(),
                 action: 'RETURN',
@@ -738,6 +753,18 @@ export default function TransactionDetailPage() {
                 userId: user!.id,
                 timestamp: new Date().toISOString(),
                 details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Verified by ${user!.name}${allItemsReturned ? ' (Transaction Closed)' : ''}`,
+                newValue: { itemId: item.id, itemBarcode: item.barcode, allItemsReturned },
+                departmentId: effectiveDeptId || undefined
+            });
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'RETURN',
+                entityId: item.id,
+                userId: user!.id,
+                timestamp: new Date().toISOString(),
+                details: `Force-returned on behalf of ${transactionUser?.name || 'user'} - Verified by ${user!.name}`,
+                newValue: { transactionId: transaction!.id, allItemsReturned },
                 departmentId: effectiveDeptId || undefined
             });
 
@@ -925,6 +952,18 @@ export default function TransactionDetailPage() {
                     userId: user!.id,
                     timestamp: new Date().toISOString(),
                     details: `Force-returned item "${item.name}" (${item.barcode}) on behalf of ${transactionUser?.name || 'user'} - Pending verification`,
+                    newValue: { itemId: item.id, itemBarcode: item.barcode, pendingVerification: true },
+                    departmentId: effectiveDeptId || undefined
+                });
+
+                await storage.addLog({
+                    id: crypto.randomUUID(),
+                    action: 'RETURN',
+                    entityId: item.id,
+                    userId: user!.id,
+                    timestamp: new Date().toISOString(),
+                    details: `Force-returned on behalf of ${transactionUser?.name || 'user'} - Pending verification`,
+                    newValue: { transactionId: transaction!.id, pendingVerification: true },
                     departmentId: effectiveDeptId || undefined
                 });
             }
@@ -988,20 +1027,15 @@ export default function TransactionDetailPage() {
 
     const primaryUserName = transactionUser?.name || transactionUser?.email || 'Unknown User';
 
-    // Dynamic Crew List Logic
-    let displayUserIds: string[] = [];
-    if (linkedShoot && shootAssignments.length > 0) {
-        // If linked to a shoot with active assignments, use the LIVE assignments as the source of truth
-        const activeCrewIds = shootAssignments
-            .filter(a => ['ACCEPTED', 'PENDING'].includes(a.status))
-            .map(a => a.userId);
-
-        // Remove primary user from this list to avoid duplication
-        displayUserIds = activeCrewIds.filter(id => id !== transaction.userId);
-    } else {
-        // Fallback to static snapshot stored on transaction
-        displayUserIds = transaction.additionalUsers || [];
-    }
+    // Immutable Crew Snapshot: prioritize the snapshot recorded on the transaction to avoid retroactive drift
+    const displayUserIds: string[] = (transaction.additionalUsers && transaction.additionalUsers.length > 0)
+        ? transaction.additionalUsers
+        : (linkedShoot && shootAssignments.length > 0
+            ? shootAssignments
+                .filter(a => ['ACCEPTED', 'PENDING'].includes(a.status))
+                .map(a => a.userId)
+                .filter(id => id !== transaction.userId)
+            : []);
 
     const additionalUserNames = displayUserIds
         .map(id => getUserName(id))
@@ -1025,6 +1059,8 @@ export default function TransactionDetailPage() {
     const openDetailsEditor = () => {
         setEditProject(transaction.project || '');
         setEditShootId(transaction.shootId || '');
+        setEditUserId(transaction.userId || '');
+        setEditAdditionalUsers(transaction.additionalUsers || []);
         setIsEditingDetails(true);
     };
 
@@ -1242,25 +1278,47 @@ export default function TransactionDetailPage() {
             return;
         }
 
+        const nextUserId = editUserId.trim() || transaction.userId;
+        const nextAdditionalUsers = editAdditionalUsers.filter(id => id !== nextUserId);
+
         const currentShootId = transaction.shootId || '';
         const nextShootId = editShootId || '';
         const currentProject = transaction.project || '';
+        const currentUserId = transaction.userId || '';
+        const currentAdditionalUsers = transaction.additionalUsers || [];
 
-        if (nextProject === currentProject && nextShootId === currentShootId) {
+        const isSameUsers = nextUserId === currentUserId &&
+            nextAdditionalUsers.length === currentAdditionalUsers.length &&
+            nextAdditionalUsers.every(id => currentAdditionalUsers.includes(id));
+
+        if (nextProject === currentProject && nextShootId === currentShootId && isSameUsers) {
             setIsEditingDetails(false);
             return;
         }
 
         const oldShoot = currentShootId ? allShoots.find(shoot => shoot.id === currentShootId) : null;
         const newShoot = nextShootId ? allShoots.find(shoot => shoot.id === nextShootId) : null;
+        const oldPrimaryUser = allUsers.find(u => u.id === currentUserId);
+        const newPrimaryUser = allUsers.find(u => u.id === nextUserId);
 
         setSaving(true);
         try {
             const updates: Partial<Transaction> & { shootId?: string | null } = {};
             if (nextProject !== currentProject) updates.project = nextProject;
             if (nextShootId !== currentShootId) updates.shootId = nextShootId || null;
+            if (nextUserId !== currentUserId) updates.userId = nextUserId;
+            if (!isSameUsers) updates.additionalUsers = nextAdditionalUsers;
 
             await storage.updateTransaction(transaction.id, updates);
+
+            // If primary custodian changed and transaction is OPEN, update equipment assignment
+            if (nextUserId !== currentUserId && transaction.status === 'OPEN') {
+                await Promise.all(transaction.items.map(itemId =>
+                    storage.updateEquipment(itemId, {
+                        assignedTo: nextUserId
+                    })
+                ));
+            }
 
             const changes: string[] = [];
             if (nextProject !== currentProject) {
@@ -1268,6 +1326,12 @@ export default function TransactionDetailPage() {
             }
             if (nextShootId !== currentShootId) {
                 changes.push(`linked ${labels.workLower} from "${oldShoot?.title || 'None'}" to "${newShoot?.title || 'None'}"`);
+            }
+            if (nextUserId !== currentUserId) {
+                changes.push(`custodian from "${oldPrimaryUser?.name || 'Unknown'}" to "${newPrimaryUser?.name || 'Unknown'}"`);
+            }
+            if (!isSameUsers && nextUserId === currentUserId) {
+                changes.push(`crew updated (${nextAdditionalUsers.length} members)`);
             }
 
             await storage.addLog({
@@ -1280,10 +1344,14 @@ export default function TransactionDetailPage() {
                 oldValue: {
                     project: currentProject || null,
                     shootId: currentShootId || null,
+                    userId: currentUserId || null,
+                    additionalUsers: currentAdditionalUsers,
                 },
                 newValue: {
                     project: nextProject,
                     shootId: nextShootId || null,
+                    userId: nextUserId,
+                    additionalUsers: nextAdditionalUsers,
                 },
                 departmentId: effectiveDeptId || transaction.departmentId,
             });
@@ -1513,6 +1581,8 @@ export default function TransactionDetailPage() {
                             onClick={() => {
                                 setEditProject(transaction.project || '');
                                 setEditShootId(transaction.shootId || '');
+                                setEditUserId(transaction.userId || '');
+                                setEditAdditionalUsers(transaction.additionalUsers || []);
                                 setIsEditingDetails(false);
                             }}
                             className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -1567,6 +1637,49 @@ export default function TransactionDetailPage() {
                         </div>
                     )}
 
+                    <div className="grid gap-4 md:grid-cols-[1fr_1fr] mt-3">
+                        <div className="w-full">
+                            <Select
+                                label="Primary Custodian"
+                                value={editUserId}
+                                onChange={(val: string) => {
+                                    setEditUserId(val);
+                                    setEditAdditionalUsers(prev => prev.filter(id => id !== val));
+                                }}
+                                dense
+                                placeholder="Select primary custodian"
+                                options={allUsers
+                                    .filter(u => u.status !== 'SUSPENDED')
+                                    .map(u => ({
+                                        value: u.id,
+                                        label: `${u.name} (${getRoleLabel(u.role)})`
+                                    }))
+                                    .sort((a, b) => a.label.localeCompare(b.label))}
+                            />
+                            {editUserId && editUserId !== transaction.userId && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                    <span>⚠️</span> Reassigning custody will update active equipment records.
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="w-full">
+                            <MultiSelect
+                                label={`Additional ${labels.workSingular} Crew`}
+                                value={editAdditionalUsers}
+                                onChange={setEditAdditionalUsers}
+                                searchPlaceholder="Search crew members…"
+                                options={allUsers
+                                    .filter(u => u.id !== editUserId && u.status !== 'SUSPENDED')
+                                    .map(u => ({
+                                        value: u.id,
+                                        label: `${u.name} (${getRoleLabel(u.role)})`
+                                    }))
+                                    .sort((a, b) => a.label.localeCompare(b.label))}
+                            />
+                        </div>
+                    </div>
+
                     <div className="flex justify-end gap-2 mt-4">
                         <Button
                             size="sm"
@@ -1574,6 +1687,8 @@ export default function TransactionDetailPage() {
                             onClick={() => {
                                 setEditProject(transaction.project || '');
                                 setEditShootId(transaction.shootId || '');
+                                setEditUserId(transaction.userId || '');
+                                setEditAdditionalUsers(transaction.additionalUsers || []);
                                 setIsEditingDetails(false);
                             }}
                             disabled={saving}

@@ -494,7 +494,10 @@ class StorageService {
             .from('transactions')
             .insert(dbTransaction);
 
-        if (error) console.error('Error saving transaction:', error);
+        if (error) {
+            console.error('Error saving transaction:', error);
+            throw error;
+        }
     }
 
     async updateTransaction(id: string, updates: Partial<Transaction>): Promise<void> {
@@ -581,7 +584,47 @@ class StorageService {
         }
 
         if (search) {
-            query = query.or(`details.ilike.%${search}%,action.ilike.%${search}%,entity_id.ilike.%${search}%`);
+            const clean = search.trim();
+            if (clean) {
+                // Check if search matches equipment (barcode, serial_number, name) or users (name)
+                const [equipRes, userRes] = await Promise.all([
+                    supabase
+                        .from('equipment')
+                        .select('id, barcode')
+                        .or(`barcode.ilike.%${clean}%,serial_number.ilike.%${clean}%,name.ilike.%${clean}%`)
+                        .limit(10),
+                    supabase
+                        .from('users')
+                        .select('id')
+                        .or(`name.ilike.%${clean}%,email.ilike.%${clean}%`)
+                        .limit(10)
+                ]);
+
+                const orClauses = [
+                    `details.ilike.%${clean}%`,
+                    `action.ilike.%${clean}%`,
+                    `entity_id.ilike.%${clean}%`,
+                    `new_value->>itemNames.ilike.%${clean}%`,
+                    `new_value->>addedItemNames.ilike.%${clean}%`,
+                    `new_value->>itemIds.ilike.%${clean}%`,
+                    `new_value->>addedItemIds.ilike.%${clean}%`,
+                ];
+
+                if (equipRes.data && equipRes.data.length > 0) {
+                    for (const eq of equipRes.data) {
+                        orClauses.push(`new_value->>itemIds.ilike.%${eq.id}%`);
+                        if (eq.barcode) orClauses.push(`new_value->>itemNames.ilike.%${eq.barcode}%`);
+                    }
+                }
+
+                if (userRes.data && userRes.data.length > 0) {
+                    for (const u of userRes.data) {
+                        orClauses.push(`user_id.eq.${u.id}`);
+                    }
+                }
+
+                query = query.or(orClauses.join(','));
+            }
         }
 
         if (page && limit) {

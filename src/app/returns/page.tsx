@@ -132,24 +132,28 @@ export default function ReturnsPage() {
     const relevantTransactions = React.useMemo(() => {
         if (!user || !allTransactions || !allAssignments) return [];
 
+        const isAdminOrManager = ['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(user.role);
+
         return allTransactions.filter(txn => {
             if (txn.status !== 'OPEN') return false;
 
-            const isPrimary = txn.userId === user.id;
+            // Admins & Managers can see and process any open transaction in their department
+            if (isAdminOrManager) return true;
 
-            // If transaction is linked to a shoot, strictly follow shoot assignments (Source of Truth)
+            const isPrimary = txn.userId === user.id;
+            const isAdditional = txn.additionalUsers?.includes(user.id);
+
+            // If transaction is linked to a shoot, primary collector, additional crew, or shoot assignment can see/return
             if (txn.shootId) {
                 const assignment = allAssignments.find(a =>
                     a.shootId === txn.shootId &&
                     a.userId === user.id &&
                     ['ACCEPTED', 'PENDING'].includes(a.status)
                 );
-                // Only Primary Creator OR Active Crew can see/return
-                return isPrimary || !!assignment;
+                return isPrimary || isAdditional || !!assignment;
             }
 
             // For non-shoot transactions, use static snapshot
-            const isAdditional = txn.additionalUsers?.includes(user.id);
             return isPrimary || isAdditional;
         });
     }, [user, allTransactions, allAssignments]);

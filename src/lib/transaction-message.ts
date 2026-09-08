@@ -53,12 +53,14 @@ export function buildCheckoutMessage({
     users,
     shoots,
     labels,
+    performerId,
 }: {
     transaction: Transaction;
     equipment: Equipment[];
     users: User[];
     shoots: Shoot[];
     labels: DepartmentLabels;
+    performerId?: string;
 }): string {
     const nameOf = (userId?: string) => {
         if (!userId) return null;
@@ -66,7 +68,8 @@ export function buildCheckoutMessage({
         return found?.name || found?.email || null;
     };
 
-    const takenBy = [transaction.userId, ...(transaction.additionalUsers || [])]
+    const primaryCollector = nameOf(transaction.userId) || 'Unknown';
+    const additionalCrew = (transaction.additionalUsers || [])
         .map(nameOf)
         .filter((n): n is string => Boolean(n));
 
@@ -89,14 +92,28 @@ export function buildCheckoutMessage({
         year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit',
     });
 
+    const isBehalf = performerId && performerId !== transaction.userId;
+    const performerName = isBehalf ? nameOf(performerId) : null;
+
     const lines: string[] = [
         '🎥 *Equipment Checkout Details*',
         '',
         `*Project:* ${transaction.project || 'Unspecified'}${shootLine}`,
         `*ID:* ${transaction.id}`,
-        `*Taken By:* ${takenBy.length ? takenBy.join(', ') : 'Unknown'}`,
-        `*Date:* ${date}`,
     ];
+
+    if (performerName) {
+        lines.push(`*Handed Over By:* ${performerName}`);
+        lines.push(`*Collected By:* ${primaryCollector}`);
+    } else {
+        lines.push(`*Collected By:* ${primaryCollector}`);
+    }
+
+    if (additionalCrew.length > 0) {
+        lines.push(`*Shoot Crew:* ${additionalCrew.join(', ')}`);
+    }
+
+    lines.push(`*Date:* ${date}`);
 
     if (items.length > 0) {
         lines.push('', `*Equipment — ${items.length} item${items.length === 1 ? '' : 's'}*`);
