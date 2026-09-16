@@ -1995,35 +1995,35 @@ export default function TransactionDetailPage() {
                         </div>
                     </div>
                 ) : (
-                    <div className="flex items-center justify-between gap-3 mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
                         <div>
-                            <h2 className="text-lg font-semibold">Items</h2>
+                            <h2 className="text-lg font-bold tracking-tight">Items</h2>
                             {transaction.status === 'OPEN' && (
-                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                                     {checkedOutItemCount > 0 && (
-                                        <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                        <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2.5 py-0.5 rounded-full">
                                             {checkedOutItemCount} Out
                                         </span>
                                     )}
                                     {pendingVerificationItemCount > 0 && (
-                                        <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                                        <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
                                             {pendingVerificationItemCount} Pending Verification
                                         </span>
                                     )}
                                     {returnedItemCount > 0 && (
-                                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
                                             {returnedItemCount} Returned
                                         </span>
                                     )}
                                 </div>
                             )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             {transaction.status === 'OPEN' && pendingVerificationItemCount > 0 && canForceReturnItems && (
                                 <button
                                     onClick={handleVerifyAllPending}
                                     disabled={saving}
-                                    className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+                                    className="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
                                 >
                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -2037,7 +2037,7 @@ export default function TransactionDetailPage() {
                                         setSelectionMode(true);
                                         selectAllCheckedOut();
                                     }}
-                                    className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                                    className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
                                 >
                                     Select
                                 </button>
@@ -2055,6 +2055,7 @@ export default function TransactionDetailPage() {
                                         }
                                     }}
                                     disabled={saving}
+                                    className="rounded-xl"
                                 >
                                     <svg className={`w-4 h-4 mr-1 transition-transform ${showAddItem ? 'rotate-45' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -2271,38 +2272,40 @@ export default function TransactionDetailPage() {
                                         }
                                     }}
                                 >
-                                    {/* Single row: number/checkbox + identity + inline status/actions */}
-                                    <div className="flex items-center gap-2.5">
-                                        {/* Checkbox (selection mode) or Number Badge */}
-                                        {selectionMode && canSelect ? (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toggleItemSelection(itemId);
-                                                }}
-                                                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${isSelected
-                                                    ? 'bg-primary text-white'
-                                                    : 'bg-muted border-2 border-muted-foreground/30'
-                                                    }`}
-                                            >
-                                                {isSelected && (
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
-                                            </button>
-                                        ) : (
-                                            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
-                                                {index + 1}
-                                            </div>
-                                        )}
+                                    {/* Responsive row: on mobile, Item Info gets full width; on desktop, inline */}
+                                    <div className="flex items-start justify-between gap-2.5">
+                                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                            {/* Checkbox (selection mode) or Number Badge */}
+                                            {selectionMode && canSelect ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleItemSelection(itemId);
+                                                    }}
+                                                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all mt-0.5 ${isSelected
+                                                        ? 'bg-primary text-white'
+                                                        : 'bg-muted border-2 border-muted-foreground/30'
+                                                        }`}
+                                                >
+                                                    {isSelected && (
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            ) : (
+                                                <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                                                    {index + 1}
+                                                </div>
+                                            )}
 
-                                        {/* Item Info */}
-                                        <ItemIdentity item={item} variant="md" wrapName className="min-w-0 flex-1" />
+                                            {/* Item Info - full width for name and details */}
+                                            <ItemIdentity item={item} variant="md" wrapName className="min-w-0 flex-1" />
+                                        </div>
 
-                                        {/* Status + actions, inline (right) */}
+                                        {/* Desktop-only: inline status + action + remove (>= sm) */}
                                         {!selectionMode && (
-                                            <div className="flex shrink-0 items-center gap-1.5">
+                                            <div className="hidden sm:flex shrink-0 items-center gap-1.5 self-center">
                                                 {isReturned && (
                                                     <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-green-500 text-white">
                                                         Returned
@@ -2321,7 +2324,7 @@ export default function TransactionDetailPage() {
                                                     </span>
                                                 )}
 
-                                                {/* Re-checkout button - for returned items in an open transaction */}
+                                                {/* Re-checkout button */}
                                                 {transaction.status === 'OPEN' && isReturned && canForceReturnItems && (
                                                     <button
                                                         onClick={(e) => {
@@ -2339,7 +2342,7 @@ export default function TransactionDetailPage() {
                                                     </button>
                                                 )}
 
-                                                {/* Verify button - for items waiting for verification */}
+                                                {/* Verify button */}
                                                 {transaction.status === 'OPEN' && isPendingVerification && canForceReturnItems && (
                                                     <button
                                                         onClick={(e) => {
@@ -2357,7 +2360,7 @@ export default function TransactionDetailPage() {
                                                     </button>
                                                 )}
 
-                                                {/* Force Return button - only for checked out items */}
+                                                {/* Force Return button */}
                                                 {transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems && (
                                                     <button
                                                         onClick={(e) => {
@@ -2375,7 +2378,7 @@ export default function TransactionDetailPage() {
                                                     </button>
                                                 )}
 
-                                                {/* Remove button - only for open transactions */}
+                                                {/* Remove button */}
                                                 {transaction.status === 'OPEN' && canEditTransactionDetails && (
                                                     <button
                                                         onClick={(e) => {
@@ -2394,7 +2397,106 @@ export default function TransactionDetailPage() {
                                                 )}
                                             </div>
                                         )}
+
+                                        {/* Mobile-only Remove button in top right (< sm) */}
+                                        {!selectionMode && transaction.status === 'OPEN' && canEditTransactionDetails && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRemoveItem(itemId);
+                                                }}
+                                                disabled={saving}
+                                                title="Remove from transaction"
+                                                aria-label="Remove from transaction"
+                                                className="sm:hidden w-8 h-8 -mr-1 -mt-0.5 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        )}
                                     </div>
+
+                                    {/* Mobile-only bottom row: status pill on left & action on right (< sm) */}
+                                    {!selectionMode && (
+                                        <div className="sm:hidden mt-2.5 pt-2 border-t border-border/40 flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                {isReturned && (
+                                                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-green-500 text-white">
+                                                        Returned
+                                                    </span>
+                                                )}
+
+                                                {isPendingVerification && (
+                                                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-500 text-black">
+                                                        Pending Verification
+                                                    </span>
+                                                )}
+
+                                                {isCheckedOut && !(transaction.status === 'OPEN' && canForceReturnItems) && (
+                                                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-orange-500 text-white">
+                                                        Out
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                {/* Re-checkout button */}
+                                                {transaction.status === 'OPEN' && isReturned && canForceReturnItems && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleReCheckoutItem(itemId);
+                                                        }}
+                                                        disabled={saving}
+                                                        title="Re-checkout this item"
+                                                        className="flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors cursor-pointer"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                        Re-checkout
+                                                    </button>
+                                                )}
+
+                                                {/* Verify button */}
+                                                {transaction.status === 'OPEN' && isPendingVerification && canForceReturnItems && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleVerifyReturnItem(itemId);
+                                                        }}
+                                                        disabled={saving}
+                                                        title="Verify this returned item"
+                                                        className="flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        Verify
+                                                    </button>
+                                                )}
+
+                                                {/* Force Return button */}
+                                                {transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleForceReturn(itemId);
+                                                        }}
+                                                        disabled={saving}
+                                                        title="Force return this item"
+                                                        className="flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600 cursor-pointer"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                                        </svg>
+                                                        Return
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })
