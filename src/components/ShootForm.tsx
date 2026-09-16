@@ -279,8 +279,13 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                 effectiveEndTime = format(endDate, "yyyy-MM-dd'T'HH:mm");
             }
 
+            // Sanitize jiraTicketId: only save if it matches valid Jira key pattern (e.g. VP-54989), otherwise undefined/null
+            const rawJira = formData.jiraTicketId?.trim();
+            const cleanJira = rawJira && /^[A-Z0-9]+-\d+$/i.test(rawJira) ? rawJira.toUpperCase() : undefined;
+
             const submissionData = {
                 ...formData,
+                jiraTicketId: cleanJira,
                 status: effectiveStatus,
                 cancellationReason: effectiveStatus === 'CANCELLED' ? formData.cancellationReason : undefined,
                 startTime: formData.startTime ? new Date(formData.startTime).toISOString() : formData.startTime,

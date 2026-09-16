@@ -64,6 +64,12 @@ export const Header = () => {
                     <div className="flex items-center gap-2.5">
                         <Link
                             href={safeReturnTo}
+                            onClick={(e) => {
+                                if (typeof window !== 'undefined' && ((window.history.state && window.history.state.idx > 0) || window.history.length > 1)) {
+                                    e.preventDefault();
+                                    router.back();
+                                }
+                            }}
                             className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-primary hover:opacity-80 transition-opacity bg-primary/10 px-2.5 py-1 rounded-lg"
                         >
                             <ArrowLeft className="w-3.5 h-3.5" />
@@ -83,6 +89,12 @@ export const Header = () => {
             return (
                 <Link
                     href={sectionHref}
+                    onClick={(e) => {
+                        if (typeof window !== 'undefined' && ((window.history.state && window.history.state.idx > 0) || window.history.length > 1)) {
+                            e.preventDefault();
+                            router.back();
+                        }
+                    }}
                     className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:opacity-80 transition-opacity"
                 >
                     <ArrowLeft className="w-4 h-4" />

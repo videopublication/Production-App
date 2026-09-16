@@ -131,7 +131,18 @@ export default function ShootList() {
 
     // Pagination state
     const [pageSize, setPageSize] = useState<number | 'ALL'>(() => getSavedState()?.pageSize ?? 50);
-    const [currentPage, setCurrentPage] = useState<number>(() => getSavedState()?.currentPage ?? 1);
+    const [currentPage, setCurrentPage] = useState<number>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                const explicit = sessionStorage.getItem('shootsCurrentPage');
+                if (explicit) {
+                    const parsed = parseInt(explicit, 10);
+                    if (!isNaN(parsed) && parsed > 0) return parsed;
+                }
+            } catch {}
+        }
+        return getSavedState()?.currentPage ?? 1;
+    });
 
     // Persist UI state to sessionStorage
     useEffect(() => {
@@ -172,17 +183,17 @@ export default function ShootList() {
     ];
 
     const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
-        shootNumber: 85,
-        title: 220,
-        jiraTicket: 95,
-        date: 155,
-        location: 160,
-        crew: 90,
-        status: 120,
-        actions: 90,
-        poc: 120,
-        createdAt: 95,
-        expenses: 95,
+        shootNumber: 72,
+        title: 180,
+        jiraTicket: 78,
+        date: 220,
+        location: 170,
+        crew: 68,
+        status: 140,
+        actions: 72,
+        poc: 110,
+        createdAt: 85,
+        expenses: 85,
     };
 
     const getDefaultColumnWidths = (customAvailableWidth?: number): Record<ColumnKey, number> => {
@@ -193,13 +204,15 @@ export default function ShootList() {
             const isSidebarCollapsed = localStorage.getItem('sidebar_is_collapsed') === 'true' || screenW < 1360;
             const sidebarW = isSidebarCollapsed ? (screenW >= 1536 ? 70 : 62) : (screenW >= 1536 ? 255 : 228);
             const availableWidth = customAvailableWidth || Math.max(900, screenW - sidebarW - (screenW >= 1536 ? 48 : 32));
-            const defaultTotal = 85 + 220 + 95 + 155 + 160 + 90 + 120 + 90; // 1015
+            const defaultTotal = 72 + 180 + 78 + 220 + 170 + 68 + 140 + 72 + 32; // 1032px (includes 32px column settings menu)
 
             if (availableWidth > defaultTotal) {
                 const diff = availableWidth - defaultTotal;
-                base.title = Math.min(380, Math.round(base.title + diff * 0.45));
-                base.location = Math.min(300, Math.round(base.location + diff * 0.35));
-                base.date = Math.min(175, Math.round(base.date + diff * 0.20));
+                base.title = Math.round(base.title + diff * 0.35);
+                base.location = Math.round(base.location + diff * 0.40);
+                base.date = Math.min(270, Math.round(base.date + diff * 0.15));
+                base.status = Math.min(165, Math.round(base.status + diff * 0.05));
+                base.jiraTicket = Math.min(95, Math.round(base.jiraTicket + diff * 0.05));
             }
         }
         return base;
@@ -222,7 +235,7 @@ export default function ShootList() {
         return DEFAULT_COLUMN_ORDER;
     });
 
-    // Column Visibility State
+    // Visible Columns State
     const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(() => {
         const DEFAULT_VISIBLE: ColumnKey[] = ['shootNumber', 'title', 'jiraTicket', 'date', 'location', 'crew', 'status', 'actions'];
         if (typeof window !== 'undefined') {
@@ -246,7 +259,7 @@ export default function ShootList() {
     // Flag to know if user has customized column widths manually
     const [hasUserCustomWidths, setHasUserCustomWidths] = useState<boolean>(() => {
         if (typeof window !== 'undefined') {
-            return !!localStorage.getItem('shoots_table_col_widths_v10');
+            return !!localStorage.getItem('shoots_has_custom_col_widths_v12');
         }
         return false;
     });
@@ -255,14 +268,14 @@ export default function ShootList() {
     const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
         if (typeof window !== 'undefined') {
             try {
-                const saved = localStorage.getItem('shoots_table_col_widths_v10');
+                // Clear obsolete bloated caches from earlier iterations
+                localStorage.removeItem('shoots_table_col_widths_v11');
+                localStorage.removeItem('shoots_table_col_widths_v10');
+                localStorage.removeItem('shoots_has_custom_col_widths');
+
+                const saved = localStorage.getItem('shoots_table_col_widths_v12');
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    // Discard oversized corrupted widths
-                    if (parsed.title && parsed.title > 500) {
-                        localStorage.removeItem('shoots_table_col_widths_v10');
-                        return getDefaultColumnWidths();
-                    }
                     const merged = { ...getDefaultColumnWidths(), ...parsed };
                     return merged as Record<ColumnKey, number>;
                 }
@@ -301,10 +314,10 @@ export default function ShootList() {
             if (next === 'full') {
                 setColWidths(curr => {
                     const currentWidth = curr.crew || DEFAULT_COLUMN_WIDTHS.crew;
-                    if (currentWidth < 200) {
-                        const updated = { ...curr, crew: 240 };
+                    if (currentWidth < 150) {
+                        const updated = { ...curr, crew: 180 };
                         try {
-                            localStorage.setItem('shoots_table_col_widths_v10', JSON.stringify(updated));
+                            localStorage.setItem('shoots_table_col_widths_v12', JSON.stringify(updated));
                         } catch {}
                         return updated;
                     }
@@ -314,7 +327,7 @@ export default function ShootList() {
                 setColWidths(curr => {
                     const updated = { ...curr, crew: DEFAULT_COLUMN_WIDTHS.crew };
                     try {
-                        localStorage.setItem('shoots_table_col_widths_v10', JSON.stringify(updated));
+                        localStorage.setItem('shoots_table_col_widths_v12', JSON.stringify(updated));
                     } catch {}
                     return updated;
                 });
@@ -327,6 +340,7 @@ export default function ShootList() {
     const columnMenuRef = React.useRef<HTMLDivElement>(null);
     const headerRef = React.useRef<HTMLDivElement>(null);
     const bodyScrollRef = React.useRef<HTMLDivElement>(null);
+    const cardScrollRef = React.useRef<HTMLDivElement>(null);
 
     // Column Resizing State
     const [resizingCol, setResizingCol] = useState<ColumnKey | null>(null);
@@ -334,44 +348,74 @@ export default function ShootList() {
     const resizeStartWidth = React.useRef(0);
 
     const getColumnStyle = (colKey: ColumnKey): React.CSSProperties => {
-        if (hasUserCustomWidths) {
-            const width = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+        // Dynamic Content Columns (absorb screen width harmoniously, avoiding huge voids)
+        if (colKey === 'title') {
+            const baseW = colWidths.title || DEFAULT_COLUMN_WIDTHS.title || 180;
             return {
-                width: `${width}px`,
-                minWidth: `${width}px`,
-                maxWidth: `${width}px`,
-                flexShrink: 0,
+                flex: `1.15 1 ${baseW}px`,
+                minWidth: '140px',
             };
         }
 
-        // Fluid 100% Fit Mode: Harmonious, compact, capped so no column stretches into giant voids
+        if (colKey === 'location') {
+            const baseW = colWidths.location || DEFAULT_COLUMN_WIDTHS.location || 170;
+            return {
+                flex: `1.25 1 ${baseW}px`,
+                minWidth: '130px',
+            };
+        }
+
+        if (colKey === 'date') {
+            const baseW = Math.max(215, colWidths.date || DEFAULT_COLUMN_WIDTHS.date || 220);
+            return {
+                flex: `0.85 1 ${baseW}px`,
+                minWidth: '215px',
+                maxWidth: `${Math.max(275, baseW)}px`,
+            };
+        }
+
+        if (colKey === 'poc') {
+            const baseW = colWidths.poc || DEFAULT_COLUMN_WIDTHS.poc || 110;
+            return {
+                flex: `0.9 1 ${baseW}px`,
+                minWidth: '95px',
+            };
+        }
+
+        // Fixed/Compact Columns
         switch (colKey) {
-            case 'shootNumber':
-                return { width: '85px', minWidth: '80px', maxWidth: '95px', flexShrink: 0 };
-            case 'jiraTicket':
-                return { width: '95px', minWidth: '90px', maxWidth: '105px', flexShrink: 0 };
-            case 'crew':
-                return crewDisplayMode === 'full'
-                    ? { width: '160px', minWidth: '140px', maxWidth: '200px', flexShrink: 0 }
-                    : { width: '90px', minWidth: '80px', maxWidth: '100px', flexShrink: 0 };
-            case 'status':
-                return { width: '120px', minWidth: '110px', maxWidth: '130px', flexShrink: 0 };
-            case 'actions':
-                return { width: '90px', minWidth: '85px', maxWidth: '95px', flexShrink: 0 };
-            case 'poc':
-                return { flex: '1 1 120px', minWidth: '100px', maxWidth: '180px' };
-            case 'createdAt':
-                return { width: '95px', minWidth: '90px', maxWidth: '105px', flexShrink: 0 };
-            case 'expenses':
-                return { width: '95px', minWidth: '90px', maxWidth: '105px', flexShrink: 0 };
-            case 'date':
-                return { width: '155px', minWidth: '145px', maxWidth: '175px', flexShrink: 0 };
-            case 'title':
-                return { flex: '1.4 1 200px', minWidth: '160px', maxWidth: '380px' };
-            case 'location':
-                return { flex: '1.1 1 140px', minWidth: '120px', maxWidth: '300px' };
+            case 'shootNumber': {
+                const w = colWidths.shootNumber || DEFAULT_COLUMN_WIDTHS.shootNumber || 72;
+                return { width: `${w}px`, minWidth: '65px', flexShrink: 0 };
+            }
+            case 'jiraTicket': {
+                const w = colWidths.jiraTicket || DEFAULT_COLUMN_WIDTHS.jiraTicket || 78;
+                return { width: `${w}px`, minWidth: '70px', flexShrink: 0 };
+            }
+            case 'crew': {
+                const w = crewDisplayMode === 'full'
+                    ? (colWidths.crew && colWidths.crew >= 130 ? colWidths.crew : 170)
+                    : (colWidths.crew || DEFAULT_COLUMN_WIDTHS.crew || 68);
+                return { width: `${w}px`, minWidth: '62px', flexShrink: 0 };
+            }
+            case 'status': {
+                const w = Math.max(138, colWidths.status || DEFAULT_COLUMN_WIDTHS.status || 140);
+                return { width: `${w}px`, minWidth: '135px', flexShrink: 0 };
+            }
+            case 'actions': {
+                const w = colWidths.actions || DEFAULT_COLUMN_WIDTHS.actions || 72;
+                return { width: `${w}px`, minWidth: '68px', flexShrink: 0 };
+            }
+            case 'createdAt': {
+                const w = colWidths.createdAt || DEFAULT_COLUMN_WIDTHS.createdAt || 85;
+                return { width: `${w}px`, minWidth: '80px', flexShrink: 0 };
+            }
+            case 'expenses': {
+                const w = colWidths.expenses || DEFAULT_COLUMN_WIDTHS.expenses || 85;
+                return { width: `${w}px`, minWidth: '80px', flexShrink: 0 };
+            }
             default:
-                return { flex: '1 1 100px', minWidth: '80px', maxWidth: '160px' };
+                return { flex: '1 1 90px', minWidth: '75px' };
         }
     };
 
@@ -396,6 +440,9 @@ export default function ShootList() {
 
         setResizingCol(colKey);
         setHasUserCustomWidths(true);
+        try {
+            localStorage.setItem('shoots_has_custom_col_widths_v12', 'true');
+        } catch {}
         resizeStartX.current = e.clientX;
 
         document.body.style.cursor = 'col-resize';
@@ -404,12 +451,12 @@ export default function ShootList() {
         const handleMouseMove = (moveEvent: MouseEvent) => {
             moveEvent.preventDefault();
             const delta = moveEvent.clientX - resizeStartX.current;
-            const minW = colKey === 'crew' ? 75 : colKey === 'status' ? 100 : colKey === 'actions' ? 65 : colKey === 'shootNumber' ? 55 : 60;
+            const minW = colKey === 'date' ? 190 : colKey === 'crew' ? 55 : colKey === 'status' ? 120 : colKey === 'actions' ? 60 : colKey === 'shootNumber' ? 50 : 50;
             const newWidth = Math.max(minW, Math.round(resizeStartWidth.current + delta));
             setColWidths(prev => {
                 const updated = { ...prev, [colKey]: newWidth };
                 try {
-                    localStorage.setItem('shoots_table_col_widths_v10', JSON.stringify(updated));
+                    localStorage.setItem('shoots_table_col_widths_v12', JSON.stringify(updated));
                 } catch {}
                 return updated;
             });
@@ -515,12 +562,16 @@ export default function ShootList() {
             localStorage.removeItem('shoots_visible_columns_v3');
             localStorage.removeItem('shoots_visible_columns');
             localStorage.removeItem('shoots_column_order');
+            localStorage.removeItem('shoots_table_col_widths_v12');
+            localStorage.removeItem('shoots_table_col_widths_v11');
             localStorage.removeItem('shoots_table_col_widths_v10');
             localStorage.removeItem('shoots_table_col_widths_v9');
             localStorage.removeItem('shoots_table_col_widths_v8');
             localStorage.removeItem('shoots_table_col_widths_v6');
             localStorage.removeItem('shoots_table_col_widths_v5');
             localStorage.removeItem('shoots_table_col_widths');
+            localStorage.removeItem('shoots_has_custom_col_widths_v12');
+            localStorage.removeItem('shoots_has_custom_col_widths');
         } catch {}
     };
 
@@ -560,8 +611,13 @@ export default function ShootList() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Reset pagination to page 1 on search or filter change
+    // Reset pagination to page 1 on search or filter change (skip on initial mount to preserve restored page)
+    const isFirstFilterMount = React.useRef(true);
     useEffect(() => {
+        if (isFirstFilterMount.current) {
+            isFirstFilterMount.current = false;
+            return;
+        }
         setCurrentPage(1);
     }, [searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, categoryFilter, expenseFilter, sortField, sortDirection]);
 
@@ -585,31 +641,25 @@ export default function ShootList() {
         departmentId?: string;
     }>({ isOpen: false, message: '' });
 
-    const [flashShootId, setFlashShootId] = useState('');
+    const [flashShootId, setFlashShootId] = useState<string>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                return sessionStorage.getItem('shootsFlash') || '';
+            } catch {}
+        }
+        return '';
+    });
 
     // Restore flash highlight & scroll on return
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const flash = sessionStorage.getItem('shootsFlash');
-        const savedScroll = sessionStorage.getItem('shootsScroll');
         if (flash) {
-            sessionStorage.removeItem('shootsFlash');
             setFlashShootId(flash);
-        }
-        if (savedScroll) {
-            sessionStorage.removeItem('shootsScroll');
-            setTimeout(() => {
-                const listScroller = document.querySelector('.shoots-list-scroll');
-                if (listScroller) {
-                    listScroller.scrollTop = Number(savedScroll);
-                }
-                window.scrollTo({ top: Number(savedScroll), behavior: 'instant' });
-            }, 60);
         }
         const onPop = () => {
             const f = sessionStorage.getItem('shootsFlash');
             if (f) {
-                sessionStorage.removeItem('shootsFlash');
                 setFlashShootId(f);
             }
         };
@@ -617,49 +667,66 @@ export default function ShootList() {
         return () => window.removeEventListener('popstate', onPop);
     }, []);
 
-    // Clear flash highlight after a moment
+    // Smoothly clear flash highlight after hold duration (2.5s hold + 1.0s transition)
     useEffect(() => {
         if (!flashShootId) return;
-        const t = setTimeout(() => setFlashShootId(''), 2500);
-        return () => clearTimeout(t);
+
+        // Trigger CSS fade-out after 2.5s
+        const tFade = setTimeout(() => {
+            setFlashShootId('');
+        }, 2500);
+
+        // Clean up sessionStorage after fade animation completes (3.6s)
+        const tClean = setTimeout(() => {
+            if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('shootsFlash');
+                sessionStorage.removeItem('shootsScroll');
+            }
+        }, 3600);
+
+        return () => {
+            clearTimeout(tFade);
+            clearTimeout(tClean);
+        };
     }, [flashShootId]);
 
     const handleShootClick = (shootId: string) => {
         if (typeof window !== 'undefined') {
             try {
-                const listScroller = document.querySelector('.shoots-list-scroll');
-                const scrollY = listScroller ? listScroller.scrollTop : window.scrollY;
-                sessionStorage.setItem('shootsScroll', String(scrollY));
+                let scrollPos = 0;
+                if (viewMode === 'list' && bodyScrollRef.current) {
+                    scrollPos = bodyScrollRef.current.scrollTop;
+                } else if (viewMode === 'card' && cardScrollRef.current) {
+                    scrollPos = cardScrollRef.current.scrollTop;
+                } else {
+                    const scroller = document.querySelector('.shoots-list-scroll') || document.querySelector('.shoots-card-scroll');
+                    scrollPos = scroller ? scroller.scrollTop : window.scrollY;
+                }
+
+                sessionStorage.setItem('shootsScroll', String(scrollPos));
                 sessionStorage.setItem('shootsFlash', shootId);
+                sessionStorage.setItem('shootsCurrentPage', String(currentPage));
+
+                sessionStorage.setItem('shootListState', JSON.stringify({
+                    viewMode,
+                    searchQuery,
+                    statusFilter,
+                    timeFilter,
+                    customDateRange,
+                    crewFilter,
+                    categoryFilter,
+                    expenseFilter,
+                    sortField,
+                    sortDirection,
+                    showFilters,
+                    pageSize,
+                    currentPage
+                }));
             } catch (e) {
                 // ignore
             }
         }
     };
-
-    // Save state to session storage on change
-    useEffect(() => {
-        const state = {
-            viewMode,
-            searchQuery,
-            statusFilter,
-            timeFilter,
-            customDateRange,
-            crewFilter,
-            categoryFilter,
-            expenseFilter,
-            sortField,
-            sortDirection,
-            showFilters,
-            pageSize,
-            currentPage
-        };
-        try {
-            sessionStorage.setItem('shootListState', JSON.stringify(state));
-        } catch {
-            // ignore
-        }
-    }, [viewMode, searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, categoryFilter, expenseFilter, sortField, sortDirection, showFilters, pageSize, currentPage]);
 
     // Pre-indexed users and assignments
     const usersById = useMemo(() => {
@@ -864,18 +931,76 @@ export default function ShootList() {
     const totalShoots = sortedShoots.length;
     const totalPages = pageSize === 'ALL' ? 1 : Math.max(1, Math.ceil(totalShoots / (pageSize as number)));
 
-    // Clamp current page if total pages decrease
+    // Clamp current page if total pages decrease (only after data has loaded!)
     useEffect(() => {
+        if (loading || shootsLoading || totalShoots === 0) return;
         if (currentPage > totalPages) {
             setCurrentPage(totalPages);
         }
-    }, [totalPages, currentPage]);
+    }, [totalPages, currentPage, loading, shootsLoading, totalShoots]);
+
+    // Ensure the page containing the clicked shoot is active upon return
+    useEffect(() => {
+        const targetShootId = flashShootId || (typeof window !== 'undefined' ? sessionStorage.getItem('shootsFlash') : null);
+        if (!targetShootId || sortedShoots.length === 0 || pageSize === 'ALL') return;
+
+        const targetIndex = sortedShoots.findIndex(s => s.id === targetShootId);
+        if (targetIndex !== -1) {
+            const pageForShoot = Math.floor(targetIndex / (pageSize as number)) + 1;
+            if (currentPage !== pageForShoot) {
+                setCurrentPage(pageForShoot);
+            }
+        }
+    }, [flashShootId, sortedShoots, pageSize, currentPage]);
 
     const paginatedShoots = useMemo(() => {
         if (pageSize === 'ALL') return sortedShoots;
         const start = (currentPage - 1) * (pageSize as number);
         return sortedShoots.slice(start, start + (pageSize as number));
     }, [sortedShoots, currentPage, pageSize]);
+
+    // Scroll to the restored shoot and highlight it once the DOM renders
+    useEffect(() => {
+        if (!flashShootId) return;
+
+        let hasScrolled = false;
+        const tryScroll = () => {
+            const targetEl = document.getElementById(`shoot-row-${flashShootId}`) || 
+                             document.getElementById(`shoot-card-${flashShootId}`) ||
+                             document.querySelector(`[data-shoot-id="${flashShootId}"]`);
+
+            if (targetEl) {
+                targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                hasScrolled = true;
+                return true;
+            }
+            return false;
+        };
+
+        if (!tryScroll()) {
+            const t1 = setTimeout(tryScroll, 100);
+            const t2 = setTimeout(tryScroll, 300);
+            const t3 = setTimeout(() => {
+                if (!hasScrolled) {
+                    const savedScroll = sessionStorage.getItem('shootsScroll');
+                    if (savedScroll) {
+                        const scroller = viewMode === 'card' ? cardScrollRef.current : bodyScrollRef.current;
+                        if (scroller) {
+                            scroller.scrollTop = Number(savedScroll);
+                        } else {
+                            window.scrollTo({ top: Number(savedScroll), behavior: 'instant' });
+                        }
+                    }
+                }
+            }, 600);
+
+            return () => {
+                clearTimeout(t1);
+                clearTimeout(t2);
+                clearTimeout(t3);
+            };
+        }
+    }, [flashShootId, paginatedShoots, viewMode]);
 
     const fromIndex = totalShoots === 0 ? 0 : pageSize === 'ALL' ? 1 : (currentPage - 1) * (pageSize as number) + 1;
     const toIndex = pageSize === 'ALL' ? totalShoots : Math.min(currentPage * (pageSize as number), totalShoots);
@@ -1707,7 +1832,10 @@ export default function ShootList() {
                         </div>
                     ) : viewMode === 'card' ? (
                         /* Card View (Internal Scroll) */
-                        <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-5 p-1 pr-2 scrollbar-thin">
+                        <div 
+                            ref={cardScrollRef}
+                            className="shoots-card-scroll flex-1 min-h-0 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-5 p-1 pr-2 scrollbar-thin"
+                        >
                         {paginatedShoots.map(shoot => {
                             const statusStyle = getStatusStyle(shoot.status);
                             const crewCount = getCrewCount(shoot.id);
@@ -1715,25 +1843,32 @@ export default function ShootList() {
                             return (
                                 <div
                                     key={shoot.id}
+                                    id={`shoot-card-${shoot.id}`}
+                                    data-shoot-id={shoot.id}
                                     className="group h-full"
                                 >
-                                    <div className={`relative flex h-full flex-col rounded-2xl border bg-card p-4 shadow-sm transition-all duration-700 hover:shadow-md sm:p-5 ${
+                                    <div className={`relative flex h-full flex-col rounded-2xl border p-4 shadow-sm transition-all duration-1000 ease-out hover:shadow-md sm:p-5 ${
                                         shoot.id === flashShootId
-                                            ? 'border-primary bg-primary/[0.08] dark:bg-primary/[0.14] ring-2 ring-primary/40 shadow-md scale-[1.01]'
-                                            : 'border-border hover:border-primary/40'
+                                            ? 'border-primary bg-primary/[0.1] dark:bg-primary/[0.18] ring-2 ring-primary/50 shadow-md scale-[1.015]'
+                                            : 'border-border bg-card hover:border-primary/40 ring-0 ring-transparent scale-100'
                                     }`}>
                                         
                                         {/* Header: Badges & Status */}
                                         <div className="flex items-start justify-between gap-2 mb-3">
                                             <div className="flex flex-wrap items-center gap-1.5">
                                                 {shoot.shootNumber && (
-                                                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md tracking-wider">
+                                                    <Link
+                                                        href={`/shoots/${shoot.id}`}
+                                                        onClick={() => handleShootClick(shoot.id)}
+                                                        className="text-[10px] font-bold text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md tracking-wider transition-colors cursor-pointer"
+                                                        title={`Open Shoot #${shoot.shootNumber}`}
+                                                    >
                                                         #{shoot.shootNumber}
-                                                    </span>
+                                                    </Link>
                                                 )}
-                                                {shoot.jiraTicketId && (
+                                                {shoot.jiraTicketId && /^[A-Z0-9]+-\d+$/i.test(shoot.jiraTicketId.trim()) && (
                                                     <a
-                                                        href={jiraBrowseUrl(shoot.jiraTicketId)}
+                                                        href={jiraBrowseUrl(shoot.jiraTicketId.trim())}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         onClick={(e) => e.stopPropagation()}
@@ -1975,9 +2110,9 @@ export default function ShootList() {
                     <div className="rounded-xl shadow-2xs bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 flex-1 min-h-0 flex flex-col overflow-hidden">
                         <div 
                             ref={bodyScrollRef}
-                            className="flex-1 min-h-0 overflow-auto custom-scrollbar"
+                            className="shoots-list-scroll flex-1 min-h-0 overflow-auto custom-scrollbar"
                         >
-                            <div className="w-full min-w-[960px]">
+                            <div className="w-full min-w-[920px]">
                                 {/* Table Header (Sticky at Top) */}
                                 <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 flex items-stretch min-w-full text-[10px] sm:text-[11px] 2xl:text-xs font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs">
                                     <div ref={headerRef} className="flex items-center flex-1 min-w-0">
@@ -1996,7 +2131,7 @@ export default function ShootList() {
                                             onDragOver={(e) => handleHeaderDragOver(colKey, e)}
                                             onDrop={(e) => handleHeaderDrop(colKey, e)}
                                             onDragEnd={handleHeaderDragEnd}
-                                            className={`relative flex items-center px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 group/header cursor-grab active:cursor-grabbing transition-colors ${
+                                            className={`relative flex items-center px-2 xl:px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 group/header cursor-grab active:cursor-grabbing transition-colors ${
                                                 !isLast ? 'border-r border-gray-200 dark:border-gray-800' : ''
                                             } ${isDragOver ? 'bg-primary/20 ring-2 ring-primary ring-inset' : ''} ${
                                                 isDragging ? 'opacity-30' : ''
@@ -2364,16 +2499,16 @@ export default function ShootList() {
                                     const isSelected = selectedShootIds.includes(shoot.id);
 
                                     return (
-                                        <div key={shoot.id} className="group w-full min-w-full">
+                                        <div key={shoot.id} id={`shoot-row-${shoot.id}`} data-shoot-id={shoot.id} className="group w-full min-w-full">
                                     <div
-                                        className={`flex items-center w-full min-w-full transition-colors hover:bg-blue-50/30 dark:hover:bg-blue-950/20 ${
+                                        className={`flex items-center w-full min-w-full transition-all duration-1000 ease-out hover:bg-blue-50/30 dark:hover:bg-blue-950/20 ${
                                             isSelected
                                                 ? 'bg-primary/[0.06] dark:bg-primary/[0.12]'
-                                                : index % 2 === 1 ? 'bg-gray-50/40 dark:bg-white/[0.01]' : 'bg-white dark:bg-transparent'
-                                        } ${
-                                            shoot.id === flashShootId
-                                                ? 'bg-primary/[0.1] dark:bg-primary/[0.18] ring-2 ring-inset ring-primary/40'
-                                                : ''
+                                                : shoot.id === flashShootId
+                                                    ? 'bg-primary/[0.14] dark:bg-primary/[0.22] ring-2 ring-inset ring-primary/60 shadow-sm'
+                                                    : index % 2 === 1
+                                                        ? 'bg-gray-50/40 dark:bg-white/[0.01] ring-0 ring-inset ring-transparent'
+                                                        : 'bg-white dark:bg-transparent ring-0 ring-inset ring-transparent'
                                         }`}
                                     >
                                         <div className="flex items-center flex-1 min-w-0">
@@ -2384,7 +2519,9 @@ export default function ShootList() {
                                                 <div
                                                     key={colKey}
                                                     style={getColumnStyle(colKey)}
-                                                    className={`px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 flex items-center min-h-[33px] 2xl:min-h-[40px] text-xs 2xl:text-sm min-w-0 ${
+                                                    className={`px-2 xl:px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 flex items-center min-h-[33px] 2xl:min-h-[40px] text-xs 2xl:text-sm min-w-0 ${
+                                                        colKey === 'status' || colKey === 'jiraTicket' ? 'overflow-hidden' : ''
+                                                    } ${
                                                         !isLast ? 'border-r border-gray-100 dark:border-gray-800/60' : ''
                                                     }`}
                                                 >
@@ -2417,9 +2554,14 @@ export default function ShootList() {
                                                                 </span>
                                                             </button>
                                                             {shoot.shootNumber ? (
-                                                                <span className="text-xs font-mono font-medium text-gray-500 dark:text-gray-400">
+                                                                <Link
+                                                                    href={`/shoots/${shoot.id}`}
+                                                                    onClick={() => handleShootClick(shoot.id)}
+                                                                    className="text-xs font-mono font-medium text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary transition-colors cursor-pointer"
+                                                                    title={`Open Shoot #${shoot.shootNumber}`}
+                                                                >
                                                                     #{shoot.shootNumber}
-                                                                </span>
+                                                                </Link>
                                                             ) : (
                                                                 <span className="text-xs text-gray-300 dark:text-gray-600">-</span>
                                                             )}
@@ -2448,17 +2590,17 @@ export default function ShootList() {
 
                                                     {/* 3. Jira */}
                                                     {colKey === 'jiraTicket' && (
-                                                        shoot.jiraTicketId ? (
+                                                        shoot.jiraTicketId && /^[A-Z0-9]+-\d+$/i.test(shoot.jiraTicketId.trim()) ? (
                                                             <a
-                                                                href={jiraBrowseUrl(shoot.jiraTicketId)}
+                                                                href={jiraBrowseUrl(shoot.jiraTicketId.trim())}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-[#0052CC] dark:text-[#4c9aff] hover:underline transition-colors whitespace-nowrap"
+                                                                className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-[#0052CC] dark:text-[#4c9aff] hover:underline transition-colors whitespace-nowrap truncate max-w-full min-w-0"
                                                                 onClick={(e) => e.stopPropagation()}
                                                                 title={`Open ${shoot.jiraTicketId} in Jira ServiceDesk`}
                                                             >
                                                                 <JiraIcon size={12} className="shrink-0 text-[#0052CC] dark:text-[#4c9aff]" />
-                                                                <span>{shoot.jiraTicketId}</span>
+                                                                <span className="truncate">{shoot.jiraTicketId}</span>
                                                             </a>
                                                         ) : (
                                                             <span className="text-xs text-gray-300 dark:text-gray-600">-</span>
@@ -2472,18 +2614,18 @@ export default function ShootList() {
                                                                 const schedule = formatScheduleCompact(shoot.startTime, shoot.endTime);
                                                                 return (
                                                                     <div
-                                                                        className="flex items-center gap-1.5 min-w-0 text-xs truncate"
+                                                                        className="flex items-center gap-1.5 min-w-0 text-xs"
                                                                         title={
                                                                             shoot.endTime
                                                                                 ? `${format(parseISO(shoot.startTime), 'MMM d, yyyy, h:mm a')} → ${format(parseISO(shoot.endTime), 'MMM d, yyyy, h:mm a')}`
                                                                                 : format(parseISO(shoot.startTime), 'MMM d, yyyy, h:mm a')
                                                                         }
                                                                     >
-                                                                        <span className="font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">
+                                                                        <span className="font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap shrink-0">
                                                                             {schedule.primary}
                                                                         </span>
                                                                         {schedule.secondary && (
-                                                                            <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                                                            <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap truncate">
                                                                                 • {schedule.secondary}
                                                                             </span>
                                                                         )}
@@ -2608,7 +2750,8 @@ export default function ShootList() {
                                                                 color: statusStyle.text,
                                                                 border: `1px solid ${statusStyle.border}`,
                                                             }}
-                                                            className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shrink-0 inline-flex items-center justify-center whitespace-nowrap"
+                                                            className="text-[9px] xl:text-[9.5px] 2xl:text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight shrink-0 inline-flex items-center justify-center whitespace-nowrap max-w-full truncate"
+                                                            title={statusStyle.label || shoot.status.replace(/_/g, ' ')}
                                                         >
                                                             {statusStyle.label || shoot.status.replace(/_/g, ' ')}
                                                         </span>

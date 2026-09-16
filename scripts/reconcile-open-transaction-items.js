@@ -33,10 +33,18 @@ async function reconcile() {
         if (!txn.items || txn.items.length === 0) continue;
 
         for (const itemId of txn.items) {
+            if (txn.post_return_conditions && txn.post_return_conditions[itemId] !== undefined) {
+                continue;
+            }
+
             const item = equipById.get(itemId);
             if (!item) {
                 console.warn(`⚠️ Item ${itemId} in transaction ${txn.id} (${txn.project}) not found in equipment table!`);
                 continue;
+            }
+
+            if (item.status === 'PENDING_VERIFICATION') {
+                continue; // Submitted for return, waiting for verification
             }
 
             if (item.status !== 'CHECKED_OUT') {

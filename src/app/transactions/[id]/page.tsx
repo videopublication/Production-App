@@ -1045,8 +1045,10 @@ export default function TransactionDetailPage() {
     const totalItemCount = transaction.items.length + manualItemQuantity;
 
     const canManualClose = transaction?.status === 'OPEN' && transaction.items.every(itemId => {
+        if (transaction.postReturnConditions?.[itemId] !== undefined) return true;
         const item = equipment.find(e => e.id === itemId);
-        return item && item.status !== 'CHECKED_OUT' && item.status !== 'PENDING_VERIFICATION';
+        if (!item) return true; // deleted equipment item shouldn't block manual close
+        return item.status !== 'CHECKED_OUT' && item.status !== 'PENDING_VERIFICATION';
     }) && areManualItemsComplete(transaction.manualItems);
 
     const canEditTransactionDetails = ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);

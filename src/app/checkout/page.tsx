@@ -39,9 +39,75 @@ const compareByName = (a: { name: string }, b: { name: string }) =>
 const compareByLabel = (a: { label: string }, b: { label: string }) =>
     a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true });
 
-const compareShootsByDateDesc = (a: Shoot, b: Shoot) => {
-    const dateDiff = new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
-    return dateDiff || a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+const getShootDateRank = (shoot: Shoot, now: Date) => {
+    if (!shoot.startTime) return { rank: 3, sortVal: 0 };
+    const start = new Date(shoot.startTime);
+    if (isNaN(start.getTime())) return { rank: 3, sortVal: 0 };
+
+    const end = shoot.endTime ? new Date(shoot.endTime) : start;
+
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const isHappeningToday = (start <= todayEnd && end >= todayStart) ||
+        start.toDateString() === now.toDateString();
+
+    if (isHappeningToday) {
+        // Today's shoots: rank 0 (highest priority), earlier in the day first
+        return { rank: 0, sortVal: start.getTime() };
+    }
+
+    if (start > todayEnd) {
+        // Upcoming future shoots: rank 1, nearest first (ascending)
+        return { rank: 1, sortVal: start.getTime() };
+    }
+
+    // Past active shoots: rank 2, most recent first (descending)
+    return { rank: 2, sortVal: -start.getTime() };
+};
+
+const compareShootsByRelevance = (a: Shoot, b: Shoot) => {
+    const now = new Date();
+    const infoA = getShootDateRank(a, now);
+    const infoB = getShootDateRank(b, now);
+
+    if (infoA.rank !== infoB.rank) {
+        return infoA.rank - infoB.rank;
+    }
+    if (infoA.sortVal !== infoB.sortVal) {
+        return infoA.sortVal - infoB.sortVal;
+    }
+    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+};
+
+const formatShootOptionLabel = (shoot: Shoot): string => {
+    if (!shoot.startTime) return shoot.title;
+
+    const start = new Date(shoot.startTime);
+    if (isNaN(start.getTime())) return shoot.title;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const tomorrowEnd = new Date(todayEnd);
+    tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+
+    const end = shoot.endTime ? new Date(shoot.endTime) : start;
+    const isToday = (start <= todayEnd && end >= todayStart) || start.toDateString() === now.toDateString();
+    const isTomorrow = !isToday && ((start >= tomorrowStart && start <= tomorrowEnd) || start.toDateString() === tomorrowStart.toDateString());
+
+    const dateStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    if (isToday) {
+        return `${shoot.title} - Today (${dateStr})`;
+    }
+    if (isTomorrow) {
+        return `${shoot.title} - Tomorrow (${dateStr})`;
+    }
+    return `${shoot.title} - ${dateStr}`;
 };
 
 const RETURNABLE_ITEM_NOTE_PATTERN = /\b(cables?|wires?|chargers?|adapters?|batter(?:y|ies)|mics?|microphones?|connectors?|stands?|tripods?|cards?|readers?|mounts?|bags?|cases?|lights?|lenses?)\b/i;
@@ -90,6 +156,7 @@ export default function CheckoutPage() {
     const [notes, setNotes] = useState('');
     const notesMayContainReturnableItems = RETURNABLE_ITEM_NOTE_PATTERN.test(notes);
     const [selectedShootId, setSelectedShootId] = useState<string>('');
+    const [showAllShoots, setShowAllShoots] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -270,15 +337,58 @@ export default function CheckoutPage() {
         }
     }, [user, router, authLoading]);
 
-    // Keep all active shoots in the dropdown (exclude cancelled and closed shoots)
+    const isCrew = user?.role === 'CREW';
+    const isAdminOrManager = !!user && ['MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role);
+
+    // Helper: Is the shoot happening today or in the future?
+    const isShootCurrentOrUpcoming = (shoot: Shoot) => {
+        if (!shoot.startTime) return false;
+        const start = new Date(shoot.startTime);
+        if (isNaN(start.getTime())) return false;
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const end = shoot.endTime ? new Date(shoot.endTime) : start;
+        return end >= todayStart || start.toDateString() === now.toDateString();
+    };
+
+    // Keep active shoots in the dropdown (exclude cancelled and closed shoots)
+    // By default: filter by assigned crew AND today/upcoming dates so past shoots don't clutter checkout
     const availableShoots = useMemo(() => {
-        return shoots.filter(shoot => {
+        const active = shoots.filter(shoot => {
             const status = shoot.status?.toUpperCase();
-            // Exclude cancelled and closed shoots
-            if (status === 'CANCELLED' || status === 'CLOSED') return false;
-            return true;
-        }).sort(compareShootsByDateDesc);
-    }, [shoots]);
+            return status !== 'CANCELLED' && status !== 'CLOSED';
+        });
+
+        // If admin/manager toggled Show All: show all active shoots (including past)
+        if (showAllShoots && isAdminOrManager) {
+            return [...active].sort(compareShootsByRelevance);
+        }
+
+        // Active shoots for checkout: by default only include today & upcoming shoots
+        const baseActive = active.filter(isShootCurrentOrUpcoming);
+
+        // If logged in as CREW: strictly only shoots where this user is assigned
+        if (isCrew && user) {
+            return baseActive
+                .filter(shoot => assignments.some(a => a.shootId === shoot.id && a.userId === user.id && a.status !== 'DECLINED'))
+                .sort(compareShootsByRelevance);
+        }
+
+        // If Manager/Admin and a specific crew member is selected as collector (other than themselves):
+        if (collectorUserId && user && collectorUserId !== user.id) {
+            const collectorShoots = baseActive.filter(shoot =>
+                assignments.some(a => a.shootId === shoot.id && a.userId === collectorUserId && a.status !== 'DECLINED')
+            );
+            if (collectorShoots.length > 0) {
+                return collectorShoots.sort(compareShootsByRelevance);
+            }
+        }
+
+        // Default for Manager/Admin: only show shoots that have crew assigned
+        return baseActive
+            .filter(shoot => assignments.some(a => a.shootId === shoot.id && a.status !== 'DECLINED'))
+            .sort(compareShootsByRelevance);
+    }, [shoots, assignments, user, isCrew, isAdminOrManager, collectorUserId, showAllShoots]);
 
     // Ensure selected shoot is in options only if active (not cancelled or closed)
     const activeShootOptions = useMemo(() => {
@@ -295,9 +405,9 @@ export default function CheckoutPage() {
             }
         }
 
-        const baseOptions = optionShoots.sort(compareShootsByDateDesc).map(shoot => ({
+        const baseOptions = optionShoots.sort(compareShootsByRelevance).map(shoot => ({
             value: shoot.id,
-            label: `${shoot.title} - ${new Date(shoot.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+            label: formatShootOptionLabel(shoot)
         }));
 
         return [{ value: '', label: `Select a ${labels.workLower}...` }, ...baseOptions];
@@ -1254,15 +1364,35 @@ export default function CheckoutPage() {
                                 <div className="space-y-5">
                                     {/* Work Selector - Premium Card (Moved to Top) */}
                                     <div className="relative bg-muted/40 rounded-2xl p-4 border border-border shadow-sm">
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                                                </svg>
+                                        <div className="flex items-center justify-between gap-3 mb-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                                    <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {isCrew
+                                                            ? `Assigned to you (${availableShoots.length})`
+                                                            : showAllShoots
+                                                                ? `Showing all ${labels.workPluralLower} (${availableShoots.length})`
+                                                                : collectorUserId && user && collectorUserId !== user.id
+                                                                    ? `Assigned to selected crew (${availableShoots.length})`
+                                                                    : `Today & Upcoming (${availableShoots.length})`}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
-                                            </div>
+                                            {isAdminOrManager && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowAllShoots(prev => !prev)}
+                                                    className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                                                >
+                                                    {showAllShoots ? 'Upcoming Only' : 'Show All'}
+                                                </button>
+                                            )}
                                         </div>
 
                                         <Select
@@ -1280,7 +1410,7 @@ export default function CheckoutPage() {
                                                 }
                                             }}
                                             options={activeShootOptions}
-                                            placeholder={`Select a ${labels.workLower}...`}
+                                            placeholder={isCrew && availableShoots.length === 0 ? `No ${labels.workPluralLower} assigned` : `Select a ${labels.workLower}...`}
                                             className="w-full"
                                         />
                                         {selectedShootId && (
@@ -1380,13 +1510,33 @@ export default function CheckoutPage() {
                             <div className="p-4">
                                 {/* Work Selector — flat section (no inner card box) */}
                                 <div className="mb-4">
-                                    <div className="flex items-center gap-2.5 mb-2">
-                                        <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                                            <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                                            </svg>
+                                    <div className="flex items-center justify-between gap-2.5 mb-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
+                                                <p className="text-[11px] text-muted-foreground">
+                                                    {isCrew
+                                                        ? `Assigned to you (${availableShoots.length})`
+                                                        : showAllShoots
+                                                            ? `Showing all (${availableShoots.length})`
+                                                            : `Today & Upcoming (${availableShoots.length})`}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <p className="text-[14px] font-semibold text-foreground">Link to {labels.workSingular}</p>
+                                        {isAdminOrManager && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAllShoots(prev => !prev)}
+                                                className="text-[11px] font-semibold px-2 py-0.5 rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground transition-all"
+                                            >
+                                                {showAllShoots ? 'Upcoming' : 'All'}
+                                            </button>
+                                        )}
                                     </div>
 
                                     <div className="relative">
@@ -1405,7 +1555,7 @@ export default function CheckoutPage() {
                                                 }
                                             }}
                                             options={activeShootOptions}
-                                            placeholder={`Select a ${labels.workLower}...`}
+                                            placeholder={isCrew && availableShoots.length === 0 ? `No ${labels.workPluralLower} assigned` : `Select a ${labels.workLower}...`}
                                             className="w-full"
                                             onOpenChange={setIsDropdownOpen}
                                         />

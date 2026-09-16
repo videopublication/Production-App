@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Equipment, EquipmentStatus } from '@/types';
@@ -12,7 +13,11 @@ import { downloadFile } from '@/lib/download';
 import { Badge } from '@/components/Badge';
 import { MobileScanner, QRScanner } from '@/components/QRScanner';
 import { useAuth } from '@/lib/auth';
-import { ScanLine, Search, X } from 'lucide-react';
+import { 
+    ScanLine, Search, X, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, 
+    ChevronsLeft, ChevronsRight, ArrowUp, ArrowDown, ArrowUpDown, List, LayoutGrid, 
+    FileText, Check, Plus, RefreshCw, SlidersHorizontal, MoreVertical
+} from 'lucide-react';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useToast } from '@/lib/toast-context';
 import { useConfirm } from '@/lib/dialog-context';
@@ -29,6 +34,95 @@ import { canUseTool, type ToolId } from '@/lib/tool-permissions';
 import { nameCovers } from '@/lib/equipment-naming';
 import { itemDetailLineForRow } from '@/components/ItemIdentity';
 import { useDepartment } from '@/lib/department-context';
+
+type InventoryStatusFilter = EquipmentStatus | 'ALL' | 'NEEDS_ATTENTION';
+type InventorySortField = 'name' | 'barcode' | 'category' | 'status' | 'location' | 'assignedToName' | 'createdAt' | 'brand' | 'model' | 'serialNumber';
+type InventorySortDirection = 'asc' | 'desc';
+
+interface InventoryStatusOption {
+    value: InventoryStatusFilter;
+    label: string;
+    color: string;
+}
+
+const ALL_STATUS_OPTIONS: InventoryStatusOption[] = [
+    { value: 'ALL', label: 'All Statuses', color: '#6b7280' },
+    { value: 'AVAILABLE', label: 'Available', color: '#10b981' },
+    { value: 'CHECKED_OUT', label: 'Checked Out', color: '#f97316' },
+    { value: 'PENDING_VERIFICATION', label: 'Pending Verification', color: '#eab308' },
+    { value: 'NEEDS_ATTENTION', label: 'Needs Attention', color: '#ef4444' },
+    { value: 'MAINTENANCE', label: 'In Maintenance', color: '#f43f5e' },
+    { value: 'DAMAGED', label: 'Damaged', color: '#dc2626' },
+    { value: 'LOST', label: 'Lost', color: '#991b1b' },
+];
+
+export type InventoryColumnKey = 
+    | 'select'
+    | 'name'
+    | 'brand'
+    | 'model'
+    | 'size'
+    | 'category'
+    | 'barcode'
+    | 'serialNumber'
+    | 'status'
+    | 'action'
+    | 'assignedToName'
+    | 'location'
+    | 'createdAt';
+
+const DEFAULT_COLUMN_ORDER: InventoryColumnKey[] = [
+    'select',
+    'name',
+    'category',
+    'barcode',
+    'status',
+    'assignedToName',
+    'location',
+    'action',
+    'brand',
+    'model',
+    'size',
+    'serialNumber',
+    'createdAt'
+];
+
+const DEFAULT_COLUMN_WIDTHS: Record<InventoryColumnKey, number> = {
+    select: 40,
+    name: 240,
+    category: 130,
+    barcode: 120,
+    status: 130,
+    assignedToName: 135,
+    location: 160,
+    action: 55,
+    brand: 110,
+    model: 120,
+    size: 75,
+    serialNumber: 110,
+    createdAt: 105,
+};
+
+const getDefaultColumnWidths = (): Record<InventoryColumnKey, number> => ({ ...DEFAULT_COLUMN_WIDTHS });
+
+const getSavedInventoryState = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = sessionStorage.getItem('inventoryListState');
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+};
+
+const parseSavedStatusFilter = (val: any): InventoryStatusFilter[] => {
+    if (Array.isArray(val)) {
+        const valid = val.filter(v => typeof v === 'string');
+        return valid.length > 0 ? (valid as InventoryStatusFilter[]) : ['ALL'];
+    }
+    if (typeof val === 'string' && val) return [val as InventoryStatusFilter];
+    return ['ALL'];
+};
 
 // Normalize a category for grouping/matching: trim, collapse whitespace, lowercase.
 const normalizeCat = (c?: string) => (c || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -228,7 +322,10 @@ function InventoryPageContent() {
             .filter(t => t.status === 'OPEN')
             .forEach(t => {
                 t.items?.forEach(itemId => {
-                    activeTransactionItemMap.set(itemId, { userId: t.userId });
+                    const isReturnedInTxn = t.postReturnConditions?.[itemId] !== undefined;
+                    if (!isReturnedInTxn) {
+                        activeTransactionItemMap.set(itemId, { userId: t.userId });
+                    }
                 });
             });
 
@@ -237,7 +334,7 @@ function InventoryPageContent() {
             i.status === 'CHECKED_OUT' && !activeTransactionItemMap.has(i.id)
         );
         const unmarkedCheckouts = items.filter(i =>
-            activeTransactionItemMap.has(i.id) && i.status !== 'CHECKED_OUT'
+            activeTransactionItemMap.has(i.id) && i.status !== 'CHECKED_OUT' && i.status !== 'PENDING_VERIFICATION'
         );
 
         return { staleAssignments, ghostCheckouts, unmarkedCheckouts, activeTransactionItemMap };
@@ -341,34 +438,492 @@ function InventoryPageContent() {
         }
     };
 
-    // ... (rest of component state) ...
-    // Persist search so navigating into an item and back (which remounts this page)
-    // doesn't wipe the query and force the user to search again.
-    const [search, setSearch] = useState(() => {
-        if (typeof window !== 'undefined') return sessionStorage.getItem('inventorySearch') || '';
-        return '';
-    });
-    const [showInventoryScanner, setShowInventoryScanner] = useState(false);
-    const searchParams = useSearchParams();
-    const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'ALL' | 'NEEDS_ATTENTION'>(() => {
-        const statusParam = searchParams.get('status');
-        if (statusParam && ['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'].includes(statusParam)) {
-            return statusParam as EquipmentStatus | 'ALL' | 'NEEDS_ATTENTION';
-        }
-        return 'ALL';
-    });
-    // Multiple categories/brands/sizes can be active at once. Empty array = all.
-    const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
-    const [brandFilter, setBrandFilter] = useState<string[]>([]);
-    const [sizeFilter, setSizeFilter] = useState<string[]>([]);
-    const [endFilter, setEndFilter] = useState<string[]>([]); // connector ends (matches either end)
+    const savedState = useMemo(() => getSavedInventoryState(), []);
+
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
         if (typeof window !== 'undefined') {
-            return (sessionStorage.getItem('inventoryViewMode') as 'grid' | 'list') || 'grid';
+            return (sessionStorage.getItem('inventoryViewMode') as 'grid' | 'list') || savedState?.viewMode || (window.innerWidth >= 768 ? 'list' : 'grid');
         }
-        return 'grid';
+        return 'list';
     });
-    const [sortConfig, setSortConfig] = useState<{ key: keyof Equipment | 'assignedToName'; direction: 'asc' | 'desc' } | null>(null);
+
+    const [search, setSearch] = useState(() => {
+        if (typeof window !== 'undefined') return sessionStorage.getItem('inventorySearch') || savedState?.search || '';
+        return '';
+    });
+
+    const [showInventoryScanner, setShowInventoryScanner] = useState(false);
+    const searchParams = useSearchParams();
+
+    const [statusFilter, setStatusFilter] = useState<InventoryStatusFilter[]>(() => {
+        const statusParam = searchParams.get('status');
+        if (statusParam && ['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION', 'MAINTENANCE', 'DAMAGED', 'LOST'].includes(statusParam)) {
+            return [statusParam as InventoryStatusFilter];
+        }
+        return parseSavedStatusFilter(savedState?.statusFilter);
+    });
+
+    // Multiple categories/brands/sizes can be active at once. Empty array = all.
+    const [categoryFilter, setCategoryFilter] = useState<string[]>(() => {
+        if (Array.isArray(savedState?.categoryFilter)) return savedState.categoryFilter;
+        if (typeof savedState?.categoryFilter === 'string' && savedState.categoryFilter !== 'ALL') return [savedState.categoryFilter];
+        return [];
+    });
+
+    const [assigneeFilter, setAssigneeFilter] = useState<string>(() => savedState?.assigneeFilter || 'ALL');
+    const [locationFilter, setLocationFilter] = useState<string>(() => savedState?.locationFilter || 'ALL');
+    const [brandFilter, setBrandFilter] = useState<string[]>(() => savedState?.brandFilter || []);
+    const [sizeFilter, setSizeFilter] = useState<string[]>(() => savedState?.sizeFilter || []);
+    const [endFilter, setEndFilter] = useState<string[]>(() => savedState?.endFilter || []);
+    const [showFilters, setShowFilters] = useState<boolean>(() => savedState?.showFilters ?? false);
+
+    // Sorting state
+    const [sortField, setSortField] = useState<InventorySortField>(() => savedState?.sortField || 'name');
+    const [sortDirection, setSortDirection] = useState<InventorySortDirection>(() => savedState?.sortDirection || 'asc');
+
+    // Pagination state
+    const [pageSize, setPageSize] = useState<number | 'ALL'>(() => savedState?.pageSize ?? 50);
+    const [currentPage, setCurrentPage] = useState<number>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                const explicit = sessionStorage.getItem('inventoryCurrentPage');
+                if (explicit) {
+                    const parsed = parseInt(explicit, 10);
+                    if (!isNaN(parsed) && parsed > 0) return parsed;
+                }
+            } catch {}
+        }
+        return savedState?.currentPage ?? 1;
+    });
+
+    // Popover Anchor State for column filter dropdowns
+    const [filterAnchor, setFilterAnchor] = useState<{
+        top: number;
+        left: number;
+        type: 'status' | 'category' | 'assignee' | 'location';
+    } | null>(null);
+    const headerFilterRef = useRef<HTMLDivElement>(null);
+    const [categorySearchQuery, setCategorySearchQuery] = useState('');
+    const [assigneeSearchQuery, setAssigneeSearchQuery] = useState('');
+    const cardScrollRef = useRef<HTMLDivElement>(null);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const [isTableScrolled, setIsTableScrolled] = useState(false);
+
+    // Column Order State
+    const [columnOrder, setColumnOrder] = useState<InventoryColumnKey[]>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.removeItem('inventory_column_order_v1');
+                const saved = localStorage.getItem('inventory_column_order_v2');
+                if (saved) {
+                    const parsed: InventoryColumnKey[] = JSON.parse(saved);
+                    const allKeys = [...DEFAULT_COLUMN_ORDER];
+                    const filtered = parsed.filter(k => allKeys.includes(k));
+                    allKeys.forEach(k => { if (!filtered.includes(k)) filtered.push(k); });
+                    return filtered;
+                }
+            } catch {}
+        }
+        return DEFAULT_COLUMN_ORDER;
+    });
+
+    // Visible Columns State (persisted per device, 8 core columns default for laptop fit)
+    const [visibleColumns, setVisibleColumns] = useState<InventoryColumnKey[]>(() => {
+        const DEFAULT_VISIBLE: InventoryColumnKey[] = [
+            'select', 'name', 'category', 'barcode', 'status', 'assignedToName', 'location', 'action'
+        ];
+        if (typeof window !== 'undefined') {
+            try {
+                // Clear obsolete v1 caches that had 12 bloated columns
+                localStorage.removeItem('inventory_visible_columns_v1');
+                localStorage.removeItem('inventory_table_col_widths_v1');
+                localStorage.removeItem('inventory_has_custom_col_widths_v1');
+
+                const saved = localStorage.getItem('inventory_visible_columns_v2');
+                if (saved) {
+                    const parsed: InventoryColumnKey[] = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length >= 3) {
+                        const safe = Array.from(new Set(['select', 'name', ...parsed]));
+                        return safe as InventoryColumnKey[];
+                    }
+                }
+            } catch {}
+        }
+        return DEFAULT_VISIBLE;
+    });
+
+    // Column Widths State (persisted per device if customized, otherwise uses fluid CSS flex system)
+    const [hasUserCustomWidths, setHasUserCustomWidths] = useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('inventory_has_custom_col_widths_v4') === 'true';
+        }
+        return false;
+    });
+
+    const [colWidths, setColWidths] = useState<Record<InventoryColumnKey, number>>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                // Clear obsolete caches
+                localStorage.removeItem('inventory_table_col_widths_v1');
+                localStorage.removeItem('inventory_has_custom_col_widths_v1');
+                localStorage.removeItem('inventory_table_col_widths_v2');
+                localStorage.removeItem('inventory_has_custom_col_widths_v2');
+                localStorage.removeItem('inventory_table_col_widths_v3');
+                localStorage.removeItem('inventory_has_custom_col_widths_v3');
+
+                const saved = localStorage.getItem('inventory_table_col_widths_v4');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && typeof parsed === 'object') {
+                        return { ...DEFAULT_COLUMN_WIDTHS, ...parsed };
+                    }
+                }
+            } catch {}
+        }
+        return { ...DEFAULT_COLUMN_WIDTHS };
+    });
+
+    // Track horizontal scrolling for sticky column boundary shadow
+    useEffect(() => {
+        const el = tableScrollRef.current;
+        if (!el) return;
+        const handleScroll = () => {
+            setIsTableScrolled(el.scrollLeft > 3);
+        };
+        el.addEventListener('scroll', handleScroll, { passive: true });
+        return () => el.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    const [resizingCol, setResizingCol] = useState<InventoryColumnKey | null>(null);
+    const resizeStartX = useRef<number>(0);
+    const resizeStartWidth = useRef<number>(0);
+    const headerRef = useRef<HTMLDivElement>(null);
+    const columnMenuRef = useRef<HTMLDivElement>(null);
+    const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
+
+    // Column Resizing Handlers (Mouse & Touch)
+    const handleMouseDownResize = (colKey: InventoryColumnKey, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!hasUserCustomWidths && headerRef.current) {
+            const cells = headerRef.current.querySelectorAll<HTMLElement>('[data-col-key]');
+            const initialWidths: Record<string, number> = {};
+            cells.forEach(cell => {
+                const key = cell.getAttribute('data-col-key');
+                if (key) {
+                    initialWidths[key] = Math.round(cell.getBoundingClientRect().width);
+                }
+            });
+            setColWidths(prev => ({ ...prev, ...initialWidths }));
+            resizeStartWidth.current = initialWidths[colKey] || colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+        } else {
+            resizeStartWidth.current = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+        }
+
+        setResizingCol(colKey);
+        setHasUserCustomWidths(true);
+        try {
+            localStorage.setItem('inventory_has_custom_col_widths_v4', 'true');
+        } catch {}
+        resizeStartX.current = e.clientX;
+
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            moveEvent.preventDefault();
+            const delta = moveEvent.clientX - resizeStartX.current;
+            const minW = colKey === 'select' ? 38 : colKey === 'name' ? 140 : colKey === 'status' ? 100 : colKey === 'action' ? 55 : 50;
+            const newWidth = Math.max(minW, Math.round(resizeStartWidth.current + delta));
+            setColWidths(prev => {
+                const updated = { ...prev, [colKey]: newWidth };
+                try {
+                    localStorage.setItem('inventory_table_col_widths_v4', JSON.stringify(updated));
+                } catch {}
+                return updated;
+            });
+        };
+
+        const handleMouseUp = () => {
+            setResizingCol(null);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    };
+
+    const handleTouchStartResize = (colKey: InventoryColumnKey, e: React.TouchEvent) => {
+        if (e.touches.length !== 1) return;
+        e.stopPropagation();
+
+        if (!hasUserCustomWidths && headerRef.current) {
+            const cells = headerRef.current.querySelectorAll<HTMLElement>('[data-col-key]');
+            const initialWidths: Record<string, number> = {};
+            cells.forEach(cell => {
+                const key = cell.getAttribute('data-col-key');
+                if (key) {
+                    initialWidths[key] = Math.round(cell.getBoundingClientRect().width);
+                }
+            });
+            setColWidths(prev => ({ ...prev, ...initialWidths }));
+            resizeStartWidth.current = initialWidths[colKey] || colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+        } else {
+            resizeStartWidth.current = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+        }
+
+        resizeStartX.current = e.touches[0].clientX;
+        setResizingCol(colKey);
+        setHasUserCustomWidths(true);
+        try {
+            localStorage.setItem('inventory_has_custom_col_widths_v4', 'true');
+        } catch {}
+
+        const handleTouchMove = (moveEvent: TouchEvent) => {
+            if (moveEvent.touches.length !== 1) return;
+            const delta = moveEvent.touches[0].clientX - resizeStartX.current;
+            const minW = colKey === 'select' ? 38 : colKey === 'name' ? 140 : colKey === 'status' ? 100 : colKey === 'action' ? 55 : 50;
+            const newWidth = Math.max(minW, Math.round(resizeStartWidth.current + delta));
+            setColWidths(prev => {
+                const updated = { ...prev, [colKey]: newWidth };
+                try {
+                    localStorage.setItem('inventory_table_col_widths_v4', JSON.stringify(updated));
+                } catch {}
+                return updated;
+            });
+        };
+
+        const handleTouchEnd = () => {
+            setResizingCol(null);
+            document.removeEventListener('touchmove', handleTouchMove);
+            document.removeEventListener('touchend', handleTouchEnd);
+        };
+
+        document.addEventListener('touchmove', handleTouchMove, { passive: true });
+        document.addEventListener('touchend', handleTouchEnd);
+    };
+
+    // Drag and Drop Column Reordering State
+    const [draggedCol, setDraggedCol] = useState<InventoryColumnKey | null>(null);
+    const [dragOverCol, setDragOverCol] = useState<InventoryColumnKey | null>(null);
+
+    const handleHeaderDragStart = (colKey: InventoryColumnKey, e: React.DragEvent) => {
+        if (colKey === 'select' || colKey === 'name') return;
+        setDraggedCol(colKey);
+        e.dataTransfer.setData('text/plain', colKey);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleHeaderDragOver = (colKey: InventoryColumnKey, e: React.DragEvent) => {
+        if (colKey === 'select' || colKey === 'name') return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragOverCol !== colKey) {
+            setDragOverCol(colKey);
+        }
+    };
+
+    const handleHeaderDrop = (targetColKey: InventoryColumnKey, e: React.DragEvent) => {
+        e.preventDefault();
+        if (!draggedCol || draggedCol === targetColKey || targetColKey === 'select' || targetColKey === 'name') {
+            setDraggedCol(null);
+            setDragOverCol(null);
+            return;
+        }
+
+        setColumnOrder(prev => {
+            const next = [...prev];
+            const sourceIdx = next.indexOf(draggedCol);
+            const targetIdx = next.indexOf(targetColKey);
+            if (sourceIdx > -1 && targetIdx > -1) {
+                next.splice(sourceIdx, 1);
+                next.splice(targetIdx, 0, draggedCol);
+                try {
+                    localStorage.setItem('inventory_column_order_v2', JSON.stringify(next));
+                } catch {}
+            }
+            return next;
+        });
+
+        setDraggedCol(null);
+        setDragOverCol(null);
+    };
+
+    const handleHeaderDragEnd = () => {
+        setDraggedCol(null);
+        setDragOverCol(null);
+    };
+
+    const moveColumn = (colKey: InventoryColumnKey, direction: 'up' | 'down') => {
+        if (colKey === 'select' || colKey === 'name') return;
+        setColumnOrder(prev => {
+            const next = [...prev];
+            const idx = next.indexOf(colKey);
+            if (idx === -1) return prev;
+            const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+            if (targetIdx < 2 || targetIdx >= next.length) return prev;
+            const [removed] = next.splice(idx, 1);
+            next.splice(targetIdx, 0, removed);
+            try {
+                localStorage.setItem('inventory_column_order_v2', JSON.stringify(next));
+            } catch {}
+            return next;
+        });
+    };
+
+    const toggleColumn = (colId: InventoryColumnKey) => {
+        if (colId === 'select' || colId === 'name') return;
+        setVisibleColumns(prev => {
+            const next = prev.includes(colId)
+                ? (prev.length > 2 ? prev.filter(c => c !== colId) : prev)
+                : [...prev, colId];
+            try {
+                localStorage.setItem('inventory_visible_columns_v2', JSON.stringify(next));
+            } catch {}
+            if (!hasUserCustomWidths) {
+                setColWidths({ ...DEFAULT_COLUMN_WIDTHS });
+            }
+            return next;
+        });
+    };
+
+    const handleResetColumns = () => {
+        const defaultVisible: InventoryColumnKey[] = [
+            'select', 'name', 'category', 'barcode', 'status', 'assignedToName', 'location', 'action'
+        ];
+        setVisibleColumns(defaultVisible);
+        setColumnOrder(DEFAULT_COLUMN_ORDER);
+        setHasUserCustomWidths(false);
+        setColWidths({ ...DEFAULT_COLUMN_WIDTHS });
+        try {
+            localStorage.removeItem('inventory_visible_columns_v2');
+            localStorage.removeItem('inventory_column_order_v2');
+            localStorage.removeItem('inventory_table_col_widths_v4');
+            localStorage.removeItem('inventory_has_custom_col_widths_v4');
+            localStorage.removeItem('inventory_table_col_widths_v3');
+            localStorage.removeItem('inventory_has_custom_col_widths_v3');
+            localStorage.removeItem('inventory_table_col_widths_v2');
+            localStorage.removeItem('inventory_has_custom_col_widths_v2');
+            localStorage.removeItem('inventory_visible_columns_v1');
+            localStorage.removeItem('inventory_column_order_v1');
+            localStorage.removeItem('inventory_table_col_widths_v1');
+            localStorage.removeItem('inventory_has_custom_col_widths_v1');
+        } catch {}
+    };
+
+    const ALL_COLUMNS: { id: InventoryColumnKey; label: string; defaultVisible: boolean; mandatory?: boolean }[] = useMemo(() => [
+        { id: 'select', label: 'Select', defaultVisible: true, mandatory: true },
+        { id: 'name', label: 'Equipment Name', defaultVisible: true, mandatory: true },
+        { id: 'category', label: 'Category', defaultVisible: true },
+        { id: 'barcode', label: 'Barcode', defaultVisible: true },
+        { id: 'status', label: 'Status', defaultVisible: true },
+        { id: 'assignedToName', label: 'Assignee', defaultVisible: true },
+        { id: 'location', label: 'Location', defaultVisible: true },
+        { id: 'action', label: 'Action', defaultVisible: true },
+        { id: 'brand', label: 'Brand', defaultVisible: false },
+        { id: 'model', label: 'Model', defaultVisible: false },
+        { id: 'size', label: 'Size', defaultVisible: false },
+        { id: 'serialNumber', label: 'S/N', defaultVisible: false },
+        { id: 'createdAt', label: 'Added Date', defaultVisible: false },
+    ], []);
+
+    const orderedVisibleColumns = useMemo(() => {
+        return columnOrder.filter(colKey => visibleColumns.includes(colKey));
+    }, [columnOrder, visibleColumns]);
+
+    const minTableWidth = useMemo(() => {
+        const minWMap: Record<InventoryColumnKey, number> = {
+            select: 40,
+            name: colWidths.name || 240,
+            action: 55,
+            location: 135,
+            assignedToName: 120,
+            category: 115,
+            model: 105,
+            brand: 100,
+            barcode: 110,
+            status: 115,
+            serialNumber: 100,
+            size: 65,
+            createdAt: 95,
+        };
+        return orderedVisibleColumns.reduce((sum, col) => sum + (minWMap[col] || 80), 0) + 36;
+    }, [orderedVisibleColumns, colWidths.name]);
+
+    const getColumnStyle = (colKey: InventoryColumnKey): React.CSSProperties => {
+        const w = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+
+        // Pinned Selection Checkbox (fixed 40px)
+        if (colKey === 'select') {
+            return {
+                width: '40px',
+                minWidth: '40px',
+                maxWidth: '40px',
+                flexShrink: 0,
+                boxSizing: 'border-box',
+            };
+        }
+
+        // Pinned Equipment Name (compact, snug, fixed so it never inflates into an empty void)
+        if (colKey === 'name') {
+            const nameW = Math.max(160, w);
+            return {
+                width: `${nameW}px`,
+                minWidth: `${nameW}px`,
+                maxWidth: `${nameW}px`,
+                flexShrink: 0,
+                boxSizing: 'border-box',
+            };
+        }
+
+        // Action Column (Print QR Button - fixed 55px)
+        if (colKey === 'action') {
+            return {
+                width: '55px',
+                minWidth: '55px',
+                maxWidth: '55px',
+                flexShrink: 0,
+                boxSizing: 'border-box',
+            };
+        }
+
+        // Proportional Flexible Data Columns:
+        // Automatically stretch to fill 100% of the screen width on large monitors with zero right-side blank space!
+        const flexWeights: Partial<Record<InventoryColumnKey, { grow: number; minW: number }>> = {
+            location: { grow: 1.6, minW: 135 },
+            assignedToName: { grow: 1.25, minW: 120 },
+            category: { grow: 1.15, minW: 115 },
+            model: { grow: 1.05, minW: 105 },
+            brand: { grow: 0.95, minW: 100 },
+            barcode: { grow: 0.85, minW: 110 },
+            status: { grow: 0.75, minW: 115 },
+            serialNumber: { grow: 0.95, minW: 100 },
+            size: { grow: 0.65, minW: 65 },
+            createdAt: { grow: 0.85, minW: 95 },
+        };
+
+        const config = flexWeights[colKey] || { grow: 1.0, minW: 80 };
+        return {
+            flex: `${config.grow} 1 ${w}px`,
+            minWidth: `${config.minW}px`,
+            boxSizing: 'border-box',
+        };
+    };
+
+    // Close 3-dots column configuration menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (isColumnMenuOpen && columnMenuRef.current && !columnMenuRef.current.contains(e.target as Node)) {
+                setIsColumnMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isColumnMenuOpen]);
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [isGeneratingQR, setIsGeneratingQR] = useState(false);
     // QR label designer: live-editable config, persisted per device.
@@ -426,13 +981,59 @@ function InventoryPageContent() {
         });
     };
 
+    // Persist UI state to sessionStorage
     useEffect(() => {
-        sessionStorage.setItem('inventoryViewMode', viewMode);
-    }, [viewMode]);
+        if (typeof window !== 'undefined') {
+            try {
+                sessionStorage.setItem('inventoryListState', JSON.stringify({
+                    viewMode,
+                    search,
+                    statusFilter,
+                    categoryFilter,
+                    assigneeFilter,
+                    locationFilter,
+                    brandFilter,
+                    sizeFilter,
+                    endFilter,
+                    showFilters,
+                    sortField,
+                    sortDirection,
+                    pageSize,
+                    currentPage
+                }));
+                sessionStorage.setItem('inventoryCurrentPage', String(currentPage));
+                sessionStorage.setItem('inventoryViewMode', viewMode);
+                sessionStorage.setItem('inventorySearch', search);
+            } catch {}
+        }
+    }, [viewMode, search, statusFilter, categoryFilter, assigneeFilter, locationFilter, brandFilter, sizeFilter, endFilter, showFilters, sortField, sortDirection, pageSize, currentPage]);
 
+    // Close column/header filter popover on outside click, resize, or scroll
     useEffect(() => {
-        sessionStorage.setItem('inventorySearch', search);
-    }, [search]);
+        const handleClickOutside = (event: MouseEvent) => {
+            if (headerFilterRef.current && !headerFilterRef.current.contains(event.target as Node)) {
+                const target = event.target as HTMLElement;
+                if (target.closest('[data-filter-trigger]')) return;
+                setFilterAnchor(null);
+            }
+        };
+        const handleScrollOrResize = (e: Event) => {
+            if (e.type === 'scroll' && e.target instanceof Node && headerFilterRef.current?.contains(e.target)) {
+                return;
+            }
+            setFilterAnchor(null);
+        };
+        if (filterAnchor) {
+            document.addEventListener('mousedown', handleClickOutside);
+            window.addEventListener('resize', handleScrollOrResize);
+            window.addEventListener('scroll', handleScrollOrResize, true);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('resize', handleScrollOrResize);
+            window.removeEventListener('scroll', handleScrollOrResize, true);
+        };
+    }, [filterAnchor]);
 
     // Sample item that drives the label designer's live preview.
     const sampleLabelItem = useMemo(() => {
@@ -494,9 +1095,10 @@ function InventoryPageContent() {
 
     const openItem = (barcode: string) => {
         if (typeof window !== 'undefined') {
-            const scroller = document.querySelector('.app-main-scroll');
+            const scroller = document.querySelector('.inventory-table-scroll') || document.querySelector('.inventory-card-scroll') || document.querySelector('.app-main-scroll');
             sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
             sessionStorage.setItem('inventoryFlash', barcode);
+            sessionStorage.setItem('inventoryCurrentPage', String(currentPage));
         }
         router.push(`/inventory/${barcode}`);
     };
@@ -516,7 +1118,7 @@ function InventoryPageContent() {
         let raf = 0;
         if (y) {
             raf = requestAnimationFrame(() => {
-                const scroller = document.querySelector('.app-main-scroll');
+                const scroller = document.querySelector('.inventory-table-scroll') || document.querySelector('.inventory-card-scroll') || document.querySelector('.app-main-scroll');
                 if (scroller) scroller.scrollTop = y;
             });
         }
@@ -524,11 +1126,35 @@ function InventoryPageContent() {
         // Run once on mount — after data (React Query cache) has rendered rows.
     }, []);
 
+    // Scroll to the restored item and highlight it once the DOM renders
+    useEffect(() => {
+        if (!flashBarcode) return;
+        const tryScroll = () => {
+            const targetEl = document.getElementById(`inventory-row-${flashBarcode}`) || 
+                             document.getElementById(`inventory-card-${flashBarcode}`) ||
+                             document.querySelector(`[data-inventory-barcode="${flashBarcode}"]`);
+            if (targetEl) {
+                targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                return true;
+            }
+            return false;
+        };
+
+        if (!tryScroll()) {
+            const t1 = setTimeout(tryScroll, 100);
+            const t2 = setTimeout(tryScroll, 300);
+            return () => {
+                clearTimeout(t1);
+                clearTimeout(t2);
+            };
+        }
+    }, [flashBarcode]);
+
     // Narrowing the list doesn't move the scroll position, so filtering 500 rows down to 2
     // leaves you parked in the empty space where the rest of the list used to be. Reset to the
     // top whenever the filter selection changes — skipping the first run, which would fight
     // the scroll restore above.
-    const filterSignature = JSON.stringify([statusFilter, categoryFilter, brandFilter, sizeFilter, endFilter]);
+    const filterSignature = JSON.stringify([statusFilter, categoryFilter, assigneeFilter, locationFilter, brandFilter, sizeFilter, endFilter]);
     const lastFilterSignature = React.useRef<string | null>(null);
     useEffect(() => {
         if (lastFilterSignature.current === null) {
@@ -628,13 +1254,96 @@ function InventoryPageContent() {
         return users[id] || id;
     }, [users]);
 
-    const handleSort = (key: keyof Equipment | 'assignedToName') => {
-        let direction: 'asc' | 'desc' = 'asc';
-        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-    };
+    const statusCounts = useMemo(() => {
+        const counts: Record<string, number> = {
+            ALL: items.filter(item => !isDataAsset(item)).length,
+            AVAILABLE: 0,
+            CHECKED_OUT: 0,
+            PENDING_VERIFICATION: 0,
+            NEEDS_ATTENTION: 0,
+            MAINTENANCE: 0,
+            DAMAGED: 0,
+            LOST: 0,
+        };
+        items.forEach(item => {
+            if (isDataAsset(item)) return;
+            if (counts[item.status] !== undefined) {
+                counts[item.status]++;
+            }
+            if (['MAINTENANCE', 'DAMAGED', 'LOST'].includes(item.status) || hasEquipmentIssue(item)) {
+                counts.NEEDS_ATTENTION++;
+            }
+        });
+        return counts;
+    }, [items]);
+
+    const locationOptions = useMemo(() => {
+        const set = new Set<string>();
+        items.forEach(i => {
+            if (!isDataAsset(i) && i.location && i.location.trim()) {
+                set.add(i.location.trim());
+            }
+        });
+        return Array.from(set).sort();
+    }, [items]);
+
+    const locationCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        items.forEach(it => {
+            if (!isDataAsset(it)) {
+                const loc = (it.location || '').trim();
+                if (loc) counts[loc] = (counts[loc] || 0) + 1;
+                else counts['__UNASSIGNED__'] = (counts['__UNASSIGNED__'] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [items]);
+
+    const assigneeCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        items.forEach(it => {
+            if (!isDataAsset(it) && it.status !== 'AVAILABLE' && it.assignedTo) {
+                counts[it.assignedTo] = (counts[it.assignedTo] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [items]);
+
+    const categoryCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        items.forEach(it => {
+            if (!isDataAsset(it) && it.category && it.category.trim()) {
+                const cat = it.category.trim();
+                counts[cat] = (counts[cat] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [items]);
+
+    const assigneeOptions = useMemo(() => {
+        return usersList
+            .map(u => ({ id: u.id, name: u.name || u.email || 'Unknown' }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [usersList]);
+
+    const ALL_INDIVIDUAL_STATUSES: InventoryStatusFilter[] = [
+        'AVAILABLE',
+        'CHECKED_OUT',
+        'PENDING_VERIFICATION',
+        'NEEDS_ATTENTION',
+        'MAINTENANCE',
+        'DAMAGED',
+        'LOST',
+    ];
+
+    const isAllStatusesSelected = statusFilter.includes('ALL') || statusFilter.length === 0 || statusFilter.length === ALL_INDIVIDUAL_STATUSES.length;
+    const isStatusFiltered = !isAllStatusesSelected;
+    const isCategoryFiltered = categoryFilter.length > 0;
+    const isAssigneeFiltered = assigneeFilter !== 'ALL';
+    const isLocationFiltered = locationFilter !== 'ALL';
+    const isBrandFiltered = brandFilter.length > 0;
+    const isSizeFiltered = sizeFilter.length > 0;
+    const hasAnyFilterActive = isStatusFiltered || isCategoryFiltered || isAssigneeFiltered || isLocationFiltered || isBrandFiltered || isSizeFiltered || !!search.trim();
 
     const filteredItems = useMemo(() => {
         // This page is the GEAR catalogue. The data team's items (cards, drives, laptops,
@@ -643,36 +1352,58 @@ function InventoryPageContent() {
         let result = items.filter(item => !isDataAsset(item));
 
         // NOTE: Department filtering is already done at the Supabase query level in useEquipment().
-        // No need to re-filter by department here — it would cause items to appear empty
-        // if item.departmentId isn't mapped correctly.
-
         if (search.trim()) {
-            // Token-AND search: every word in the query must appear somewhere across the
-            // item's fields (name/category/barcode/serial/model), separator-insensitive
-            // and order-independent. So "fz 100 battery" matches an item named "Battery"
-            // with model "FZ-100", and "fz-100"/"fz100"/"fz 100" all behave the same.
             const normalize = (str: string) => str.toLowerCase().replace(/[\s\-_]/g, '');
-            const tokens = search.trim().split(/\s+/).map(normalize).filter(Boolean);
+            const tokens: string[] = search.trim().split(/\s+/).map(normalize).filter(Boolean);
             result = result.filter(item => {
                 const hay = normalize(
-                    [item.name, item.category, item.barcode, item.serialNumber, item.metadata?.model, item.metadata?.brand, item.metadata?.size, item.metadata?.endA, item.metadata?.endB]
+                    [
+                        item.name, 
+                        item.category, 
+                        item.barcode, 
+                        item.serialNumber, 
+                        item.location,
+                        item.metadata?.model, 
+                        item.metadata?.brand, 
+                        item.metadata?.size, 
+                        item.metadata?.endA, 
+                        item.metadata?.endB,
+                        getUserName(item.assignedTo)
+                    ]
                         .filter(Boolean)
                         .join(' ')
                 );
-                return tokens.every(t => hay.includes(t));
+                return tokens.every((t: string) => hay.includes(t));
             });
         }
 
-        if (statusFilter !== 'ALL') {
-            if (statusFilter === 'NEEDS_ATTENTION') {
-                result = result.filter(item => ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(item.status) || hasEquipmentIssue(item));
-            } else {
-                result = result.filter(item => item.status === statusFilter);
-            }
+        if (isStatusFiltered) {
+            result = result.filter(item => {
+                const isNeedsAttention = ['MAINTENANCE', 'DAMAGED', 'LOST'].includes(item.status) || hasEquipmentIssue(item);
+                if (statusFilter.includes('NEEDS_ATTENTION') && isNeedsAttention) return true;
+                return statusFilter.includes(item.status as InventoryStatusFilter);
+            });
         }
 
         if (categoryFilter.length > 0) {
-            result = result.filter(item => categoryFilter.includes(normalizeCat(item.category)));
+            const catSet = new Set(categoryFilter.map(c => c.trim().toLowerCase()));
+            result = result.filter(item => catSet.has((item.category || '').trim().toLowerCase()));
+        }
+
+        if (assigneeFilter !== 'ALL') {
+            if (assigneeFilter === 'UNASSIGNED') {
+                result = result.filter(item => !item.assignedTo || item.status === 'AVAILABLE');
+            } else {
+                result = result.filter(item => item.assignedTo === assigneeFilter && item.status !== 'AVAILABLE');
+            }
+        }
+
+        if (locationFilter !== 'ALL') {
+            if (locationFilter === 'UNASSIGNED') {
+                result = result.filter(item => !item.location || item.location.trim() === '');
+            } else {
+                result = result.filter(item => (item.location || '').trim().toLowerCase() === locationFilter.trim().toLowerCase());
+            }
         }
 
         if (brandFilter.length > 0) {
@@ -680,11 +1411,7 @@ function InventoryPageContent() {
         }
 
         if (sizeFilter.length > 0) {
-            // '__none__' matches items with no size set.
-            result = result.filter(item => {
-                const sz = normalizeCat(item.metadata?.size || '');
-                return sizeFilter.includes(sz || '__none__');
-            });
+            result = result.filter(item => sizeFilter.includes(normalizeCat(item.metadata?.size || '')));
         }
 
         if (endFilter.length > 0) {
@@ -696,27 +1423,188 @@ function InventoryPageContent() {
             });
         }
 
-        if (sortConfig) {
-            result = [...result].sort((a, b) => {
-                let aValue: string | number | null | undefined = a[sortConfig.key as keyof Equipment] as string | number | null | undefined;
-                let bValue: string | number | null | undefined = b[sortConfig.key as keyof Equipment] as string | number | null | undefined;
+        return result;
+    }, [items, search, statusFilter, categoryFilter, assigneeFilter, locationFilter, brandFilter, sizeFilter, endFilter, getUserName]);
 
-                if (sortConfig.key === 'assignedToName') {
+    // Sorted items for list & grid views
+    const sortedItems = useMemo(() => {
+        return [...filteredItems].sort((a, b) => {
+            let aValue = '';
+            let bValue = '';
+
+            switch (sortField) {
+                case 'name':
+                    aValue = a.name || '';
+                    bValue = b.name || '';
+                    break;
+                case 'barcode':
+                    aValue = a.barcode || '';
+                    bValue = b.barcode || '';
+                    break;
+                case 'serialNumber':
+                    aValue = a.serialNumber || '';
+                    bValue = b.serialNumber || '';
+                    break;
+                case 'category':
+                    aValue = a.category || '';
+                    bValue = b.category || '';
+                    break;
+                case 'status':
+                    aValue = a.status || '';
+                    bValue = b.status || '';
+                    break;
+                case 'location':
+                    aValue = a.location || '';
+                    bValue = b.location || '';
+                    break;
+                case 'assignedToName':
                     aValue = getUserName(a.assignedTo) || '';
                     bValue = getUserName(b.assignedTo) || '';
-                }
+                    break;
+                case 'brand':
+                    aValue = a.metadata?.brand || '';
+                    bValue = b.metadata?.brand || '';
+                    break;
+                case 'model':
+                    aValue = a.metadata?.model || '';
+                    bValue = b.metadata?.model || '';
+                    break;
+                case 'createdAt':
+                    const timeA = new Date(a.createdAt || a.lastActivity || 0).getTime();
+                    const timeB = new Date(b.createdAt || b.lastActivity || 0).getTime();
+                    return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
+                default:
+                    aValue = ((a as any)[sortField] ?? '').toString();
+                    bValue = ((b as any)[sortField] ?? '').toString();
+            }
 
-                const valA = (aValue ?? '').toString();
-                const valB = (bValue ?? '').toString();
+            const cmp = aValue.localeCompare(bValue, undefined, { numeric: true, sensitivity: 'base' });
+            return sortDirection === 'asc' ? cmp : -cmp;
+        });
+    }, [filteredItems, sortField, sortDirection, getUserName]);
 
-                // Natural/numeric compare so "…-2" sorts before "…-10" (not lexicographic).
-                const cmp = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
-                return sortConfig.direction === 'asc' ? cmp : -cmp;
+    // Pagination calculations
+    const totalItems = sortedItems.length;
+    const totalPages = pageSize === 'ALL' ? 1 : Math.max(1, Math.ceil(totalItems / (pageSize as number)));
+
+    // Clamp current page if total pages decrease
+    useEffect(() => {
+        if (equipmentLoading || totalItems === 0) return;
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [totalPages, currentPage, equipmentLoading, totalItems]);
+
+    // Ensure the page containing flash item is active
+    useEffect(() => {
+        const targetBarcode = flashBarcode || (typeof window !== 'undefined' ? sessionStorage.getItem('inventoryFlash') : null);
+        if (!targetBarcode || sortedItems.length === 0 || pageSize === 'ALL') return;
+
+        const targetIndex = sortedItems.findIndex(i => i.barcode === targetBarcode);
+        if (targetIndex !== -1) {
+            const pageForItem = Math.floor(targetIndex / (pageSize as number)) + 1;
+            if (currentPage !== pageForItem) {
+                setCurrentPage(pageForItem);
+            }
+        }
+    }, [flashBarcode, sortedItems, pageSize, currentPage]);
+
+    const paginatedItems = useMemo(() => {
+        if (pageSize === 'ALL') return sortedItems;
+        const start = (currentPage - 1) * (pageSize as number);
+        return sortedItems.slice(start, start + (pageSize as number));
+    }, [sortedItems, currentPage, pageSize]);
+
+    const fromIndex = totalItems === 0 ? 0 : pageSize === 'ALL' ? 1 : (currentPage - 1) * (pageSize as number) + 1;
+    const toIndex = pageSize === 'ALL' ? totalItems : Math.min(currentPage * (pageSize as number), totalItems);
+
+    const handlePageChange = (newPage: number) => {
+        const target = Math.max(1, Math.min(newPage, totalPages));
+        setCurrentPage(target);
+        if (typeof window !== 'undefined') {
+            sessionStorage.setItem('inventoryCurrentPage', String(target));
+            const scroller = document.querySelector('.inventory-table-scroll') || document.querySelector('.inventory-card-scroll');
+            if (scroller) scroller.scrollTop = 0;
+        }
+    };
+
+    const toggleStatusFilter = (status: InventoryStatusFilter) => {
+        if (status === 'ALL') {
+            setStatusFilter(['ALL']);
+            setCurrentPage(1);
+            return;
+        }
+        setStatusFilter(prev => {
+            const isAll = prev.includes('ALL') || prev.length === 0 || prev.length === ALL_INDIVIDUAL_STATUSES.length;
+            if (isAll) {
+                // If previously all, selecting a status selects ONLY that status
+                return [status];
+            }
+            const exists = prev.includes(status);
+            let next: InventoryStatusFilter[];
+            if (exists) {
+                next = prev.filter(s => s !== status);
+            } else {
+                next = [...prev, status];
+            }
+            if (next.length === 0 || next.length === ALL_INDIVIDUAL_STATUSES.length) {
+                return ['ALL'];
+            }
+            return next;
+        });
+        setCurrentPage(1);
+    };
+
+    const selectAllStatuses = () => {
+        setStatusFilter(['ALL']);
+        setCurrentPage(1);
+    };
+
+    const deselectAllStatuses = () => {
+        setStatusFilter(['ALL']);
+        setCurrentPage(1);
+    };
+
+    const resetAllFilters = () => {
+        setStatusFilter(['ALL']);
+        setCategoryFilter([]);
+        setAssigneeFilter('ALL');
+        setLocationFilter('ALL');
+        setBrandFilter([]);
+        setSizeFilter([]);
+        setEndFilter([]);
+        setSearch('');
+        setCurrentPage(1);
+    };
+
+    const toggleFilterMenu = (type: 'status' | 'category' | 'assignee' | 'location', e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (filterAnchor?.type === type) {
+            setFilterAnchor(null);
+        } else {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const popoverWidth = type === 'status' || type === 'category' || type === 'assignee' ? 280 : 240;
+            // Center the popover under the trigger button, clamped within viewport margins
+            let left = rect.left + (rect.width / 2) - (popoverWidth / 2);
+            if (left + popoverWidth > window.innerWidth - 16) {
+                left = window.innerWidth - popoverWidth - 16;
+            }
+            if (left < 16) {
+                left = 16;
+            }
+            let top = rect.bottom + 6;
+            const estimatedHeight = 360;
+            if (top + estimatedHeight > window.innerHeight - 16 && rect.top > estimatedHeight) {
+                top = Math.max(16, rect.top - estimatedHeight - 6);
+            }
+            setFilterAnchor({
+                top: Math.max(16, top),
+                left: Math.max(16, left),
+                type,
             });
         }
-
-        return result;
-    }, [items, search, statusFilter, categoryFilter, brandFilter, sizeFilter, endFilter, sortConfig, getUserName]);
+    };
 
     // Build deduped {value,label} options for a facet, keyed by normalized value.
     const buildOptions = (pick: (i: Equipment) => string | undefined) => {
@@ -728,7 +1616,7 @@ function InventoryPageContent() {
             if (!map.has(key)) map.set(key, raw);
         }
         return Array.from(map.entries())
-            .map(([value, label]) => ({ value, label }))
+            .map(([key, label]) => ({ value: label, label }))
             .sort((a, b) => a.label.localeCompare(b.label));
     };
     // Category / Brand / Size options for the filters (deduped).
@@ -778,15 +1666,23 @@ function InventoryPageContent() {
         return getStatusVariant(item.status);
     };
 
-    const SortIcon = ({ active, direction }: { active: boolean; direction: 'asc' | 'desc' }) => (
-        <svg className={`w-4 h-4 ml-1 transition-colors ${active ? 'text-primary' : 'text-muted-foreground/30'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            {active && direction === 'desc' ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            )}
-        </svg>
-    );
+    const handleSort = (field: InventorySortField) => {
+        if (sortField === field) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
+        }
+    };
+
+    const SortIndicator = ({ field }: { field: InventorySortField }) => {
+        if (sortField !== field) {
+            return <ArrowUpDown size={11} className="text-gray-400 opacity-40 shrink-0 ml-1" />;
+        }
+        return sortDirection === 'asc' 
+            ? <ArrowUp size={11} className="text-primary shrink-0 ml-1" /> 
+            : <ArrowDown size={11} className="text-primary shrink-0 ml-1" />;
+    };
 
     const handlePrintQR = async (e: React.MouseEvent, item: Equipment) => {
         e.preventDefault();
@@ -840,11 +1736,25 @@ function InventoryPageContent() {
     };
 
     const toggleSelectAll = () => {
-        if (selectedItems.size === filteredItems.length && filteredItems.length > 0) {
-            setSelectedItems(new Set());
+        const currentBatch = pageSize === 'ALL' ? sortedItems : paginatedItems;
+        const allBatchSelected = currentBatch.length > 0 && currentBatch.every(i => selectedItems.has(i.id));
+        if (allBatchSelected) {
+            const next = new Set(selectedItems);
+            currentBatch.forEach(i => next.delete(i.id));
+            setSelectedItems(next);
         } else {
-            setSelectedItems(new Set(filteredItems.map(item => item.id)));
+            const next = new Set(selectedItems);
+            currentBatch.forEach(i => next.add(i.id));
+            setSelectedItems(next);
         }
+    };
+
+    const selectAllFiltered = () => {
+        setSelectedItems(new Set(filteredItems.map(item => item.id)));
+    };
+
+    const clearAllSelection = () => {
+        setSelectedItems(new Set());
     };
 
 
@@ -1364,17 +2274,17 @@ function InventoryPageContent() {
 
     return (
         <div className="flex flex-col h-[calc(100dvh-62px)] 2xl:h-[calc(100dvh-66px)] max-h-[calc(100dvh-62px)] 2xl:max-h-[calc(100dvh-66px)] w-full overflow-hidden space-y-1.5 animate-fade-in">
-            {/* Unified Compact Toolbar: Search + Quick Actions + Filters */}
+            {/* Unified Compact Toolbar: Search + Quick Actions + Filters (Matching Shoots page style) */}
             <div className="shrink-0 rounded-xl p-1.5 sm:p-2 shadow-2xs space-y-1.5 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800">
-                {/* Row 1: Search + Quick Tools + View Switcher + Primary Actions */}
+                {/* Row 1: Search + Quick Tools + View Switcher + Filter Toggle + Actions */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5 sm:gap-2">
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                         {/* Compact Search Input */}
-                        <div className="relative flex-1 min-w-[180px] max-w-md">
+                        <div className="relative flex-1 min-w-0 max-w-md">
                             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                             <input
-                                type="search"
-                                placeholder="Search name, barcode, serial…"
+                                type="text"
+                                placeholder="Search name, barcode, serial, model…"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 onKeyDown={(e) => {
@@ -1387,6 +2297,7 @@ function InventoryPageContent() {
                                     type="button"
                                     onClick={() => setSearch('')}
                                     className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                                    title="Clear search"
                                 >
                                     <X size={12} />
                                 </button>
@@ -1408,49 +2319,71 @@ function InventoryPageContent() {
                         </button>
                     </div>
 
-                    {/* View Mode + Actions */}
-                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    {/* View Mode + Filters + Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
                         {/* View Mode Toggle */}
-                        <div className="flex bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="flex bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
                             <button
                                 onClick={() => setViewMode('grid')}
-                                className={`p-1 rounded-md transition-all cursor-pointer ${
+                                className={`p-1.5 rounded-md transition-all cursor-pointer ${
                                     viewMode === 'grid'
                                         ? 'bg-white dark:bg-[#2c2c2e] text-primary shadow-xs'
                                         : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                 }`}
                                 title="Grid View"
                             >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                                </svg>
+                                <LayoutGrid size={14} />
                             </button>
                             <button
                                 onClick={() => setViewMode('list')}
-                                className={`p-1 rounded-md transition-all cursor-pointer ${
+                                className={`p-1.5 rounded-md transition-all cursor-pointer ${
                                     viewMode === 'list'
                                         ? 'bg-white dark:bg-[#2c2c2e] text-primary shadow-xs'
                                         : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                 }`}
                                 title="List / Table View"
                             >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                                </svg>
+                                <List size={14} />
                             </button>
                         </div>
+
+                        {/* Filter Toggle Button with Active Count Badge (Shoots style) */}
+                        <button
+                            type="button"
+                            onClick={() => setShowFilters(!showFilters)}
+                            className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer h-8 shrink-0 ${
+                                showFilters || hasAnyFilterActive
+                                    ? 'bg-primary/10 text-primary border border-primary/25 font-semibold'
+                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent'
+                            }`}
+                            title={hasAnyFilterActive ? 'Active filters applied. Click to toggle panel' : 'Filter inventory'}
+                        >
+                            <Filter size={12} />
+                            <span className="hidden sm:inline">Filters</span>
+                            {hasAnyFilterActive && (
+                                <span className="flex items-center justify-center min-w-[15px] h-[15px] px-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full">
+                                    {[
+                                        isStatusFiltered,
+                                        isCategoryFiltered,
+                                        isAssigneeFiltered,
+                                        isLocationFiltered,
+                                        isBrandFiltered,
+                                        isSizeFiltered,
+                                        !!search.trim()
+                                    ].filter(Boolean).length}
+                                </span>
+                            )}
+                            <ChevronDown size={12} className={`transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+                        </button>
 
                         {/* Database Cleanup Button */}
                         {(cleanupData.staleAssignments.length > 0 || cleanupData.ghostCheckouts.length > 0) && can('fixData') && (
                             <button
                                 onClick={handleCleanupAssignments}
-                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-lg border border-rose-500/30 flex items-center gap-1 transition-all animate-pulse cursor-pointer"
+                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-lg border border-rose-500/30 flex items-center gap-1 transition-all animate-pulse cursor-pointer h-8 shrink-0"
                                 title="Fix inconsistent data in database"
                             >
-                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M7.4 17.65c-.66.86-1.4 1.85-1.4 3.75 0 0 4.1 1.7 8 0 0-1.9-.74-2.89-1.4-3.75l-5.2-7.25c-.66-.86.13-1.65.95-1.65h3.3c.82 0 1.61.79.95 1.65l-5.2 7.25Z" />
-                                    <path d="M12 2c5.523 0 10 4.477 10 10 0 2.275-.76 4.375-2.031 6.094" />
-                                </svg>
+                                <RefreshCw size={12} />
                                 <span>Fix ({cleanupData.staleAssignments.length + cleanupData.ghostCheckouts.length})</span>
                             </button>
                         )}
@@ -1458,36 +2391,37 @@ function InventoryPageContent() {
                         {/* Bulk Import */}
                         <Link
                             href="/inventory/bulk-add"
-                            className="px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-1 transition-all cursor-pointer"
+                            className="px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-1 transition-all cursor-pointer h-8 shrink-0"
+                            title="Bulk Import Equipment"
                         >
-                            <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
+                            <Plus size={12} className="text-gray-500" />
                             <span className="hidden sm:inline">Bulk Import</span>
+                            <span className="sm:hidden">Import</span>
                         </Link>
 
                         {/* Export CSV */}
                         {can('exportCsv') && (
                             <button
                                 onClick={() => {
-                                    const headers = ['Name', 'Category', 'Barcode', 'Serial Number', 'Status', 'Assigned To'];
-                                    const rows = filteredItems.map(item => [
+                                    const headers = ['Name', 'Category', 'Barcode', 'Serial Number', 'Status', 'Location', 'Assigned To'];
+                                    const rows = sortedItems.map(item => [
                                         `"${item.name.replace(/"/g, '""')}"`,
                                         `"${item.category.replace(/"/g, '""')}"`,
                                         item.barcode,
                                         item.serialNumber || '',
                                         item.status,
+                                        `"${(item.location || '').replace(/"/g, '""')}"`,
                                         item.assignedTo ? (users[item.assignedTo] || 'Unknown') : ''
                                     ].join(','));
                                     const csvContent = [headers.join(','), ...rows].join('\n');
                                     downloadFile(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), `inventory_export_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
                                 }}
-                                className="px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-1 transition-all cursor-pointer"
+                                className="px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-1 transition-all cursor-pointer h-8 shrink-0"
+                                title="Export CSV"
                             >
-                                <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <span>Export</span>
+                                <FileText size={12} className="text-gray-500" />
+                                <span className="hidden sm:inline">Export</span>
+                                <span className="sm:hidden">CSV</span>
                             </button>
                         )}
 
@@ -1495,49 +2429,312 @@ function InventoryPageContent() {
                         {['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '') && (
                             <Link
                                 href="/inventory/add"
-                                className="px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-xs flex items-center gap-1 transition-all cursor-pointer"
+                                className="px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-xs flex items-center gap-1 transition-all cursor-pointer h-8 shrink-0"
+                                title="Add New Equipment"
                             >
-                                <span>+ New</span>
+                                <Plus size={12} strokeWidth={2.5} />
+                                <span className="hidden xs:inline">New</span>
                             </Link>
                         )}
                     </div>
                 </div>
 
-                {/* Row 2: Status Filter Tabs + Facet Filters + Summary Count */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-0.5 border-t border-gray-100 dark:border-gray-800/80">
-                    {/* Status Tabs */}
-                    <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide py-0.5">
-                        {(['ALL', 'AVAILABLE', 'CHECKED_OUT', 'PENDING_VERIFICATION', 'NEEDS_ATTENTION'] as const).map((status) => (
-                            <button
-                                key={status}
-                                onClick={() => setStatusFilter(status)}
-                                className={`whitespace-nowrap px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
-                                    statusFilter === status
-                                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black shadow-2xs font-semibold'
-                                        : 'text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                {/* Row 2: ALWAYS-VISIBLE ACTIVE FILTER CHIPS (When Filter Panel is Collapsed) */}
+                {!showFilters && hasAnyFilterActive && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-800/80 animate-in fade-in duration-150">
+                        <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 flex items-center gap-1 mr-0.5">
+                            <Filter size={11} className="text-primary" />
+                            Active:
+                        </span>
+
+                        {search.trim() && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 shadow-2xs">
+                                <span className="text-gray-400">Search:</span> &ldquo;{search}&rdquo;
+                                <button
+                                    onClick={() => setSearch('')}
+                                    className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                    title="Clear search query"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        )}
+
+                        {isStatusFiltered && statusFilter.map(st => {
+                            const opt = ALL_STATUS_OPTIONS.find(o => o.value === st);
+                            return (
+                                <span key={st} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary/10 text-primary border border-primary/25 shadow-2xs">
+                                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: opt?.color || '#2563eb' }} />
+                                    <span>{opt?.label || st.replace(/_/g, ' ')}</span>
+                                    <button
+                                        onClick={() => toggleStatusFilter(st)}
+                                        className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                        title={`Remove ${opt?.label || st} filter`}
+                                    >
+                                        <X size={11} />
+                                    </button>
+                                </span>
+                            );
+                        })}
+
+                        {categoryFilter.length > 0 && categoryFilter.map(cat => (
+                            <span key={cat} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary/10 text-primary border border-primary/25 shadow-2xs">
+                                <span className="opacity-70 font-normal">Category:</span> {cat}
+                                <button
+                                    onClick={() => {
+                                        setCategoryFilter(prev => prev.filter(c => c !== cat));
+                                        setCurrentPage(1);
+                                    }}
+                                    className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                    title={`Remove ${cat} filter`}
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        ))}
+
+                        {isAssigneeFiltered && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shadow-2xs">
+                                <span className="opacity-70 font-normal">Assigned:</span> {assigneeFilter === 'UNASSIGNED' ? 'Unassigned' : (getUserName(assigneeFilter) || 'User')}
+                                <button
+                                    onClick={() => {
+                                        setAssigneeFilter('ALL');
+                                        setCurrentPage(1);
+                                    }}
+                                    className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                    title="Remove assignee filter"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        )}
+
+                        {isLocationFiltered && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shadow-2xs">
+                                <span className="opacity-70 font-normal">Location:</span> {locationFilter === 'UNASSIGNED' ? 'No Location' : locationFilter}
+                                <button
+                                    onClick={() => {
+                                        setLocationFilter('ALL');
+                                        setCurrentPage(1);
+                                    }}
+                                    className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                    title="Remove location filter"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        )}
+
+                        {brandFilter.map(brand => (
+                            <span key={brand} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 shadow-2xs">
+                                <span className="text-gray-400">Brand:</span> {brand}
+                                <button
+                                    onClick={() => {
+                                        setBrandFilter(prev => prev.filter(b => b !== brand));
+                                        setCurrentPage(1);
+                                    }}
+                                    className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        ))}
+
+                        {sizeFilter.map(sz => (
+                            <span key={sz} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 shadow-2xs">
+                                <span className="text-gray-400">Size:</span> {sz === '__none__' ? 'No size' : sz}
+                                <button
+                                    onClick={() => {
+                                        setSizeFilter(prev => prev.filter(s => s !== sz));
+                                        setCurrentPage(1);
+                                    }}
+                                    className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        ))}
+
+                        <button
+                            type="button"
+                            onClick={resetAllFilters}
+                            className="text-[11px] font-bold text-red-500 hover:text-red-600 hover:underline px-1.5 py-0.5 cursor-pointer transition-colors ml-1"
+                            title="Reset all filters"
+                        >
+                            Reset all
+                        </button>
+                    </div>
+                )}
+
+                {/* Row 2: SLEEK 1-ROW FILTER BAR (When Filter Panel is Expanded) */}
+                {showFilters && (
+                    <div className="flex items-center gap-1.5 sm:gap-2 pt-1.5 border-t border-gray-100 dark:border-gray-800/80 flex-wrap sm:flex-nowrap overflow-x-auto no-scrollbar animate-in fade-in slide-in-from-top-1 duration-150">
+                        {/* 1. Status Multi-Filter Trigger */}
+                        <button
+                            type="button"
+                            data-filter-trigger="status"
+                            onClick={(e) => toggleFilterMenu('status', e)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer h-7.5 shadow-2xs shrink-0 ${
+                                isStatusFiltered
+                                    ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                            }`}
+                        >
+                            <span className="text-gray-400 dark:text-gray-500 font-normal">Status:</span>
+                            <span className="truncate max-w-[110px]">
+                                {!isStatusFiltered
+                                    ? 'All'
+                                    : statusFilter.length === 1
+                                    ? (ALL_STATUS_OPTIONS.find(o => o.value === statusFilter[0])?.label || statusFilter[0])
+                                    : `${statusFilter.length} active`}
+                            </span>
+                            <ChevronDown size={11} className="text-gray-400 shrink-0" />
+                        </button>
+
+                        {/* 2. Category Filter Trigger */}
+                        <button
+                            type="button"
+                            data-filter-trigger="category"
+                            onClick={(e) => toggleFilterMenu('category', e)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer h-7.5 shadow-2xs shrink-0 ${
+                                isCategoryFiltered
+                                    ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                            }`}
+                        >
+                            <span className="text-gray-400 dark:text-gray-500 font-normal">Category:</span>
+                            <span className="truncate max-w-[110px]">
+                                {!isCategoryFiltered
+                                    ? 'All'
+                                    : categoryFilter.length === 1
+                                    ? categoryFilter[0]
+                                    : `${categoryFilter.length} active`}
+                            </span>
+                            <ChevronDown size={11} className="text-gray-400 shrink-0" />
+                        </button>
+
+                        {/* 3. Assigned To Filter Trigger */}
+                        <button
+                            type="button"
+                            data-filter-trigger="assignee"
+                            onClick={(e) => toggleFilterMenu('assignee', e)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer h-7.5 shadow-2xs shrink-0 ${
+                                isAssigneeFiltered
+                                    ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                            }`}
+                        >
+                            <span className="text-gray-400 dark:text-gray-500 font-normal">Assigned:</span>
+                            <span className="truncate max-w-[110px]">
+                                {assigneeFilter === 'ALL'
+                                    ? 'All'
+                                    : assigneeFilter === 'UNASSIGNED'
+                                    ? 'Unassigned'
+                                    : (getUserName(assigneeFilter) || '1 User')}
+                            </span>
+                            <ChevronDown size={11} className="text-gray-400 shrink-0" />
+                        </button>
+
+                        {/* 4. Location Filter */}
+                        <div className="relative flex items-center shrink-0">
+                            <select
+                                value={locationFilter}
+                                onChange={(e) => {
+                                    setLocationFilter(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                className={`h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary ${
+                                    isLocationFiltered
+                                        ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                 }`}
                             >
-                                {status === 'ALL' ? 'All' : status === 'NEEDS_ATTENTION' ? 'Needs Attention' : status === 'PENDING_VERIFICATION' ? 'Pending' : status.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                            </button>
-                        ))}
-                    </div>
+                                <option value="ALL">Location: All</option>
+                                <option value="UNASSIGNED">No Location</option>
+                                {locationOptions.map(loc => (
+                                    <option key={loc} value={loc}>{loc}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
+                        </div>
 
-                    {/* Facet Filters & Selected Count */}
-                    <div className="flex items-center gap-2 flex-wrap">
+                        {/* 5. Additional Facet Filters (Brand, Size, Connector End) */}
                         <FacetFilters
-                            resultCount={filteredItems.length}
+                            resultCount={totalItems}
                             groups={[
-                                { key: 'category', label: 'Category', options: categoryOptions, selected: categoryFilter, onChange: setCategoryFilter },
-                                { key: 'brand', label: 'Brand', options: brandOptions, selected: brandFilter, onChange: setBrandFilter },
-                                { key: 'size', label: 'Size', options: sizeOptions, selected: sizeFilter, onChange: setSizeFilter },
-                                { key: 'end', label: 'Connector end', options: endOptions, selected: endFilter, onChange: setEndFilter },
+                                { key: 'brand', label: 'Brand', options: brandOptions, selected: brandFilter, onChange: (val) => { setBrandFilter(val); setCurrentPage(1); } },
+                                { key: 'size', label: 'Size', options: sizeOptions, selected: sizeFilter, onChange: (val) => { setSizeFilter(val); setCurrentPage(1); } },
+                                { key: 'end', label: 'Connector', options: endOptions, selected: endFilter, onChange: (val) => { setEndFilter(val); setCurrentPage(1); } },
                             ]}
                         />
-                        <span className="text-[11px] font-medium text-gray-400">
-                            {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
-                        </span>
+
+                        {/* Reset Action */}
+                        {hasAnyFilterActive && (
+                            <button
+                                type="button"
+                                onClick={resetAllFilters}
+                                className="h-7.5 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 transition-colors cursor-pointer shrink-0"
+                                title="Reset all active filters"
+                            >
+                                <X size={11} />
+                                <span>Reset</span>
+                            </button>
+                        )}
+
+                        {/* Sort Controls (Flush right, Shoots style) */}
+                        <div className="flex items-center gap-1 sm:ml-auto shrink-0">
+                            <div className="relative flex items-center">
+                                <select
+                                    value={sortField}
+                                    onChange={(e) => setSortField(e.target.value as InventorySortField)}
+                                    className="h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shadow-2xs appearance-none"
+                                >
+                                    <option value="name">Sort: Name</option>
+                                    <option value="category">Sort: Category</option>
+                                    <option value="barcode">Sort: Barcode</option>
+                                    <option value="serialNumber">Sort: S/N</option>
+                                    <option value="status">Sort: Status</option>
+                                    <option value="assignedToName">Sort: Assigned To</option>
+                                    <option value="location">Sort: Location</option>
+                                    <option value="brand">Sort: Brand</option>
+                                    <option value="model">Sort: Model</option>
+                                    <option value="createdAt">Sort: Added Date</option>
+                                </select>
+                                <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                className="h-7.5 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1 text-xs cursor-pointer shadow-2xs"
+                                title={`Sorting ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}. Click to toggle`}
+                            >
+                                {sortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                                <span className="font-semibold text-[11px]">{sortDirection === 'asc' ? 'Asc' : 'Desc'}</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
+            </div>
+
+            {/* Results Count (Fixed & Compact, matching Shoots page) */}
+            <div className="shrink-0 flex items-center justify-between px-1 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
+                <p>
+                    {totalItems === 0 ? (
+                        '0 items'
+                    ) : (
+                        <>
+                            Showing <span className="font-semibold text-gray-900 dark:text-white">{fromIndex}–{toIndex}</span> of <span className="font-semibold text-gray-900 dark:text-white">{totalItems}</span> items
+                            {totalItems !== items.filter(i => !isDataAsset(i)).length && (
+                                <span className="text-gray-400 ml-1"> (filtered from {items.filter(i => !isDataAsset(i)).length})</span>
+                            )}
+                        </>
+                    )}
+                </p>
+                {totalItems > 0 && pageSize !== 'ALL' && totalPages > 1 && (
+                    <p className="text-gray-400">
+                        Page {currentPage} of {totalPages}
+                    </p>
+                )}
             </div>
 
             {/* Scanner Drawer (if activated) */}
@@ -1586,13 +2783,18 @@ function InventoryPageContent() {
                             type="button"
                             onClick={toggleSelectAll}
                             className="flex items-center justify-center cursor-pointer shrink-0"
+                            title={
+                                paginatedItems.length > 0 && paginatedItems.every(i => selectedItems.has(i.id))
+                                    ? 'Deselect page'
+                                    : 'Select page'
+                            }
                         >
                             <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                selectedItems.size === filteredItems.length && filteredItems.length > 0
+                                paginatedItems.length > 0 && paginatedItems.every(i => selectedItems.has(i.id))
                                     ? 'border-primary bg-primary text-white'
                                     : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
                             }`}>
-                                {selectedItems.size === filteredItems.length && filteredItems.length > 0 && (
+                                {paginatedItems.length > 0 && paginatedItems.every(i => selectedItems.has(i.id)) && (
                                     <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                     </svg>
@@ -1602,6 +2804,24 @@ function InventoryPageContent() {
                         <span className="text-xs font-semibold text-primary">
                             {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
                         </span>
+                        {selectedItems.size > 0 && selectedItems.size < totalItems && (
+                            <button
+                                type="button"
+                                onClick={selectAllFiltered}
+                                className="text-[11px] font-semibold text-primary underline hover:text-primary/80 cursor-pointer ml-1"
+                            >
+                                Select all {totalItems}
+                            </button>
+                        )}
+                        {selectedItems.size > 0 && (
+                            <button
+                                type="button"
+                                onClick={clearAllSelection}
+                                className="text-[11px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer ml-1"
+                            >
+                                Clear
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -1743,23 +2963,28 @@ function InventoryPageContent() {
                         ))}
                     </div>
                 ) : viewMode === 'grid' ? (
-                    <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-2 sm:p-2.5">
+                    <div ref={cardScrollRef} className="inventory-card-scroll flex-1 min-h-0 overflow-y-auto custom-scrollbar p-2 sm:p-2.5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
-                            {filteredItems.map((item) => {
+                            {paginatedItems.map((item) => {
                                 const issue = getEquipmentIssue(item);
 
                                 return (
                                     <Link
                                         key={item.id}
+                                        id={`inventory-card-${item.barcode}`}
+                                        data-inventory-barcode={item.barcode}
                                         href={`/inventory/${item.barcode}`}
                                         onClick={() => {
-                                            const scroller = document.querySelector('.app-main-scroll');
-                                            sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
-                                            sessionStorage.setItem('inventoryFlash', item.barcode);
+                                            if (typeof window !== 'undefined') {
+                                                const scroller = cardScrollRef.current;
+                                                sessionStorage.setItem('inventoryScroll', String(scroller?.scrollTop ?? 0));
+                                                sessionStorage.setItem('inventoryFlash', item.barcode);
+                                                sessionStorage.setItem('inventoryCurrentPage', String(currentPage));
+                                            }
                                         }}
                                         className="block h-full"
                                     >
-                                        <div className={`group bg-white dark:bg-[#1c1c1e] rounded-xl p-2.5 border transition-all duration-300 cursor-pointer h-full flex flex-col ${item.barcode === flashBarcode ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-inset ring-primary/30' : 'border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-xs'}`}>
+                                        <div className={`group bg-white dark:bg-[#1c1c1e] rounded-xl p-2.5 border transition-all duration-300 cursor-pointer h-full flex flex-col ${item.barcode === flashBarcode ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-inset ring-primary/30' : selectedItems.has(item.id) ? 'border-primary/50 bg-primary/[0.04]' : 'border-gray-100 dark:border-gray-800 hover:border-primary/30 hover:shadow-xs'}`}>
                                             <div className="flex items-start justify-between gap-1.5 mb-1.5">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-start gap-1 min-w-0">
@@ -1801,6 +3026,12 @@ function InventoryPageContent() {
                                                     <span className="font-mono text-gray-500 shrink-0">{item.barcode}</span>
                                                 </div>
 
+                                                {item.location && (
+                                                    <div className="text-[10px] text-gray-500 truncate mt-0.5 flex items-center gap-1">
+                                                        <span className="text-gray-400">Loc:</span> {item.location}
+                                                    </div>
+                                                )}
+
                                                 {issue && (
                                                     <div className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-1.5 py-1 text-[10px] font-semibold leading-snug text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                                                         <span className="block truncate">{getIssueSummary(issue)}</span>
@@ -1828,173 +3059,615 @@ function InventoryPageContent() {
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-xs text-left border-collapse">
-                            <thead className="sticky top-0 z-20 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 shadow-2xs">
-                                <tr>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3 py-1.5 2xl:py-2 w-8">
-                                        <button
-                                            type="button"
-                                            onClick={toggleSelectAll}
-                                            className="flex items-center justify-center cursor-pointer"
-                                        >
-                                            <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                                selectedItems.size === filteredItems.length && filteredItems.length > 0
-                                                    ? 'border-primary bg-primary text-white'
-                                                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
-                                            }`}>
-                                                {selectedItems.size === filteredItems.length && filteredItems.length > 0 && (
-                                                    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
-                                            </span>
-                                        </button>
-                                    </th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('name')}>
-                                        <div className="flex items-center whitespace-nowrap">Equipment Name <SortIcon active={sortConfig?.key === 'name'} direction={sortConfig?.direction || 'asc'} /></div>
-                                    </th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">Brand</th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">Model</th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">Size</th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('category')}>
-                                        <div className="flex items-center">Category <SortIcon active={sortConfig?.key === 'category'} direction={sortConfig?.direction || 'asc'} /></div>
-                                    </th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('barcode')}>
-                                        <div className="flex items-center">Barcode <SortIcon active={sortConfig?.key === 'barcode'} direction={sortConfig?.direction || 'asc'} /></div>
-                                    </th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('serialNumber')}>
-                                        <div className="flex items-center whitespace-nowrap">S/N <SortIcon active={sortConfig?.key === 'serialNumber'} direction={sortConfig?.direction || 'asc'} /></div>
-                                    </th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('status')}>
-                                        <div className="flex items-center">Status <SortIcon active={sortConfig?.key === 'status'} direction={sortConfig?.direction || 'asc'} /></div>
-                                    </th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-center">Action</th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('assignedToName')}>
-                                        <div className="flex items-center">Assigned To <SortIcon active={sortConfig?.key === 'assignedToName'} direction={sortConfig?.direction || 'asc'} /></div>
-                                    </th>
-                                    <th className="sticky top-0 bg-gray-50/95 dark:bg-[#1f1f23]/95 backdrop-blur-xs z-20 px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => handleSort('createdAt')}>
-                                        <div className="flex items-center whitespace-nowrap">Added <SortIcon active={sortConfig?.key === 'createdAt'} direction={sortConfig?.direction || 'asc'} /></div>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800/70">
-                                {filteredItems.map((item) => {
-                                    const issue = getEquipmentIssue(item);
+                    <div ref={tableScrollRef} className="inventory-list-scroll flex-1 min-h-0 overflow-auto custom-scrollbar">
+                        <div className="w-full min-w-full" style={{ minWidth: `${minTableWidth}px` }}>
+                            {/* Table Header (Sticky at Top with Resizer Handles & 3-Dots Menu) */}
+                            <div className="sticky top-0 z-20 bg-gray-50 dark:bg-[#1f1f23] border-b border-gray-200 dark:border-gray-800 flex items-stretch w-full text-[10px] sm:text-[11px] 2xl:text-xs font-semibold text-gray-500 dark:text-gray-400 select-none uppercase tracking-wider shadow-2xs">
+                                <div ref={headerRef} className="flex items-center flex-1 min-w-0">
+                                    {orderedVisibleColumns.map((colKey, colIdx) => {
+                                        const isLast = colIdx === orderedVisibleColumns.length - 1;
+                                        const isDragOver = dragOverCol === colKey;
+                                        const isDragging = draggedCol === colKey;
+                                        const isSelectCol = colKey === 'select';
+                                        const isNameCol = colKey === 'name';
+                                        const isStickyCol = isSelectCol || isNameCol;
+                                        const selectWidth = colWidths.select || DEFAULT_COLUMN_WIDTHS.select || 40;
+                                        const stickyLeft = isSelectCol ? 0 : selectWidth;
 
+                                        return (
+                                            <div
+                                                key={colKey}
+                                                data-col-key={colKey}
+                                                style={{
+                                                    ...getColumnStyle(colKey),
+                                                    ...(isStickyCol ? { position: 'sticky', left: `${stickyLeft}px`, zIndex: isSelectCol ? 35 : 30 } : {})
+                                                }}
+                                                draggable={!resizingCol && colKey !== 'select' && colKey !== 'name'}
+                                                onDragStart={(e) => handleHeaderDragStart(colKey, e)}
+                                                onDragOver={(e) => handleHeaderDragOver(colKey, e)}
+                                                onDrop={(e) => handleHeaderDrop(colKey, e)}
+                                                onDragEnd={handleHeaderDragEnd}
+                                                className={`relative flex items-center ${
+                                                    isSelectCol ? 'px-0 justify-center' : 'px-2 xl:px-2.5 2xl:px-3'
+                                                } py-1.5 2xl:py-2 group/header ${
+                                                    colKey !== 'select' && colKey !== 'name' ? 'cursor-grab active:cursor-grabbing' : ''
+                                                } transition-colors ${
+                                                    !isLast ? 'border-r border-gray-200 dark:border-gray-800' : ''
+                                                } ${isDragOver ? 'bg-primary/20 ring-2 ring-primary ring-inset' : ''} ${
+                                                    isDragging ? 'opacity-30' : ''
+                                                } ${
+                                                    isStickyCol ? 'bg-gray-50 dark:bg-[#1f1f23]' : ''
+                                                } ${
+                                                    isNameCol && isTableScrolled ? 'shadow-[4px_0_8px_-3px_rgba(0,0,0,0.12)] dark:shadow-[4px_0_8px_-3px_rgba(0,0,0,0.4)]' : ''
+                                                }`}
+                                                title={colKey !== 'select' && colKey !== 'name' ? "Drag column header left/right to reorder" : undefined}
+                                            >
+                                                <div className="flex items-center min-w-0 flex-1 w-full">
+                                                    {colKey === 'select' && (
+                                                        <div className="flex items-center justify-center w-full min-w-0">
+                                                            <button
+                                                                type="button"
+                                                                onClick={toggleSelectAll}
+                                                                className="flex items-center justify-center cursor-pointer"
+                                                                title="Select all on this page"
+                                                            >
+                                                                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                                    paginatedItems.length > 0 && paginatedItems.every(i => selectedItems.has(i.id))
+                                                                        ? 'border-primary bg-primary text-white'
+                                                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                                }`}>
+                                                                    {paginatedItems.length > 0 && paginatedItems.every(i => selectedItems.has(i.id)) && (
+                                                                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                    )}
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {colKey === 'name' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSort('name')}
+                                                            className="flex items-center truncate text-left font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white transition-colors cursor-pointer outline-none focus:outline-none select-none w-full"
+                                                            title="Sort by Equipment Name"
+                                                        >
+                                                            <span className="truncate">Equipment Name</span> <SortIndicator field="name" />
+                                                        </button>
+                                                    )}
+
+                                                    {colKey === 'brand' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSort('brand')}
+                                                            className="flex items-center truncate text-left font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white transition-colors cursor-pointer outline-none focus:outline-none select-none w-full"
+                                                            title="Sort by Brand"
+                                                        >
+                                                            <span className="truncate">Brand</span> <SortIndicator field="brand" />
+                                                        </button>
+                                                    )}
+
+                                                    {colKey === 'model' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSort('model')}
+                                                            className="flex items-center truncate text-left font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white transition-colors cursor-pointer outline-none focus:outline-none select-none w-full"
+                                                            title="Sort by Model"
+                                                        >
+                                                            <span className="truncate">Model</span> <SortIndicator field="model" />
+                                                        </button>
+                                                    )}
+
+                                                    {colKey === 'size' && (
+                                                        <span className="text-gray-500 dark:text-gray-400 font-bold truncate">
+                                                            Size
+                                                        </span>
+                                                    )}
+
+                                                    {colKey === 'category' && (
+                                                        <div className="flex items-center gap-1 min-w-0 w-full justify-between">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSort('category')}
+                                                                className="font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white flex items-center gap-0.5 truncate cursor-pointer outline-none focus:outline-none select-none"
+                                                                title="Sort by Category"
+                                                            >
+                                                                <span className="truncate">Category</span> <SortIndicator field="category" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                data-filter-trigger="category"
+                                                                onClick={(e) => toggleFilterMenu('category', e)}
+                                                                className={`p-1 rounded-md transition-all shrink-0 flex items-center gap-0.5 cursor-pointer outline-none focus:outline-none select-none ${
+                                                                    isCategoryFiltered
+                                                                        ? 'bg-primary text-white shadow-xs px-1.5'
+                                                                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                                                }`}
+                                                                title={`Filter by Category (${categoryFilter.length > 0 ? `${categoryFilter.length} selected` : 'All'})`}
+                                                            >
+                                                                <Filter size={11} className={isCategoryFiltered ? 'fill-current' : ''} />
+                                                                {isCategoryFiltered && (
+                                                                    <span className="text-[10px] font-bold leading-none">{categoryFilter.length}</span>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {colKey === 'barcode' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSort('barcode')}
+                                                            className="flex items-center truncate text-left font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white transition-colors cursor-pointer outline-none focus:outline-none select-none w-full"
+                                                            title="Sort by Barcode"
+                                                        >
+                                                            <span className="truncate">Barcode</span> <SortIndicator field="barcode" />
+                                                        </button>
+                                                    )}
+
+                                                    {colKey === 'serialNumber' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSort('serialNumber')}
+                                                            className="flex items-center truncate text-left font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white transition-colors cursor-pointer outline-none focus:outline-none select-none w-full"
+                                                            title="Sort by Serial Number"
+                                                        >
+                                                            <span className="truncate">S/N</span> <SortIndicator field="serialNumber" />
+                                                        </button>
+                                                    )}
+
+                                                    {colKey === 'status' && (
+                                                        <div className="flex items-center gap-1 min-w-0 w-full justify-between">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSort('status')}
+                                                                className="font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white flex items-center gap-0.5 truncate cursor-pointer outline-none focus:outline-none select-none"
+                                                                title="Sort by Status"
+                                                            >
+                                                                <span className="truncate">Status</span> <SortIndicator field="status" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                data-filter-trigger="status"
+                                                                onClick={(e) => toggleFilterMenu('status', e)}
+                                                                className={`p-1 rounded-md transition-all shrink-0 flex items-center gap-0.5 cursor-pointer outline-none focus:outline-none select-none ${
+                                                                    isStatusFiltered
+                                                                        ? 'bg-primary text-white shadow-xs px-1.5'
+                                                                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                                                }`}
+                                                                title={`Filter by Status (${isStatusFiltered ? `${statusFilter.length} selected` : 'All'})`}
+                                                            >
+                                                                <Filter size={11} className={isStatusFiltered ? 'fill-current' : ''} />
+                                                                {isStatusFiltered && (
+                                                                    <span className="text-[10px] font-bold leading-none">{statusFilter.length}</span>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {colKey === 'action' && (
+                                                        <div className="flex items-center justify-center w-full min-w-0">
+                                                            <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Action</span>
+                                                        </div>
+                                                    )}
+
+                                                    {colKey === 'assignedToName' && (
+                                                        <div className="flex items-center gap-1 min-w-0 w-full justify-between">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSort('assignedToName')}
+                                                                className="font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white flex items-center gap-0.5 min-w-0 truncate cursor-pointer outline-none focus:outline-none select-none"
+                                                                title="Sort by Assignee"
+                                                            >
+                                                                <span className="truncate">Assignee</span> <SortIndicator field="assignedToName" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                data-filter-trigger="assignee"
+                                                                onClick={(e) => toggleFilterMenu('assignee', e)}
+                                                                className={`p-1 rounded-md transition-all shrink-0 flex items-center gap-0.5 cursor-pointer outline-none focus:outline-none select-none ${
+                                                                    isAssigneeFiltered
+                                                                        ? 'bg-primary text-white shadow-xs px-1.5'
+                                                                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                                                }`}
+                                                                title="Filter by Assignee"
+                                                            >
+                                                                <Filter size={11} className={isAssigneeFiltered ? 'fill-current' : ''} />
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {colKey === 'location' && (
+                                                        <div className="flex items-center gap-1 min-w-0 w-full justify-between">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSort('location')}
+                                                                className="font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white flex items-center gap-0.5 truncate cursor-pointer outline-none focus:outline-none select-none"
+                                                                title="Sort by Location"
+                                                            >
+                                                                <span className="truncate">Location</span> <SortIndicator field="location" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                data-filter-trigger="location"
+                                                                onClick={(e) => toggleFilterMenu('location', e)}
+                                                                className={`p-1 rounded-md transition-all shrink-0 flex items-center gap-0.5 cursor-pointer outline-none focus:outline-none select-none ${
+                                                                    isLocationFiltered
+                                                                        ? 'bg-primary text-white shadow-xs px-1.5'
+                                                                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                                                }`}
+                                                                title="Filter by Location"
+                                                            >
+                                                                <Filter size={11} className={isLocationFiltered ? 'fill-current' : ''} />
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {colKey === 'createdAt' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSort('createdAt')}
+                                                            className="flex items-center truncate text-left font-bold text-gray-700 dark:text-gray-200 hover:text-gray-950 dark:hover:text-white transition-colors cursor-pointer outline-none focus:outline-none select-none w-full"
+                                                            title="Sort by Added Date"
+                                                        >
+                                                            <span className="truncate">Added Date</span> <SortIndicator field="createdAt" />
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {/* Clean Full-Height Column Resizer Handle */}
+                                                <div
+                                                    onMouseDown={(e) => handleMouseDownResize(colKey, e)}
+                                                    onTouchStart={(e) => handleTouchStartResize(colKey, e)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize select-none flex items-center justify-center group/resizer z-30 touch-none"
+                                                    title="Drag to resize column width"
+                                                >
+                                                    <div className={`w-[2px] h-full transition-colors ${
+                                                        resizingCol === colKey ? 'bg-primary' : 'bg-transparent group-hover/resizer:bg-primary/70'
+                                                    }`} />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Permanent Fixed 3-Dots Menu at far right of Table Header */}
+                                <div className="relative shrink-0 flex items-center justify-center w-9 border-l border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#1f1f23] z-30" ref={columnMenuRef}>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsColumnMenuOpen(!isColumnMenuOpen);
+                                        }}
+                                        className={`p-1 rounded-md transition-all cursor-pointer ${
+                                            isColumnMenuOpen
+                                                ? 'bg-primary text-white shadow-xs'
+                                                : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                        }`}
+                                        title="Configure columns &amp; ordering"
+                                    >
+                                        <MoreVertical size={14} />
+                                    </button>
+
+                                    {/* Column Management Dropdown Menu */}
+                                    {isColumnMenuOpen && (
+                                        <div 
+                                            onClick={(e) => e.stopPropagation()} 
+                                            className="absolute top-full right-0 mt-1 w-64 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-150 normal-case tracking-normal"
+                                        >
+                                            <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-gray-900 dark:text-white">Customize Columns</h4>
+                                                    <p className="text-[10px] text-gray-400">Reorder &amp; toggle visibility</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleResetColumns}
+                                                    className="text-[10px] font-semibold text-primary hover:underline cursor-pointer"
+                                                >
+                                                    Reset
+                                                </button>
+                                            </div>
+
+                                            <div className="space-y-1 max-h-72 overflow-y-auto pr-0.5 custom-scrollbar">
+                                                {columnOrder.filter(k => k !== 'select').map((colKey, index) => {
+                                                    const colDef = ALL_COLUMNS.find(c => c.id === colKey);
+                                                    if (!colDef) return null;
+                                                    const isChecked = visibleColumns.includes(colKey);
+                                                    const isMandatory = colDef.mandatory;
+
+                                                    return (
+                                                        <div
+                                                            key={colKey}
+                                                            onClick={() => {
+                                                                if (!isMandatory) toggleColumn(colKey);
+                                                            }}
+                                                            className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors select-none ${
+                                                                isMandatory
+                                                                    ? 'bg-gray-50/80 dark:bg-gray-800/30 cursor-default opacity-85'
+                                                                    : 'cursor-pointer ' + (isChecked ? 'bg-gray-50 dark:bg-gray-800/60' : 'opacity-60 hover:opacity-90')
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
+                                                                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                                    isChecked
+                                                                        ? 'border-primary bg-primary text-white'
+                                                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                                }`}>
+                                                                    {isChecked && (
+                                                                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                    )}
+                                                                </span>
+                                                                <span className={`font-medium truncate ${isChecked ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                                    {colDef.label}
+                                                                </span>
+                                                                {isMandatory && (
+                                                                    <span className="text-[9px] font-semibold uppercase px-1 py-0.2 rounded bg-gray-200/80 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ml-1">
+                                                                        Required
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Reorder Buttons */}
+                                                            {!isMandatory ? (
+                                                                <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            moveColumn(colKey, 'up');
+                                                                        }}
+                                                                        disabled={index <= 1}
+                                                                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-20 disabled:pointer-events-none transition-colors cursor-pointer"
+                                                                        title="Move column left / up"
+                                                                    >
+                                                                        <ChevronUp size={13} />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            moveColumn(colKey, 'down');
+                                                                        }}
+                                                                        disabled={index === columnOrder.filter(k => k !== 'select').length - 1}
+                                                                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-20 disabled:pointer-events-none transition-colors cursor-pointer"
+                                                                        title="Move column right / down"
+                                                                    >
+                                                                        <ChevronDown size={13} />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-[10px] text-gray-400 font-medium italic pr-1">Pinned</span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Table Body Rows */}
+                            <div className="divide-y divide-gray-100 dark:divide-gray-800/70 w-full">
+                                {paginatedItems.map((item, index) => {
+                                    const issue = getEquipmentIssue(item);
                                     return (
-                                        <tr
+                                        <div
                                             key={item.id}
+                                            id={`inventory-row-${item.barcode}`}
+                                            data-inventory-barcode={item.barcode}
                                             onClick={() => {
                                                 if (isBulkEditMode) return;
                                                 if (typeof window !== 'undefined' && window.getSelection()?.toString()) return;
                                                 openItem(item.barcode);
                                             }}
-                                            className={`transition-colors min-h-[34px] ${!isBulkEditMode && 'cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-950/20'} ${item.barcode === flashBarcode ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : selectedItems.has(item.id) ? 'bg-primary/[0.06] dark:bg-primary/[0.12]' : 'bg-white dark:bg-transparent'}`}
+                                            className="group w-full"
                                         >
-                                            <td className="px-2.5 2xl:px-3 py-1.5 2xl:py-2" onClick={(e) => e.stopPropagation()}>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => toggleSelect(e, item.id)}
-                                                    className="flex items-center justify-center cursor-pointer"
-                                                >
-                                                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                                        selectedItems.has(item.id)
-                                                            ? 'border-primary bg-primary text-white'
-                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
-                                                    }`}>
-                                                        {selectedItems.has(item.id) && (
-                                                            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        )}
-                                                    </span>
-                                                </button>
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">
-                                                {isBulkEditMode ? (
-                                                    <div className="w-40">
-                                                        <InlineInput value={editDrafts[item.id]?.name ?? item.name} onChange={(val) => handleDraftChange(item.id, 'name', val)} placeholder="Name" />
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
-                                                        {issue && (
-                                                            <div className="mt-0.5 flex max-w-[320px] items-start gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                                                <svg className="mt-0.5 h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                                                </svg>
-                                                                <span className="line-clamp-2">{getIssueSummary(issue)}: {issue.note}</span>
+                                            <div className={`flex items-center w-full transition-colors ${
+                                                !isBulkEditMode ? 'cursor-pointer' : ''
+                                            } ${
+                                                item.barcode === flashBarcode 
+                                                    ? 'bg-[#eef2ff] dark:bg-[#1e1e38] ring-1 ring-inset ring-primary/40' 
+                                                    : selectedItems.has(item.id) 
+                                                        ? 'bg-[#f0fdf4] dark:bg-[#052e16] hover:bg-[#e2f9e8] dark:hover:bg-[#07381b]' 
+                                                        : index % 2 === 1 
+                                                            ? 'bg-[#f9fafb] dark:bg-[#18181b] hover:bg-[#f0f7ff] dark:hover:bg-[#1a2333]' 
+                                                            : 'bg-white dark:bg-[#1c1c1e] hover:bg-[#f0f7ff] dark:hover:bg-[#1a2333]'
+                                            }`}>
+                                                <div className="flex items-center flex-1 min-w-0">
+                                                    {orderedVisibleColumns.map((colKey, colIdx) => {
+                                                        const isLast = colIdx === orderedVisibleColumns.length - 1;
+                                                        const isSelectCol = colKey === 'select';
+                                                        const isNameCol = colKey === 'name';
+                                                        const isStickyCol = isSelectCol || isNameCol;
+                                                        const selectWidth = colWidths.select || DEFAULT_COLUMN_WIDTHS.select || 40;
+                                                        const stickyLeft = isSelectCol ? 0 : selectWidth;
+
+                                                        return (
+                                                            <div
+                                                                key={colKey}
+                                                                style={{
+                                                                    ...getColumnStyle(colKey),
+                                                                    ...(isStickyCol ? { position: 'sticky', left: `${stickyLeft}px`, zIndex: isSelectCol ? 15 : 10 } : {})
+                                                                }}
+                                                                className={`${
+                                                                    isSelectCol ? 'px-0 justify-center' : 'px-2 xl:px-2.5 2xl:px-3'
+                                                                } py-1.5 2xl:py-2 flex items-center min-h-[34px] 2xl:min-h-[40px] text-xs min-w-0 ${
+                                                                    !isLast ? 'border-r border-gray-100 dark:border-gray-800/60' : ''
+                                                                } ${
+                                                                    isStickyCol
+                                                                        ? (item.barcode === flashBarcode 
+                                                                            ? 'bg-[#eef2ff] dark:bg-[#1e1e38]' 
+                                                                            : selectedItems.has(item.id) 
+                                                                                ? 'bg-[#f0fdf4] dark:bg-[#052e16] group-hover:bg-[#e2f9e8] dark:group-hover:bg-[#07381b]' 
+                                                                                : (index % 2 === 1 
+                                                                                    ? 'bg-[#f9fafb] dark:bg-[#18181b]' 
+                                                                                    : 'bg-white dark:bg-[#1c1c1e]'
+                                                                                  ) + ' group-hover:bg-[#f0f7ff] dark:group-hover:bg-[#1a2333]'
+                                                                          )
+                                                                        : ''
+                                                                } ${
+                                                                    isNameCol && isTableScrolled ? 'shadow-[4px_0_8px_-3px_rgba(0,0,0,0.12)] dark:shadow-[4px_0_8px_-3px_rgba(0,0,0,0.4)]' : ''
+                                                                }`}
+                                                            >
+                                                                {colKey === 'select' && (
+                                                                    <div className="flex items-center justify-center shrink-0 w-full" onClick={(e) => e.stopPropagation()}>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => toggleSelect(e, item.id)}
+                                                                            className="flex items-center justify-center cursor-pointer"
+                                                                        >
+                                                                            <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                                                selectedItems.has(item.id)
+                                                                                    ? 'border-primary bg-primary text-white'
+                                                                                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                                            }`}>
+                                                                                {selectedItems.has(item.id) && (
+                                                                                    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                                    </svg>
+                                                                                )}
+                                                                            </span>
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'name' && (
+                                                                    <div className="min-w-0 w-full">
+                                                                        {isBulkEditMode ? (
+                                                                            <InlineInput value={editDrafts[item.id]?.name ?? item.name} onChange={(val) => handleDraftChange(item.id, 'name', val)} placeholder="Name" />
+                                                                        ) : (
+                                                                            <>
+                                                                                <div className="font-medium text-gray-900 dark:text-gray-100 truncate hover:text-primary transition-colors" title={item.name}>
+                                                                                    {item.name}
+                                                                                </div>
+                                                                                {(!visibleColumns.includes('brand') || !visibleColumns.includes('model')) && (item.metadata?.brand || item.metadata?.model) && (
+                                                                                    <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate leading-tight mt-0.5" title={`${item.metadata?.brand || ''} ${item.metadata?.model || ''}`.trim()}>
+                                                                                        {[item.metadata?.brand, item.metadata?.model].filter(Boolean).join(' · ')}
+                                                                                    </div>
+                                                                                )}
+                                                                                {issue && (
+                                                                                    <div className="mt-0.5 flex max-w-[320px] items-start gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                                                                        <svg className="mt-0.5 h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                                                        </svg>
+                                                                                        <span className="line-clamp-2">{getIssueSummary(issue)}: {issue.note}</span>
+                                                                                    </div>
+                                                                                )}
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'brand' && (
+                                                                    <div className="min-w-0 w-full text-gray-600 dark:text-gray-400 truncate" title={item.metadata?.brand || ''}>
+                                                                        {isBulkEditMode ? (
+                                                                            <InlineInput value={editDrafts[item.id]?.metadata?.brand ?? item.metadata?.brand ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'brand', val)} placeholder="Brand" />
+                                                                        ) : (item.metadata?.brand || '—')}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'model' && (
+                                                                    <div className="min-w-0 w-full text-gray-600 dark:text-gray-400 truncate" title={item.metadata?.model || ''}>
+                                                                        {isBulkEditMode ? (
+                                                                            <InlineInput value={editDrafts[item.id]?.metadata?.model ?? item.metadata?.model ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'model', val)} placeholder="Model" />
+                                                                        ) : (item.metadata?.model || '—')}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'size' && (
+                                                                    <div className="min-w-0 w-full text-gray-600 dark:text-gray-400 truncate" title={item.metadata?.size || ''}>
+                                                                        {isBulkEditMode ? (
+                                                                            <InlineInput value={editDrafts[item.id]?.metadata?.size ?? item.metadata?.size ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'size', val)} placeholder="Size" />
+                                                                        ) : (item.metadata?.size || '—')}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'category' && (
+                                                                    <div className="min-w-0 w-full text-gray-600 dark:text-gray-400 truncate" title={item.category}>
+                                                                        {isBulkEditMode ? (
+                                                                            <InlineInput value={editDrafts[item.id]?.category ?? item.category} onChange={(val) => handleDraftChange(item.id, 'category', val)} placeholder="Category" />
+                                                                        ) : item.category}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'barcode' && (
+                                                                    <div className="min-w-0 w-full font-mono text-gray-600 dark:text-gray-400 truncate" title={item.barcode}>
+                                                                        {isBulkEditMode ? (
+                                                                            <InlineInput value={editDrafts[item.id]?.barcode ?? item.barcode} onChange={(val) => handleDraftChange(item.id, 'barcode', val)} placeholder="Barcode" />
+                                                                        ) : item.barcode}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'serialNumber' && (
+                                                                    <div className="min-w-0 w-full font-mono text-gray-600 dark:text-gray-400 truncate" title={item.serialNumber || ''}>
+                                                                        {isBulkEditMode ? (
+                                                                            <InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N" />
+                                                                        ) : (item.serialNumber || '—')}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'status' && (
+                                                                    <div className="min-w-0 flex items-center">
+                                                                        <Badge variant={getDisplayStatusVariant(item)} className="text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                                            {getDisplayStatus(item)}
+                                                                        </Badge>
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'action' && (
+                                                                    <div className="min-w-0 w-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => handlePrintQR(e, item)}
+                                                                            className="p-1 rounded-md text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                                                                            title="Print QR"
+                                                                        >
+                                                                            <svg className="w-4 h-4 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 0 0 2-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'assignedToName' && (
+                                                                    <div className="min-w-0 w-full text-gray-600 dark:text-gray-400 truncate" title={item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}>
+                                                                        {item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'location' && (
+                                                                    <div className="min-w-0 w-full text-gray-600 dark:text-gray-400 truncate" title={item.location || '—'}>
+                                                                        {item.location || '—'}
+                                                                    </div>
+                                                                )}
+
+                                                                {colKey === 'createdAt' && (
+                                                                    <div className="min-w-0 w-full whitespace-nowrap text-gray-400 truncate">
+                                                                        {(item.createdAt || item.lastActivity)
+                                                                            ? new Date(item.createdAt || item.lastActivity!).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                                                                            : '—'}
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
-                                                {isBulkEditMode ? (
-                                                    <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.brand ?? item.metadata?.brand ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'brand', val)} placeholder="Brand" /></div>
-                                                ) : (item.metadata?.brand || '—')}
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
-                                                {isBulkEditMode ? (
-                                                    <div className="w-28"><InlineInput value={editDrafts[item.id]?.metadata?.model ?? item.metadata?.model ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'model', val)} placeholder="Model" /></div>
-                                                ) : (item.metadata?.model || '—')}
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
-                                                {isBulkEditMode ? (
-                                                    <div className="w-24"><InlineInput value={editDrafts[item.id]?.metadata?.size ?? item.metadata?.size ?? ''} onChange={(val) => handleMetadataDraftChange(item, 'size', val)} placeholder="Size" /></div>
-                                                ) : (item.metadata?.size || '—')}
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">
-                                                {isBulkEditMode ? (
-                                                    <div className="w-32">
-                                                        <InlineInput value={editDrafts[item.id]?.category ?? item.category} onChange={(val) => handleDraftChange(item.id, 'category', val)} placeholder="Category" />
-                                                    </div>
-                                                ) : item.category}
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 font-mono text-gray-600 dark:text-gray-400">
-                                                {isBulkEditMode ? (
-                                                    <div className="w-32">
-                                                        <InlineInput value={editDrafts[item.id]?.barcode ?? item.barcode} onChange={(val) => handleDraftChange(item.id, 'barcode', val)} placeholder="Barcode" />
-                                                    </div>
-                                                ) : item.barcode}
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 font-mono text-gray-600 dark:text-gray-400">
-                                                {isBulkEditMode ? (
-                                                    <div className="w-28"><InlineInput value={editDrafts[item.id]?.serialNumber ?? item.serialNumber ?? ''} onChange={(val) => handleDraftChange(item.id, 'serialNumber', val)} placeholder="S/N" /></div>
-                                                ) : (item.serialNumber || '—')}
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2">
-                                                <Badge variant={getDisplayStatusVariant(item)} className="text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                                                    {getDisplayStatus(item)}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-center">
-                                                <button
-                                                    onClick={(e) => handlePrintQR(e, item)}
-                                                    className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
-                                                    title="Print QR"
-                                                >
-                                                    <svg className="w-4 h-4 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                                    </svg>
-                                                </button>
-                                            </td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 text-gray-500 dark:text-gray-400">{item.status !== 'AVAILABLE' ? (getUserName(item.assignedTo) || '-') : '-'}</td>
-                                            <td className="px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 whitespace-nowrap text-gray-400">
-                                                {(item.createdAt || item.lastActivity)
-                                                    ? new Date(item.createdAt || item.lastActivity!).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-                                                    : '—'}
-                                            </td>
-                                        </tr>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className="w-9 shrink-0 border-l border-transparent" />
+                                            </div>
+                                        </div>
                                     );
                                 })}
-                            </tbody>
-                        </table>
+                            </div>
+                        </div>
                     </div>
                 )}
 
-                {filteredItems.length === 0 && !isInventoryLoading && (
+                {totalItems === 0 && !isInventoryLoading && (
                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                         <div className="w-12 h-12 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-3">
                             <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2005,9 +3678,9 @@ function InventoryPageContent() {
                         <p className="text-xs text-gray-500 mt-1 mb-4 max-w-sm">
                             We could not find any items matching your current filters. Try adjusting your search criteria.
                         </p>
-                        {(search || statusFilter !== 'ALL' || categoryFilter.length > 0 || brandFilter.length > 0 || sizeFilter.length > 0 || endFilter.length > 0) && (
+                        {hasAnyFilterActive && (
                             <button
-                                onClick={() => { setSearch(''); setStatusFilter('ALL'); setCategoryFilter([]); setBrandFilter([]); setSizeFilter([]); setEndFilter([]); }}
+                                onClick={resetAllFilters}
                                 className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
                             >
                                 Clear all filters
@@ -2016,6 +3689,107 @@ function InventoryPageContent() {
                     </div>
                 )}
             </div>
+
+            {/* Modern Pagination Controls (Fixed Footer & Compact, matching Shoots page) */}
+            {totalItems > 0 && (
+                <div className="shrink-0">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 p-2 sm:p-2.5 text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-[#1c1c1e] rounded-xl border border-gray-200/80 dark:border-gray-800 shadow-2xs">
+                        {/* Left: Row Count Details */}
+                        <div className="flex items-center gap-2 text-[11px] sm:text-xs">
+                            <span>
+                                Showing <strong className="font-semibold text-gray-900 dark:text-white">{fromIndex}</strong> to <strong className="font-semibold text-gray-900 dark:text-white">{toIndex}</strong> of <strong className="font-semibold text-gray-900 dark:text-white">{totalItems}</strong> items
+                            </span>
+                        </div>
+
+                        {/* Center: Navigation Buttons */}
+                        {pageSize !== 'ALL' && totalPages > 1 && (
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => handlePageChange(1)}
+                                    disabled={currentPage === 1}
+                                    aria-label="First page"
+                                    title="First page"
+                                    className="p-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                >
+                                    <ChevronsLeft size={13} />
+                                </button>
+                                <button
+                                    onClick={() => handlePageChange(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    aria-label="Previous page"
+                                    title="Previous page"
+                                    className="p-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                >
+                                    <ChevronLeft size={13} />
+                                </button>
+
+                                {/* Page numbers */}
+                                <div className="flex items-center gap-1 mx-0.5">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                        .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                                        .map((p, idx, arr) => {
+                                            const prevP = arr[idx - 1];
+                                            const showEllipsis = prevP && p - prevP > 1;
+                                            return (
+                                                <React.Fragment key={p}>
+                                                    {showEllipsis && <span className="px-0.5 text-gray-400 text-xs">…</span>}
+                                                    <button
+                                                        onClick={() => handlePageChange(p)}
+                                                        className={`min-w-[28px] h-7 px-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                                                            currentPage === p
+                                                                ? 'bg-primary text-primary-foreground shadow-2xs'
+                                                                : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                                        }`}
+                                                    >
+                                                        {p}
+                                                    </button>
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                </div>
+
+                                <button
+                                    onClick={() => handlePageChange(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    aria-label="Next page"
+                                    title="Next page"
+                                    className="p-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                >
+                                    <ChevronRight size={13} />
+                                </button>
+                                <button
+                                    onClick={() => handlePageChange(totalPages)}
+                                    disabled={currentPage === totalPages}
+                                    aria-label="Last page"
+                                    title="Last page"
+                                    className="p-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                >
+                                    <ChevronsRight size={13} />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Right: Page Size Selector */}
+                        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs">
+                            <span className="text-gray-500 dark:text-gray-400">Rows per page:</span>
+                            <select
+                                value={pageSize}
+                                onChange={(e) => {
+                                    const val = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
+                                    setPageSize(val);
+                                    setCurrentPage(1);
+                                }}
+                                className="px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-medium focus:ring-1 focus:ring-primary cursor-pointer shadow-2xs"
+                            >
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                                <option value="ALL">All</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            )}
             {ncOpen && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
                     <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#1c1c1e]">
@@ -2537,6 +4311,318 @@ function InventoryPageContent() {
                     </div>
                 );
             })()}
+
+            {/* Floating In-Header Column Filter Dropdown (Rendered in Portal to avoid clipping) */}
+            {filterAnchor && typeof document !== 'undefined' && createPortal(
+                <div
+                    ref={headerFilterRef}
+                    style={{
+                        position: 'fixed',
+                        top: `${filterAnchor.top}px`,
+                        left: `${filterAnchor.left}px`,
+                        zIndex: 99999,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-72 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl p-2.5 text-xs font-normal normal-case animate-in fade-in zoom-in-95 duration-100 ring-1 ring-black/10 dark:ring-white/10 select-none"
+                >
+                    {filterAnchor.type === 'status' && (
+                        <div className="flex flex-col max-h-[380px]">
+                            <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 dark:border-gray-800 mb-1 shrink-0">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-gray-900 dark:text-white text-xs">Filter by Status</span>
+                                    {isStatusFiltered && (
+                                        <span className="px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-bold text-[10px]">
+                                            {statusFilter.length}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    {isStatusFiltered ? (
+                                        <button
+                                            type="button"
+                                            onClick={selectAllStatuses}
+                                            className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                                        >
+                                            Reset to All
+                                        </button>
+                                    ) : (
+                                        <span className="text-[11px] text-gray-400">All visible</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-0.5 overflow-y-auto pr-1 scrollbar-thin flex-1 min-h-0">
+                                {ALL_STATUS_OPTIONS.map((opt) => {
+                                    const count = statusCounts[opt.value] || 0;
+                                    const isAllOption = opt.value === 'ALL';
+                                    const isChecked = isAllOption
+                                        ? isAllStatusesSelected
+                                        : !isAllStatusesSelected && statusFilter.includes(opt.value);
+
+                                    return (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => toggleStatusFilter(opt.value)}
+                                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                                isChecked
+                                                    ? 'bg-primary/10 text-primary font-semibold'
+                                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                    isChecked
+                                                        ? 'border-primary bg-primary text-white'
+                                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                }`}>
+                                                    {isChecked && <Check size={10} strokeWidth={3} />}
+                                                </span>
+                                                {!isAllOption && (
+                                                    <span
+                                                        className="w-2 h-2 rounded-full shrink-0"
+                                                        style={{ backgroundColor: opt.color }}
+                                                    />
+                                                )}
+                                                <span className="truncate">{opt.label}</span>
+                                            </div>
+                                            <span className="text-[10px] text-gray-400 font-mono shrink-0 ml-2">
+                                                {count}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {filterAnchor.type === 'category' && (
+                        <div className="flex flex-col max-h-[380px]">
+                            <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 dark:border-gray-800 mb-1 shrink-0">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-gray-900 dark:text-white text-xs">Filter by Category</span>
+                                    {isCategoryFiltered && (
+                                        <span className="px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-bold text-[10px]">
+                                            {categoryFilter.length}
+                                        </span>
+                                    )}
+                                </div>
+                                {categoryFilter.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setCategoryFilter([]); setCurrentPage(1); }}
+                                        className="text-[11px] font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="px-1 py-1 mb-1">
+                                <input
+                                    type="text"
+                                    placeholder="Search category…"
+                                    value={categorySearchQuery}
+                                    onChange={(e) => setCategorySearchQuery(e.target.value)}
+                                    className="w-full h-7 px-2 text-xs bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                            </div>
+
+                            <div className="space-y-0.5 overflow-y-auto pr-1 scrollbar-thin flex-1 min-h-0">
+                                {categoryOptions
+                                    .filter(opt => opt.label.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+                                    .map((opt) => {
+                                        const isChecked = categoryFilter.includes(opt.value);
+                                        return (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => {
+                                                    setCategoryFilter(prev =>
+                                                        prev.includes(opt.value)
+                                                            ? prev.filter(c => c !== opt.value)
+                                                            : [...prev, opt.value]
+                                                    );
+                                                    setCurrentPage(1);
+                                                }}
+                                                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                                    isChecked
+                                                        ? 'bg-primary/10 text-primary font-semibold'
+                                                        : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                                        isChecked
+                                                            ? 'border-primary bg-primary text-white'
+                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                                                    }`}>
+                                                        {isChecked && <Check size={10} strokeWidth={3} />}
+                                                    </span>
+                                                    <span className="truncate">{opt.label}</span>
+                                                </div>
+                                                <span className="text-[10px] text-gray-400 font-mono shrink-0 ml-2">
+                                                    {categoryCounts[opt.label] || 0}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                            </div>
+                        </div>
+                    )}
+
+                    {filterAnchor.type === 'assignee' && (
+                        <div className="flex flex-col max-h-[380px]">
+                            <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 dark:border-gray-800 mb-1 shrink-0">
+                                <span className="font-bold text-gray-900 dark:text-white text-xs">Filter by Assignee</span>
+                                {isAssigneeFiltered && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAssigneeFilter('ALL'); setCurrentPage(1); }}
+                                        className="text-[11px] font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="px-1 py-1 mb-1">
+                                <input
+                                    type="text"
+                                    placeholder="Search assignee…"
+                                    value={assigneeSearchQuery}
+                                    onChange={(e) => setAssigneeSearchQuery(e.target.value)}
+                                    className="w-full h-7 px-2 text-xs bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                            </div>
+
+                            <div className="space-y-0.5 overflow-y-auto pr-1 scrollbar-thin flex-1 min-h-0">
+                                <button
+                                    type="button"
+                                    onClick={() => { setAssigneeFilter('ALL'); setFilterAnchor(null); setCurrentPage(1); }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                        assigneeFilter === 'ALL'
+                                            ? 'bg-primary/10 text-primary font-semibold'
+                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                    }`}
+                                >
+                                    <span>All Assignees</span>
+                                    {assigneeFilter === 'ALL' && <Check size={12} />}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setAssigneeFilter('UNASSIGNED'); setFilterAnchor(null); setCurrentPage(1); }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                        assigneeFilter === 'UNASSIGNED'
+                                            ? 'bg-primary/10 text-primary font-semibold'
+                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                    }`}
+                                >
+                                    <span>Unassigned (Available)</span>
+                                    {assigneeFilter === 'UNASSIGNED' && <Check size={12} />}
+                                </button>
+                                {assigneeOptions
+                                    .filter(u => u.name.toLowerCase().includes(assigneeSearchQuery.toLowerCase()))
+                                    .map((u) => {
+                                        const isChecked = assigneeFilter === u.id;
+                                        const userCount = assigneeCounts[u.id] || 0;
+                                        return (
+                                            <button
+                                                key={u.id}
+                                                type="button"
+                                                onClick={() => { setAssigneeFilter(u.id); setFilterAnchor(null); setCurrentPage(1); }}
+                                                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                                    isChecked
+                                                        ? 'bg-primary/10 text-primary font-semibold'
+                                                        : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                                }`}
+                                            >
+                                                <span className="truncate">{u.name}</span>
+                                                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                                    {userCount > 0 && (
+                                                        <span className="text-[10px] text-gray-400 font-mono">
+                                                            {userCount}
+                                                        </span>
+                                                    )}
+                                                    {isChecked && <Check size={12} />}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                            </div>
+                        </div>
+                    )}
+
+                    {filterAnchor.type === 'location' && (
+                        <div className="flex flex-col max-h-[380px]">
+                            <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 dark:border-gray-800 mb-1 shrink-0">
+                                <span className="font-bold text-gray-900 dark:text-white text-xs">Filter by Location</span>
+                                {isLocationFiltered && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setLocationFilter('ALL'); setCurrentPage(1); }}
+                                        className="text-[11px] font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="space-y-0.5 overflow-y-auto pr-1 scrollbar-thin flex-1 min-h-0">
+                                <button
+                                    type="button"
+                                    onClick={() => { setLocationFilter('ALL'); setFilterAnchor(null); setCurrentPage(1); }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                        locationFilter === 'ALL'
+                                            ? 'bg-primary/10 text-primary font-semibold'
+                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                    }`}
+                                >
+                                    <span>All Locations</span>
+                                    {locationFilter === 'ALL' && <Check size={12} />}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setLocationFilter('UNASSIGNED'); setFilterAnchor(null); setCurrentPage(1); }}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                        locationFilter === 'UNASSIGNED'
+                                            ? 'bg-primary/10 text-primary font-semibold'
+                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                    }`}
+                                >
+                                    <span>No Location</span>
+                                    {locationFilter === 'UNASSIGNED' && <Check size={12} />}
+                                </button>
+                                {locationOptions.map((loc) => {
+                                    const isChecked = locationFilter === loc;
+                                    const locCount = locationCounts[loc] || 0;
+                                    return (
+                                        <button
+                                            key={loc}
+                                            type="button"
+                                            onClick={() => { setLocationFilter(loc); setFilterAnchor(null); setCurrentPage(1); }}
+                                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                                                isChecked
+                                                    ? 'bg-primary/10 text-primary font-semibold'
+                                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                            }`}
+                                        >
+                                            <span className="truncate">{loc}</span>
+                                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                                <span className="text-[10px] text-gray-400 font-mono">
+                                                    {locCount}
+                                                </span>
+                                                {isChecked && <Check size={12} />}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>,
+                document.body
+            )}
         </div>
     );
 }
