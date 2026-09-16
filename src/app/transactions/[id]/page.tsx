@@ -778,6 +778,197 @@ export default function TransactionDetailPage() {
         }
     };
 
+    const handleVerifyReturnItem = async (itemId: string) => {
+        if (!canForceReturnItems) {
+            showToast('Only managers and admins can verify items', 'error');
+            return;
+        }
+
+        const item = equipment.find(e => e.id === itemId);
+        if (!item) {
+            showToast('Item not found', 'error');
+            return;
+        }
+
+        const isConfirmed = await confirm({
+            title: 'Verify Item Return?',
+            message: `Verify that "${item.name}" (${item.barcode || 'No barcode'}) has been returned in OK condition and make it available?`,
+            confirmLabel: 'Verify Return',
+            variant: 'primary'
+        });
+
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            const now = new Date().toISOString();
+
+            // 1. Update item status to AVAILABLE only if it is NOT actively checked out in another open transaction
+            const otherOpenTxns = (await storage.getTransactions(undefined, undefined, undefined, 'OPEN', undefined, undefined, effectiveDeptId))
+                .filter(t => t.id !== transaction?.id);
+            const inOtherOpenTxn = otherOpenTxns.some(t =>
+                t.items?.includes(itemId) && (!t.postReturnConditions || t.postReturnConditions[itemId] === undefined)
+            );
+
+            if (!inOtherOpenTxn) {
+                await storage.updateEquipment(itemId, {
+                    status: 'AVAILABLE',
+                    assignedTo: null as unknown as string,
+                    lastActivity: now
+                });
+            }
+
+            // 2. Update Transaction postReturnConditions
+            const currentConditions: Record<string, Equipment['condition']> = transaction?.postReturnConditions || {};
+            const updatedConditions: Record<string, Equipment['condition']> = {
+                ...currentConditions,
+                [itemId]: 'OK'
+            };
+
+            const allItemsReturned = transaction?.items.every(id =>
+                updatedConditions[id] !== undefined
+            ) && areManualItemsComplete(transaction?.manualItems);
+
+            const txnUpdates: Partial<Transaction> = {
+                postReturnConditions: updatedConditions
+            };
+
+            if (allItemsReturned) {
+                txnUpdates.status = 'CLOSED';
+                txnUpdates.timestampIn = now;
+            }
+
+            if (transaction) {
+                await storage.updateTransaction(transaction.id, txnUpdates);
+            }
+
+            // 3. Log
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'VERIFY',
+                entityId: transaction!.id,
+                userId: user!.id,
+                timestamp: now,
+                details: `Verified returned item "${item.name}" (${item.barcode || 'No barcode'})${allItemsReturned ? ' - All items returned (Transaction Closed)' : ''}`,
+                newValue: { itemId: item.id, itemBarcode: item.barcode, allItemsReturned },
+                departmentId: effectiveDeptId || undefined
+            });
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'VERIFY',
+                entityId: item.id,
+                userId: user!.id,
+                timestamp: now,
+                details: `Verified returned item - Verified by ${user!.name || 'manager'}`,
+                newValue: { transactionId: transaction!.id, allItemsReturned },
+                departmentId: effectiveDeptId || undefined
+            });
+
+            await loadData(true);
+            showToast(allItemsReturned ? `${item.name} verified! Transaction closed.` : `${item.name} verified successfully.`, 'success');
+        } catch (error) {
+            console.error('Error verifying item:', error);
+            showToast('Failed to verify item', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleVerifyAllPending = async () => {
+        if (!canForceReturnItems) {
+            showToast('Only managers and admins can verify items', 'error');
+            return;
+        }
+
+        const pendingItemIds = getPendingVerificationItems();
+        if (pendingItemIds.length === 0) {
+            showToast('No pending items to verify', 'info');
+            return;
+        }
+
+        const isConfirmed = await confirm({
+            title: `Verify All ${pendingItemIds.length} Pending Item${pendingItemIds.length > 1 ? 's' : ''}?`,
+            message: `This will mark all ${pendingItemIds.length} pending items as verified in OK condition, make them available, and settle this transaction.`,
+            confirmLabel: `Verify All (${pendingItemIds.length})`,
+            variant: 'primary'
+        });
+
+        if (!isConfirmed) return;
+
+        setSaving(true);
+        try {
+            const now = new Date().toISOString();
+            const otherOpenTxns = (await storage.getTransactions(undefined, undefined, undefined, 'OPEN', undefined, undefined, effectiveDeptId))
+                .filter(t => t.id !== transaction?.id);
+
+            const currentConditions: Record<string, Equipment['condition']> = transaction?.postReturnConditions || {};
+            const updatedConditions: Record<string, Equipment['condition']> = { ...currentConditions };
+
+            for (const itemId of pendingItemIds) {
+                const inOtherOpenTxn = otherOpenTxns.some(t =>
+                    t.items?.includes(itemId) && (!t.postReturnConditions || t.postReturnConditions[itemId] === undefined)
+                );
+                if (!inOtherOpenTxn) {
+                    await storage.updateEquipment(itemId, {
+                        status: 'AVAILABLE',
+                        assignedTo: null as unknown as string,
+                        lastActivity: now
+                    });
+                }
+                updatedConditions[itemId] = 'OK';
+
+                const item = equipment.find(e => e.id === itemId);
+                await storage.addLog({
+                    id: crypto.randomUUID(),
+                    action: 'VERIFY',
+                    entityId: itemId,
+                    userId: user!.id,
+                    timestamp: now,
+                    details: `Verified returned item "${item?.name || itemId}" - Verified by ${user!.name || 'manager'}`,
+                    newValue: { transactionId: transaction!.id },
+                    departmentId: effectiveDeptId || undefined
+                });
+            }
+
+            const allItemsReturned = transaction?.items.every(id =>
+                updatedConditions[id] !== undefined
+            ) && areManualItemsComplete(transaction?.manualItems);
+
+            const txnUpdates: Partial<Transaction> = {
+                postReturnConditions: updatedConditions
+            };
+
+            if (allItemsReturned) {
+                txnUpdates.status = 'CLOSED';
+                txnUpdates.timestampIn = now;
+            }
+
+            if (transaction) {
+                await storage.updateTransaction(transaction.id, txnUpdates);
+            }
+
+            await storage.addLog({
+                id: crypto.randomUUID(),
+                action: 'VERIFY',
+                entityId: transaction!.id,
+                userId: user!.id,
+                timestamp: now,
+                details: `Verified ${pendingItemIds.length} returned items - Verified by ${user!.name || 'manager'}${allItemsReturned ? ' (Transaction Closed)' : ''}`,
+                newValue: { count: pendingItemIds.length, allItemsReturned },
+                departmentId: effectiveDeptId || undefined
+            });
+
+            await loadData(true);
+            showToast(allItemsReturned ? `All ${pendingItemIds.length} items verified! Transaction closed.` : `${pendingItemIds.length} items verified.`, 'success');
+        } catch (error) {
+            console.error('Error verifying all pending items:', error);
+            showToast('Failed to verify pending items', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleReCheckoutItem = async (itemId: string) => {
         if (!canForceReturnItems) {
             showToast('Only managers and admins can re-checkout items', 'error');
@@ -880,8 +1071,17 @@ export default function TransactionDetailPage() {
 
     const getCheckedOutItems = () => {
         return transaction?.items.filter(itemId => {
+            if (transaction.status === 'CLOSED' || transaction.postReturnConditions?.[itemId] !== undefined) return false;
             const item = equipment.find(e => e.id === itemId);
             return item?.status === 'CHECKED_OUT';
+        }).sort(compareItemIdsByName) || [];
+    };
+
+    const getPendingVerificationItems = () => {
+        return transaction?.items.filter(itemId => {
+            if (transaction.status === 'CLOSED' || transaction.postReturnConditions?.[itemId] !== undefined) return false;
+            const item = equipment.find(e => e.id === itemId);
+            return item?.status === 'PENDING_VERIFICATION';
         }).sort(compareItemIdsByName) || [];
     };
 
@@ -1043,6 +1243,18 @@ export default function TransactionDetailPage() {
 
     const manualItemQuantity = (transaction.manualItems || []).reduce((sum, item) => sum + item.quantity, 0);
     const totalItemCount = transaction.items.length + manualItemQuantity;
+
+    const returnedItemCount = transaction.items.filter(id => {
+        return transaction.status === 'CLOSED' || transaction.postReturnConditions?.[id] !== undefined;
+    }).length;
+
+    const pendingVerificationItemCount = transaction.items.filter(id => {
+        if (transaction.status === 'CLOSED' || transaction.postReturnConditions?.[id] !== undefined) return false;
+        const item = equipment.find(e => e.id === id);
+        return item?.status === 'PENDING_VERIFICATION';
+    }).length;
+
+    const checkedOutItemCount = Math.max(0, transaction.items.length - returnedItemCount - pendingVerificationItemCount);
 
     const canManualClose = transaction?.status === 'OPEN' && transaction.items.every(itemId => {
         if (transaction.postReturnConditions?.[itemId] !== undefined) return true;
@@ -1784,8 +1996,41 @@ export default function TransactionDetailPage() {
                     </div>
                 ) : (
                     <div className="flex items-center justify-between gap-3 mb-4">
-                        <h2 className="text-lg font-semibold">Checked Out Items</h2>
+                        <div>
+                            <h2 className="text-lg font-semibold">Items</h2>
+                            {transaction.status === 'OPEN' && (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                    {checkedOutItemCount > 0 && (
+                                        <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                            {checkedOutItemCount} Out
+                                        </span>
+                                    )}
+                                    {pendingVerificationItemCount > 0 && (
+                                        <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                                            {pendingVerificationItemCount} Pending Verification
+                                        </span>
+                                    )}
+                                    {returnedItemCount > 0 && (
+                                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                                            {returnedItemCount} Returned
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                         <div className="flex items-center gap-2">
+                            {transaction.status === 'OPEN' && pendingVerificationItemCount > 0 && canForceReturnItems && (
+                                <button
+                                    onClick={handleVerifyAllPending}
+                                    disabled={saving}
+                                    className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>Verify All Pending ({pendingVerificationItemCount})</span>
+                                </button>
+                            )}
                             {transaction.status === 'OPEN' && !showAddItem && getCheckedOutItems().length > 1 && canForceReturnItems && (
                                 <button
                                     onClick={() => {
@@ -2001,7 +2246,8 @@ export default function TransactionDetailPage() {
 
                             // Status determination is strictly transaction-context-aware
                             const isReturned = isTxnClosed || hasReturnRecord;
-                            const isCheckedOut = !isReturned;
+                            const isPendingVerification = !isReturned && item.status === 'PENDING_VERIFICATION';
+                            const isCheckedOut = !isReturned && !isPendingVerification;
 
                             const isSelected = selectedItems.has(itemId);
                             const canSelect = isCheckedOut && transaction.status === 'OPEN' && canForceReturnItems;
@@ -2057,18 +2303,26 @@ export default function TransactionDetailPage() {
                                         {/* Status + actions, inline (right) */}
                                         {!selectionMode && (
                                             <div className="flex shrink-0 items-center gap-1.5">
-                                                {/* Status pill shown only when there's no Return action to imply it */}
-                                                {!(transaction.status === 'OPEN' && isCheckedOut && canForceReturnItems) && (
-                                                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isCheckedOut
-                                                        ? 'bg-orange-500 text-white'
-                                                        : 'bg-green-500 text-white'
-                                                        }`}>
-                                                        {isCheckedOut ? 'Out' : 'Returned'}
+                                                {isReturned && (
+                                                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-green-500 text-white">
+                                                        Returned
+                                                    </span>
+                                                )}
+
+                                                {isPendingVerification && (
+                                                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-500 text-black">
+                                                        Pending Verification
+                                                    </span>
+                                                )}
+
+                                                {isCheckedOut && !(transaction.status === 'OPEN' && canForceReturnItems) && (
+                                                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-orange-500 text-white">
+                                                        Out
                                                     </span>
                                                 )}
 
                                                 {/* Re-checkout button - for returned items in an open transaction */}
-                                                {transaction.status === 'OPEN' && !isCheckedOut && canForceReturnItems && (
+                                                {transaction.status === 'OPEN' && isReturned && canForceReturnItems && (
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
@@ -2082,6 +2336,24 @@ export default function TransactionDetailPage() {
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                                         </svg>
                                                         Re-checkout
+                                                    </button>
+                                                )}
+
+                                                {/* Verify button - for items waiting for verification */}
+                                                {transaction.status === 'OPEN' && isPendingVerification && canForceReturnItems && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleVerifyReturnItem(itemId);
+                                                        }}
+                                                        disabled={saving}
+                                                        title="Verify this returned item"
+                                                        className="flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        Verify
                                                     </button>
                                                 )}
 
@@ -2104,7 +2376,7 @@ export default function TransactionDetailPage() {
                                                 )}
 
                                                 {/* Remove button - only for open transactions */}
-                                                {transaction.status === 'OPEN' && (
+                                                {transaction.status === 'OPEN' && canEditTransactionDetails && (
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
