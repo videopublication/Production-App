@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useShoots } from '@/hooks/useShoots';
 import { useAssignments } from '@/hooks/useAssignments';
@@ -14,15 +14,15 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useDepartment } from '@/lib/department-context';
 import { useToast } from '@/lib/toast-context';
-import { Shoot, ShootReviewStatus, ShootStatus } from '@/types';
+import { Shoot, ShootReviewStatus } from '@/types';
 import { ShootReviewModal } from '@/components/ShootReviewModal';
 import { 
     Film, CheckCircle2, Clock, Search, Video, ExternalLink, 
     Star, MessageSquare, ArrowLeft, Check, RefreshCw, 
-    Sparkles, Filter, ChevronRight, Play, Eye, Grid3X3, 
+    Filter, ChevronRight, Play, Grid3X3, 
     List, ArrowUpDown, ArrowUp, ArrowDown, X, Download, 
-    CheckSquare, Square, ChevronLeft, ChevronDown, Edit2, 
-    Link2, Copy, SlidersHorizontal, AlertCircle
+    CheckSquare, Square, ChevronLeft, Edit2, 
+    Link2, SlidersHorizontal
 } from 'lucide-react';
 import { format, parseISO, isToday, isAfter, isBefore } from 'date-fns';
 
@@ -40,10 +40,10 @@ export default function ShootReviewsDashboard() {
     const { showToast } = useToast();
 
     // Data Queries
-    const { data: shoots = [], isLoading: loadingShoots, refetch: refetchShoots } = useShoots();
+    const { data: shoots = [], isLoading: loadingShoots } = useShoots();
     const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
     const { data: users = [] } = useUsers();
-    const { data: allReviews = [], isLoading: loadingReviews, refetch: refetchReviews } = useAllShootReviews();
+    const { data: allReviews = [], isLoading: loadingReviews } = useAllShootReviews();
     
     // Mutations
     const { mutateAsync: updateStatus } = useUpdateShootReviewStatus();
@@ -63,7 +63,7 @@ export default function ShootReviewsDashboard() {
     // Sorting & Pagination
     const [sortField, setSortField] = useState<SortField>('shootNumber');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-    const [pageSize, setPageSize] = useState<number>(25);
+    const [pageSize, setPageSize] = useState<number>(30);
     const [currentPage, setCurrentPage] = useState<number>(1);
 
     // Selection & Bulk Actions
@@ -72,7 +72,7 @@ export default function ShootReviewsDashboard() {
     const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
     const [togglingShootId, setTogglingShootId] = useState<string | null>(null);
 
-    // Inline URL Edit Popover State
+    // Inline URL Edit State
     const [inlineUrlShootId, setInlineUrlShootId] = useState<string | null>(null);
     const [inlineUrlValue, setInlineUrlValue] = useState<string>('');
     const [savingInlineUrl, setSavingInlineUrl] = useState<boolean>(false);
@@ -149,7 +149,7 @@ export default function ShootReviewsDashboard() {
                     if (timeFilter === 'UPCOMING' && !isAfter(sDate, now)) return false;
                     if (timeFilter === 'PAST' && !isBefore(sDate, now)) return false;
                 } catch {
-                    // Ignore date parsing errors
+                    // Ignore date parse errors
                 }
             }
 
@@ -379,12 +379,12 @@ export default function ShootReviewsDashboard() {
         showToast('CSV exported successfully', 'success');
     };
 
-    // Helper domain badge for video URL
+    // Helper domain label for video URL
     const getVideoDomainLabel = (url: string) => {
         if (/youtube\.com|youtu\.be/i.test(url)) return 'YouTube';
         if (/vimeo\.com/i.test(url)) return 'Vimeo';
         if (/drive\.google\.com/i.test(url)) return 'Drive';
-        return 'Link';
+        return 'Video';
     };
 
     const hasActiveFilters = selectedTab !== 'ALL' || videoFilter !== 'ALL' || timeFilter !== 'ALL' || shootStatusFilter !== 'ALL' || ratingFilter !== 'ALL' || searchQuery.trim() !== '';
@@ -402,154 +402,142 @@ export default function ShootReviewsDashboard() {
     const isLoading = loadingShoots || loadingAssignments || loadingReviews;
 
     return (
-        <div className="max-w-7xl mx-auto w-full p-2.5 sm:p-5 space-y-4 animate-fade-in pb-24">
+        <div className="w-full h-[calc(100dvh-56px)] 2xl:h-[calc(100dvh-60px)] flex flex-col px-3 sm:px-5 lg:px-6 py-2.5 space-y-2.5 animate-fade-in overflow-hidden">
             
-            {/* Header & Department Breadcrumb */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        <Link 
-                            href="/shoots"
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                            <ArrowLeft size={13} />
-                            <span>Shoots</span>
-                        </Link>
-                        <span className="text-muted-foreground/40">•</span>
-                        <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                            Video Publication
-                        </span>
+            {/* Top Streamlined Header Row */}
+            <div className="flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <Film size={17} />
                     </div>
-                    <div className="flex items-center gap-2.5">
-                        <Film className="w-6 h-6 sm:w-7 sm:h-7 text-primary shrink-0" />
-                        <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
-                            Shoot Video Reviews
-                        </h1>
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-base sm:text-lg font-bold text-foreground truncate">
+                                Shoot Video Reviews
+                            </h1>
+                            <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                Video Publication
+                            </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate hidden md:block">
+                            Quality control hub for reviewing shoot footage, leaving feedback, and bulk managing sign-offs.
+                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        Quality control hub for reviewing shoot footage, giving crew feedback, and bulk managing review sign-offs.
-                    </p>
                 </div>
 
-                {/* Right Header Actions */}
-                <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                {/* Right Top Actions */}
+                <div className="flex items-center gap-1.5 shrink-0">
                     <button
                         type="button"
                         onClick={() => handleExportCSV()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-card text-foreground border border-border hover:bg-muted transition-all shadow-2xs cursor-pointer"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-card text-foreground border border-border hover:bg-muted transition-all shadow-2xs cursor-pointer h-7 sm:h-8"
                         title="Export current filtered list to CSV"
                     >
-                        <Download size={13} />
-                        <span>Export CSV</span>
+                        <Download size={12} />
+                        <span className="hidden sm:inline">Export CSV</span>
+                        <span className="sm:hidden">Export</span>
                     </button>
 
                     <Link
                         href="/shoots"
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border shrink-0"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border transition-colors h-7 sm:h-8"
                     >
-                        All Shoots
+                        <span>All Shoots</span>
                     </Link>
                 </div>
             </div>
 
-            {/* KPI Metric Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+            {/* Sleek, Compact KPI Metric Strip */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
                 
                 {/* Total Shoots */}
                 <div 
-                    onClick={() => setSelectedTab('ALL')}
-                    className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs relative overflow-hidden group ${
+                    onClick={() => { setSelectedTab('ALL'); setCurrentPage(1); }}
+                    className={`p-2 sm:p-2.5 px-3 rounded-xl border transition-all cursor-pointer shadow-2xs flex items-center justify-between ${
                         selectedTab === 'ALL'
                             ? 'bg-primary/10 border-primary/40 ring-1 ring-primary/30'
                             : 'bg-card border-border hover:border-primary/40'
                     }`}
                 >
-                    <div className="flex items-center justify-between text-xs font-bold text-muted-foreground mb-1">
-                        <span>Total Shoots</span>
-                        <Film size={14} className="text-primary" />
+                    <div>
+                        <span className="text-[11px] font-medium text-muted-foreground block">Total Shoots</span>
+                        <span className="text-lg sm:text-xl 2xl:text-2xl font-bold text-foreground">{metrics.total}</span>
                     </div>
-                    <div className="text-2xl sm:text-3xl font-black text-foreground">
-                        {metrics.total}
+                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        <Film size={14} />
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                        In Video Publication
-                    </p>
                 </div>
 
                 {/* Pending Reviews */}
                 <div 
-                    onClick={() => setSelectedTab('PENDING')}
-                    className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs relative overflow-hidden group ${
+                    onClick={() => { setSelectedTab('PENDING'); setCurrentPage(1); }}
+                    className={`p-2 sm:p-2.5 px-3 rounded-xl border transition-all cursor-pointer shadow-2xs flex items-center justify-between ${
                         selectedTab === 'PENDING'
-                            ? 'bg-amber-500/15 border-amber-500/50 ring-2 ring-amber-500/30'
+                            ? 'bg-amber-500/15 border-amber-500/50 ring-1 ring-amber-500/40'
                             : 'bg-card border-border hover:border-amber-400/50'
                     }`}
                 >
-                    <div className="flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-400 mb-1">
-                        <span className="flex items-center gap-1">
-                            <Clock size={13} />
+                    <div>
+                        <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <Clock size={11} />
                             Pending Review
                         </span>
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="text-lg sm:text-xl 2xl:text-2xl font-bold text-amber-900 dark:text-amber-200">{metrics.pending}</span>
                     </div>
-                    <div className="text-2xl sm:text-3xl font-black text-amber-900 dark:text-amber-200">
-                        {metrics.pending}
+                    <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
                     </div>
-                    <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5">
-                        Awaiting sign-off
-                    </p>
                 </div>
 
                 {/* Reviews Done */}
                 <div 
-                    onClick={() => setSelectedTab('DONE')}
-                    className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs relative overflow-hidden group ${
+                    onClick={() => { setSelectedTab('DONE'); setCurrentPage(1); }}
+                    className={`p-2 sm:p-2.5 px-3 rounded-xl border transition-all cursor-pointer shadow-2xs flex items-center justify-between ${
                         selectedTab === 'DONE'
-                            ? 'bg-emerald-500/15 border-emerald-500/50 ring-2 ring-emerald-500/30'
+                            ? 'bg-emerald-500/15 border-emerald-500/50 ring-1 ring-emerald-500/40'
                             : 'bg-card border-border hover:border-emerald-400/50'
                     }`}
                 >
-                    <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">
-                        <span className="flex items-center gap-1">
-                            <CheckCircle2 size={13} />
+                    <div>
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 size={11} />
                             Reviews Done
                         </span>
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span className="text-lg sm:text-xl 2xl:text-2xl font-bold text-emerald-900 dark:text-emerald-200">{metrics.done}</span>
                     </div>
-                    <div className="text-2xl sm:text-3xl font-black text-emerald-900 dark:text-emerald-200">
-                        {metrics.done}
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 shrink-0">
+                        <Check size={13} strokeWidth={3} />
                     </div>
-                    <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
-                        Verified & approved
-                    </p>
                 </div>
 
-                {/* Video Links & Completion */}
-                <div className="p-3 sm:p-4 rounded-2xl border border-border bg-card shadow-2xs">
-                    <div className="flex items-center justify-between text-xs font-bold text-muted-foreground mb-1">
-                        <span>Video Coverage</span>
-                        <Video size={14} className="text-blue-500" />
+                {/* Video Coverage & Completion */}
+                <div className="p-2 sm:p-2.5 px-3 rounded-xl border border-border bg-card shadow-2xs flex items-center justify-between">
+                    <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-0.5">
+                            <span className="font-medium truncate">Video Coverage</span>
+                            <span className="font-bold text-primary shrink-0">{metrics.completionRate}% Done</span>
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-base sm:text-lg font-bold text-foreground">{metrics.withVideo}</span>
+                            <span className="text-[10px] text-muted-foreground truncate">/ {metrics.total} with video link</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-1 mt-1 overflow-hidden">
+                            <div 
+                                className="bg-emerald-500 h-1 rounded-full transition-all duration-500"
+                                style={{ width: `${metrics.completionRate}%` }}
+                            />
+                        </div>
                     </div>
-                    <div className="flex items-baseline justify-between">
-                        <span className="text-2xl sm:text-3xl font-black text-foreground">
-                            {metrics.withVideo}
-                            <span className="text-xs font-normal text-muted-foreground ml-1">/ {metrics.total}</span>
-                        </span>
-                        <span className="text-xs font-bold text-primary">{metrics.completionRate}% Done</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-1.5 mt-2 overflow-hidden">
-                        <div 
-                            className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
-                            style={{ width: `${metrics.completionRate}%` }}
-                        />
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 shrink-0">
+                        <Video size={13} />
                     </div>
                 </div>
 
             </div>
 
-            {/* STICKY / FLOATING BULK ACTION BAR */}
+            {/* STICKY BULK ACTION BAR (activates when rows are checked) */}
             {selectedShootIds.length > 0 && (
-                <div className="sticky top-2 z-30 bg-gray-900/95 dark:bg-zinc-800/95 text-white backdrop-blur-md px-4 py-3 rounded-2xl shadow-xl border border-gray-700 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="bg-gray-900/95 dark:bg-zinc-800/95 text-white backdrop-blur-md px-3 sm:px-4 py-2 rounded-xl shadow-lg border border-gray-700 flex flex-wrap items-center justify-between gap-2 shrink-0 animate-in fade-in duration-150">
                     <div className="flex items-center gap-2">
                         <span className="bg-primary text-primary-foreground text-xs font-black px-2 py-0.5 rounded-md">
                             {selectedShootIds.length}
@@ -559,29 +547,27 @@ export default function ShootReviewsDashboard() {
                         </span>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                         {isAuthorized && (
                             <>
                                 <button
                                     type="button"
                                     onClick={() => handleBulkMarkStatus('DONE')}
                                     disabled={isBulkUpdating}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                                    title="Mark selected shoots as Review Done"
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer disabled:opacity-50"
                                 >
-                                    <CheckCircle2 size={13} />
-                                    <span>{isBulkUpdating ? 'Updating...' : 'Mark as Done'}</span>
+                                    <CheckCircle2 size={12} />
+                                    <span>{isBulkUpdating ? 'Updating...' : 'Mark Done'}</span>
                                 </button>
 
                                 <button
                                     type="button"
                                     onClick={() => handleBulkMarkStatus('PENDING')}
                                     disabled={isBulkUpdating}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                                    title="Mark selected shoots as Pending Review"
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-all cursor-pointer disabled:opacity-50"
                                 >
-                                    <Clock size={13} />
-                                    <span>{isBulkUpdating ? 'Updating...' : 'Mark as Pending'}</span>
+                                    <Clock size={12} />
+                                    <span>{isBulkUpdating ? 'Updating...' : 'Mark Pending'}</span>
                                 </button>
                             </>
                         )}
@@ -592,16 +578,16 @@ export default function ShootReviewsDashboard() {
                                 const selected = shoots.filter(s => selectedShootIds.includes(s.id));
                                 handleExportCSV(selected);
                             }}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 transition-colors cursor-pointer"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 transition-colors cursor-pointer"
                         >
-                            <Download size={13} />
+                            <Download size={12} />
                             <span>Export ({selectedShootIds.length})</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setSelectedShootIds([])}
-                            className="px-2.5 py-1.5 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
+                            className="px-2 py-1 rounded-lg text-xs text-gray-400 hover:text-white transition-colors cursor-pointer"
                         >
                             Clear
                         </button>
@@ -609,16 +595,15 @@ export default function ShootReviewsDashboard() {
                 </div>
             )}
 
-            {/* CONTROL TOOLBAR: Status Tabs, Search, View Mode, Filter Toggle */}
-            <div className="bg-card border border-border p-2.5 sm:p-3 rounded-2xl shadow-2xs space-y-2.5">
-                
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+            {/* COMPACT TOOLBAR: Status Tabs + Search + Filters + View Mode */}
+            <div className="bg-card border border-border p-1.5 sm:p-2 rounded-xl shadow-2xs space-y-2 shrink-0">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                     
-                    {/* Left: Quick Status Filter Tabs */}
-                    <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl overflow-x-auto custom-scrollbar shrink-0">
+                    {/* Left: Quick Status Tabs */}
+                    <div className="flex items-center gap-0.5 bg-muted/70 p-0.5 rounded-lg overflow-x-auto custom-scrollbar shrink-0">
                         <button
                             onClick={() => { setSelectedTab('ALL'); setCurrentPage(1); }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                                 selectedTab === 'ALL'
                                     ? 'bg-background text-foreground shadow-2xs'
                                     : 'text-muted-foreground hover:text-foreground'
@@ -628,93 +613,93 @@ export default function ShootReviewsDashboard() {
                         </button>
                         <button
                             onClick={() => { setSelectedTab('PENDING'); setCurrentPage(1); }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
                                 selectedTab === 'PENDING'
                                     ? 'bg-amber-500 text-white shadow-2xs'
                                     : 'text-amber-700 dark:text-amber-400 hover:text-amber-800'
                             }`}
                         >
-                            <Clock size={12} />
+                            <Clock size={11} />
                             Pending ({metrics.pending})
                         </button>
                         <button
                             onClick={() => { setSelectedTab('DONE'); setCurrentPage(1); }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
                                 selectedTab === 'DONE'
                                     ? 'bg-emerald-600 text-white shadow-2xs'
                                     : 'text-emerald-700 dark:text-emerald-400 hover:text-emerald-800'
                             }`}
                         >
-                            <CheckCircle2 size={12} />
+                            <CheckCircle2 size={11} />
                             Done ({metrics.done})
                         </button>
                     </div>
 
-                    {/* Right Controls: Search, Advanced Filter Toggle, View Mode */}
-                    <div className="flex items-center gap-2 flex-1 justify-end">
+                    {/* Right: Search, Filter Toggle, View Switcher */}
+                    <div className="flex items-center gap-1.5 flex-1 justify-end">
                         
                         {/* Search Bar */}
-                        <div className="relative flex-1 sm:max-w-xs">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <div className="relative flex-1 max-w-xs md:max-w-sm">
+                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                                 placeholder="Search title, #, crew, location..."
-                                className="w-full pl-9 pr-7 py-1.5 text-xs rounded-xl border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                className="w-full pl-8 pr-6 py-1 text-xs rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary h-7 sm:h-8"
                             />
                             {searchQuery && (
                                 <button
                                     onClick={() => setSearchQuery('')}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                                 >
-                                    <X size={12} />
+                                    <X size={11} />
                                 </button>
                             )}
                         </div>
 
-                        {/* Advanced Filters Button */}
+                        {/* Filters Dropdown Toggle */}
                         <button
                             type="button"
                             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors cursor-pointer shrink-0 ${
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer shrink-0 h-7 sm:h-8 ${
                                 showAdvancedFilters || hasActiveFilters
                                     ? 'bg-primary/10 border-primary/30 text-primary font-bold'
                                     : 'bg-background border-input text-muted-foreground hover:text-foreground'
                             }`}
                         >
-                            <SlidersHorizontal size={13} />
+                            <SlidersHorizontal size={12} />
                             <span className="hidden sm:inline">Filters</span>
                             {hasActiveFilters && (
-                                <span className="w-2 h-2 rounded-full bg-primary" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                             )}
                         </button>
 
                         {/* View Mode Toggle */}
-                        <div className="flex items-center bg-muted/70 p-0.5 rounded-xl border border-border shrink-0">
+                        <div className="flex items-center bg-muted/70 p-0.5 rounded-lg border border-border shrink-0">
                             <button
                                 type="button"
                                 onClick={() => setViewMode('list')}
-                                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                                className={`p-1 rounded-md transition-all cursor-pointer ${
                                     viewMode === 'list'
                                         ? 'bg-background text-foreground shadow-2xs font-bold'
                                         : 'text-muted-foreground hover:text-foreground'
                                 }`}
                                 title="List / Table View"
                             >
-                                <List size={15} />
+                                <List size={14} />
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setViewMode('card')}
-                                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                                className={`p-1 rounded-md transition-all cursor-pointer ${
                                     viewMode === 'card'
                                         ? 'bg-background text-foreground shadow-2xs font-bold'
                                         : 'text-muted-foreground hover:text-foreground'
                                 }`}
                                 title="Card View"
                             >
-                                <Grid3X3 size={15} />
+                                <Grid3X3 size={14} />
                             </button>
                         </div>
 
@@ -722,19 +707,17 @@ export default function ShootReviewsDashboard() {
 
                 </div>
 
-                {/* EXPANDED FILTER ROW */}
+                {/* Collapsible Advanced Filters */}
                 {showAdvancedFilters && (
-                    <div className="pt-2.5 border-t border-border/80 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs animate-in fade-in duration-150">
-                        
-                        {/* Video Link Presence */}
+                    <div className="pt-2 border-t border-border/70 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs animate-in fade-in duration-100">
                         <div>
-                            <label className="text-[11px] font-bold text-muted-foreground block mb-1">
+                            <label className="text-[10px] font-bold text-muted-foreground block mb-0.5">
                                 Video URL
                             </label>
                             <select
                                 value={videoFilter}
                                 onChange={(e) => { setVideoFilter(e.target.value as VideoPresenceFilter); setCurrentPage(1); }}
-                                className="w-full px-2.5 py-1.5 rounded-xl border border-input bg-background text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                className="w-full px-2 py-1 rounded-lg border border-input bg-background text-foreground text-xs focus:outline-none"
                             >
                                 <option value="ALL">All Videos</option>
                                 <option value="HAS_VIDEO">Has Video Link</option>
@@ -742,15 +725,14 @@ export default function ShootReviewsDashboard() {
                             </select>
                         </div>
 
-                        {/* Shoot Status */}
                         <div>
-                            <label className="text-[11px] font-bold text-muted-foreground block mb-1">
+                            <label className="text-[10px] font-bold text-muted-foreground block mb-0.5">
                                 Shoot Status
                             </label>
                             <select
                                 value={shootStatusFilter}
                                 onChange={(e) => { setShootStatusFilter(e.target.value); setCurrentPage(1); }}
-                                className="w-full px-2.5 py-1.5 rounded-xl border border-input bg-background text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                className="w-full px-2 py-1 rounded-lg border border-input bg-background text-foreground text-xs focus:outline-none"
                             >
                                 <option value="ALL">All Statuses</option>
                                 <option value="OPEN">Open</option>
@@ -762,15 +744,14 @@ export default function ShootReviewsDashboard() {
                             </select>
                         </div>
 
-                        {/* Time Filter */}
                         <div>
-                            <label className="text-[11px] font-bold text-muted-foreground block mb-1">
+                            <label className="text-[10px] font-bold text-muted-foreground block mb-0.5">
                                 Date / Time
                             </label>
                             <select
                                 value={timeFilter}
                                 onChange={(e) => { setTimeFilter(e.target.value as TimeFilter); setCurrentPage(1); }}
-                                className="w-full px-2.5 py-1.5 rounded-xl border border-input bg-background text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                className="w-full px-2 py-1 rounded-lg border border-input bg-background text-foreground text-xs focus:outline-none"
                             >
                                 <option value="ALL">All Dates</option>
                                 <option value="TODAY">Today</option>
@@ -779,15 +760,14 @@ export default function ShootReviewsDashboard() {
                             </select>
                         </div>
 
-                        {/* Rating Filter */}
                         <div>
-                            <label className="text-[11px] font-bold text-muted-foreground block mb-1">
+                            <label className="text-[10px] font-bold text-muted-foreground block mb-0.5">
                                 Feedback Rating
                             </label>
                             <select
                                 value={ratingFilter}
                                 onChange={(e) => { setRatingFilter(e.target.value as RatingFilter); setCurrentPage(1); }}
-                                className="w-full px-2.5 py-1.5 rounded-xl border border-input bg-background text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                className="w-full px-2 py-1 rounded-lg border border-input bg-background text-foreground text-xs focus:outline-none"
                             >
                                 <option value="ALL">All Ratings</option>
                                 <option value="4_PLUS">4+ Stars ⭐</option>
@@ -797,7 +777,7 @@ export default function ShootReviewsDashboard() {
                         </div>
 
                         {hasActiveFilters && (
-                            <div className="col-span-2 sm:col-span-4 flex justify-end pt-1">
+                            <div className="col-span-2 sm:col-span-4 flex justify-end">
                                 <button
                                     type="button"
                                     onClick={resetFilters}
@@ -809,62 +789,63 @@ export default function ShootReviewsDashboard() {
                         )}
                     </div>
                 )}
-
             </div>
 
-            {/* DATA VIEW CONTAINER */}
+            {/* MAIN DATA VIEW (Viewport-Fitted Container with Internal Scroll) */}
             {isLoading ? (
-                <div className="py-20 text-center text-muted-foreground flex flex-col items-center justify-center gap-3">
-                    <RefreshCw size={24} className="animate-spin text-primary" />
-                    <p className="text-xs font-medium">Loading shoots and review statuses...</p>
+                <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                    <RefreshCw size={22} className="animate-spin text-primary" />
+                    <p className="text-xs font-medium">Loading shoot reviews...</p>
                 </div>
             ) : filteredAndSortedShoots.length === 0 ? (
-                <div className="py-20 border border-dashed border-border rounded-3xl text-center bg-card/40 flex flex-col items-center justify-center p-6 space-y-2">
-                    <Film size={38} className="text-muted-foreground/40 mb-1" />
-                    <h3 className="text-sm font-bold text-foreground">No shoots match your criteria</h3>
+                <div className="flex-1 border border-dashed border-border rounded-xl bg-card/30 flex flex-col items-center justify-center p-6 space-y-2 text-center">
+                    <Film size={32} className="text-muted-foreground/40 mb-1" />
+                    <h3 className="text-sm font-bold text-foreground">No shoots found</h3>
                     <p className="text-xs text-muted-foreground max-w-sm">
-                        {hasActiveFilters ? 'Try adjusting your filters or search query.' : 'No shoots found.'}
+                        {hasActiveFilters ? 'No shoots match your filter criteria.' : 'No shoots found.'}
                     </p>
                     {hasActiveFilters && (
                         <button
                             onClick={resetFilters}
-                            className="mt-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+                            className="mt-1 px-3 py-1 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
                         >
-                            Clear Filters
+                            Reset Filters
                         </button>
                     )}
                 </div>
             ) : viewMode === 'list' ? (
                 
-                /* ========================
-                   LIST VIEW (HIGH-CONTROL TABLE)
-                   ======================== */
-                <div className="rounded-2xl border border-border bg-card shadow-2xs overflow-hidden flex flex-col">
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse min-w-[960px]">
+                /* =========================================================================
+                   LIST VIEW: RESPONSIVE TABLE (Zero horizontal cutoff on laptop screens)
+                   ========================================================================= */
+                <div className="rounded-xl border border-border bg-card shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
+                    
+                    {/* Internal Scrollable Table Body */}
+                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left border-collapse min-w-[760px] lg:min-w-full table-fixed">
                             
-                            {/* Table Header */}
-                            <thead>
-                                <tr className="border-b border-border bg-muted/50 text-[11px] font-bold text-muted-foreground uppercase tracking-wider select-none">
+                            {/* Sticky Table Header */}
+                            <thead className="sticky top-0 z-20 bg-muted/90 dark:bg-[#1f1f23]/95 backdrop-blur-xs border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-wider select-none">
+                                <tr>
                                     
                                     {/* Multi-Select Header Checkbox */}
-                                    <th className="p-3 w-10 text-center">
+                                    <th className="p-2.5 w-10 text-center shrink-0">
                                         <button
                                             type="button"
                                             onClick={toggleSelectAllVisible}
-                                            className="cursor-pointer text-muted-foreground hover:text-foreground"
+                                            className="cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
                                             title={isAllVisibleSelected ? 'Deselect all visible' : 'Select all visible'}
                                         >
                                             {isAllVisibleSelected ? (
-                                                <CheckSquare size={16} className="text-primary" />
+                                                <CheckSquare size={15} className="text-primary" />
                                             ) : (
-                                                <Square size={16} />
+                                                <Square size={15} />
                                             )}
                                         </button>
                                     </th>
 
-                                    {/* Shoot Number */}
-                                    <th className="p-3 w-20">
+                                    {/* Shoot # */}
+                                    <th className="p-2.5 w-16 shrink-0">
                                         <button
                                             type="button"
                                             onClick={() => handleSort('shootNumber')}
@@ -879,8 +860,8 @@ export default function ShootReviewsDashboard() {
                                         </button>
                                     </th>
 
-                                    {/* Shoot Title & Location */}
-                                    <th className="p-3 min-w-[200px]">
+                                    {/* Title & Info (Flexible Width) */}
+                                    <th className="p-2.5 min-w-[200px]">
                                         <button
                                             type="button"
                                             onClick={() => handleSort('title')}
@@ -896,7 +877,7 @@ export default function ShootReviewsDashboard() {
                                     </th>
 
                                     {/* Date */}
-                                    <th className="p-3 w-32">
+                                    <th className="p-2.5 w-24 sm:w-28 shrink-0">
                                         <button
                                             type="button"
                                             onClick={() => handleSort('date')}
@@ -912,18 +893,18 @@ export default function ShootReviewsDashboard() {
                                     </th>
 
                                     {/* Video Link */}
-                                    <th className="p-3 w-36">
-                                        <span>Video Link</span>
+                                    <th className="p-2.5 w-28 sm:w-32 shrink-0">
+                                        <span>Video</span>
                                     </th>
 
-                                    {/* Review Status (Sortable) */}
-                                    <th className="p-3 w-36">
+                                    {/* Review Status */}
+                                    <th className="p-2.5 w-28 sm:w-32 shrink-0">
                                         <button
                                             type="button"
                                             onClick={() => handleSort('reviewStatus')}
                                             className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
                                         >
-                                            <span>Review Status</span>
+                                            <span>Review</span>
                                             {sortField === 'reviewStatus' ? (
                                                 sortDirection === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />
                                             ) : (
@@ -932,8 +913,8 @@ export default function ShootReviewsDashboard() {
                                         </button>
                                     </th>
 
-                                    {/* Feedback & Rating */}
-                                    <th className="p-3 w-32">
+                                    {/* Feedback Notes */}
+                                    <th className="p-2.5 w-24 sm:w-28 shrink-0">
                                         <button
                                             type="button"
                                             onClick={() => handleSort('rating')}
@@ -948,20 +929,20 @@ export default function ShootReviewsDashboard() {
                                         </button>
                                     </th>
 
-                                    {/* Assigned Crew */}
-                                    <th className="p-3 w-36">
+                                    {/* Crew (Hidden on smaller screens, shown on md+) */}
+                                    <th className="p-2.5 w-32 2xl:w-44 shrink-0 hidden lg:table-cell">
                                         <span>Crew</span>
                                     </th>
 
-                                    {/* Actions */}
-                                    <th className="p-3 w-28 text-right">
-                                        <span>Actions</span>
+                                    {/* Actions (Always visible, right-aligned) */}
+                                    <th className="p-2.5 w-20 sm:w-24 shrink-0 text-right pr-3">
+                                        <span>Action</span>
                                     </th>
 
                                 </tr>
                             </thead>
 
-                            {/* Table Body */}
+                            {/* Table Body Rows */}
                             <tbody className="divide-y divide-border text-xs">
                                 {paginatedShoots.map((shoot) => {
                                     const isDone = shoot.reviewStatus === 'DONE';
@@ -982,22 +963,22 @@ export default function ShootReviewsDashboard() {
                                             }`}
                                         >
                                             {/* Row Checkbox */}
-                                            <td className="p-3 text-center">
+                                            <td className="p-2.5 text-center">
                                                 <button
                                                     type="button"
                                                     onClick={() => toggleSelectShoot(shoot.id)}
                                                     className="cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center justify-center"
                                                 >
                                                     {isSelected ? (
-                                                        <CheckSquare size={16} className="text-primary" />
+                                                        <CheckSquare size={15} className="text-primary" />
                                                     ) : (
-                                                        <Square size={16} />
+                                                        <Square size={15} />
                                                     )}
                                                 </button>
                                             </td>
 
                                             {/* Shoot # */}
-                                            <td className="p-3 font-mono font-bold text-gray-500 dark:text-gray-400">
+                                            <td className="p-2.5 font-mono font-bold text-gray-500 dark:text-gray-400">
                                                 {shoot.shootNumber ? (
                                                     <Link 
                                                         href={`/shoots/${shoot.id}`}
@@ -1010,13 +991,13 @@ export default function ShootReviewsDashboard() {
                                                 )}
                                             </td>
 
-                                            {/* Title, Location & Status Tag */}
-                                            <td className="p-3">
-                                                <div className="space-y-0.5 max-w-xs sm:max-w-md">
-                                                    <div className="flex items-center gap-2">
+                                            {/* Shoot Title & Location (Flexible Column) */}
+                                            <td className="p-2.5 min-w-[200px] overflow-hidden">
+                                                <div className="space-y-0.5">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
                                                         <Link 
                                                             href={`/shoots/${shoot.id}`}
-                                                            className="font-bold text-foreground hover:text-primary transition-colors truncate block"
+                                                            className="font-bold text-foreground hover:text-primary transition-colors truncate max-w-[240px] 2xl:max-w-md block"
                                                             title={shoot.title}
                                                         >
                                                             {shoot.title}
@@ -1026,15 +1007,15 @@ export default function ShootReviewsDashboard() {
                                                         </span>
                                                     </div>
                                                     {shoot.location && (
-                                                        <p className="text-[11px] text-muted-foreground truncate">
+                                                        <p className="text-[11px] text-muted-foreground truncate max-w-[240px] 2xl:max-w-md">
                                                             {shoot.location}
                                                         </p>
                                                     )}
                                                 </div>
                                             </td>
 
-                                            {/* Date / Time */}
-                                            <td className="p-3 text-muted-foreground whitespace-nowrap">
+                                            {/* Date */}
+                                            <td className="p-2.5 text-muted-foreground whitespace-nowrap">
                                                 {shoot.startTime ? (
                                                     <div>
                                                         <span className="font-medium text-foreground block">
@@ -1049,23 +1030,22 @@ export default function ShootReviewsDashboard() {
                                                 )}
                                             </td>
 
-                                            {/* Video Link Column */}
-                                            <td className="p-3">
+                                            {/* Video Link */}
+                                            <td className="p-2.5">
                                                 {shoot.reviewVideoUrl ? (
-                                                    <div className="flex items-center gap-1.5">
+                                                    <div className="flex items-center gap-1">
                                                         <a
                                                             href={shoot.reviewVideoUrl}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors"
-                                                            title={`Watch video (${shoot.reviewVideoUrl})`}
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors"
+                                                            title={`Watch (${shoot.reviewVideoUrl})`}
                                                         >
-                                                            <Play size={10} className="fill-current" />
-                                                            <span>{getVideoDomainLabel(shoot.reviewVideoUrl)}</span>
-                                                            <ExternalLink size={10} />
+                                                            <Play size={9} className="fill-current" />
+                                                            <span>Watch</span>
+                                                            <ExternalLink size={9} />
                                                         </a>
 
-                                                        {/* Edit Video URL Icon */}
                                                         <button
                                                             type="button"
                                                             onClick={() => {
@@ -1073,9 +1053,9 @@ export default function ShootReviewsDashboard() {
                                                                 setInlineUrlValue(shoot.reviewVideoUrl || '');
                                                             }}
                                                             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-                                                            title="Change video link"
+                                                            title="Edit link"
                                                         >
-                                                            <Edit2 size={11} />
+                                                            <Edit2 size={10} />
                                                         </button>
                                                     </div>
                                                 ) : (
@@ -1086,23 +1066,23 @@ export default function ShootReviewsDashboard() {
                                                                 value={inlineUrlValue}
                                                                 onChange={(e) => setInlineUrlValue(e.target.value)}
                                                                 placeholder="Paste link..."
-                                                                className="w-32 px-2 py-1 text-[11px] rounded-lg border border-primary bg-background focus:outline-none"
+                                                                className="w-28 px-1.5 py-0.5 text-[10px] rounded border border-primary bg-background focus:outline-none"
                                                                 autoFocus
                                                             />
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleSaveInlineUrl(shoot.id)}
                                                                 disabled={savingInlineUrl}
-                                                                className="px-2 py-1 text-[10px] font-bold bg-primary text-primary-foreground rounded-lg cursor-pointer"
+                                                                className="px-1.5 py-0.5 text-[9px] font-bold bg-primary text-primary-foreground rounded cursor-pointer"
                                                             >
                                                                 {savingInlineUrl ? '...' : 'Save'}
                                                             </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setInlineUrlShootId(null)}
-                                                                className="p-1 text-muted-foreground hover:text-foreground"
+                                                                className="text-muted-foreground hover:text-foreground"
                                                             >
-                                                                <X size={11} />
+                                                                <X size={10} />
                                                             </button>
                                                         </div>
                                                     ) : (
@@ -1112,22 +1092,22 @@ export default function ShootReviewsDashboard() {
                                                                 setInlineUrlShootId(shoot.id);
                                                                 setInlineUrlValue('');
                                                             }}
-                                                            className="inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-200/80 dark:border-amber-800/80 hover:bg-amber-100 transition-colors cursor-pointer"
+                                                            className="inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-md border border-amber-200/80 dark:border-amber-800/80 hover:bg-amber-100 transition-colors cursor-pointer whitespace-nowrap"
                                                         >
-                                                            <Link2 size={10} />
-                                                            <span>+ Add Link</span>
+                                                            <Link2 size={9} />
+                                                            <span>+ Link</span>
                                                         </button>
                                                     )
                                                 )}
                                             </td>
 
-                                            {/* Review Status One-Click Toggle Badge */}
-                                            <td className="p-3">
+                                            {/* Review Status Toggle */}
+                                            <td className="p-2.5 whitespace-nowrap">
                                                 <button
                                                     type="button"
                                                     onClick={(e) => handleToggleQuickStatus(shoot, e)}
                                                     disabled={togglingShootId === shoot.id}
-                                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
                                                         isDone 
                                                             ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100' 
                                                             : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100'
@@ -1135,55 +1115,48 @@ export default function ShootReviewsDashboard() {
                                                     title={isAuthorized ? 'Click to toggle status' : 'Review status'}
                                                 >
                                                     {togglingShootId === shoot.id ? (
-                                                        <RefreshCw size={11} className="animate-spin" />
+                                                        <RefreshCw size={10} className="animate-spin" />
                                                     ) : isDone ? (
                                                         <>
-                                                            <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />
+                                                            <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
                                                             <span>Done</span>
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <Clock size={12} className="text-amber-600 dark:text-amber-400" />
+                                                            <Clock size={11} className="text-amber-600 dark:text-amber-400" />
                                                             <span>Pending</span>
                                                         </>
                                                     )}
                                                 </button>
-                                                {shoot.reviewCompletedBy && isDone && (
-                                                    <span className="block text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]" title={`Signed off by ${shoot.reviewCompletedBy}`}>
-                                                        by {shoot.reviewCompletedBy}
-                                                    </span>
-                                                )}
                                             </td>
 
                                             {/* Feedback & Rating */}
-                                            <td className="p-3">
+                                            <td className="p-2.5 whitespace-nowrap">
                                                 <button
                                                     type="button"
                                                     onClick={() => { setSelectedShoot(shoot); setIsReviewModalOpen(true); }}
-                                                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground group cursor-pointer"
+                                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer group"
                                                 >
                                                     {avgRating ? (
                                                         <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
-                                                            <Star size={12} className="fill-amber-400 text-amber-400" />
+                                                            <Star size={11} className="fill-amber-400 text-amber-400" />
                                                             {avgRating}
                                                         </span>
-                                                    ) : (
-                                                        <span className="text-[11px] text-muted-foreground/60">-</span>
-                                                    )}
-                                                    <span className="text-[11px] font-medium bg-muted px-1.5 py-0.5 rounded-md group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                                                    ) : null}
+                                                    <span className="text-[11px] font-medium bg-muted px-1.5 py-0.5 rounded group-hover:bg-primary/10 group-hover:text-primary transition-colors">
                                                         {shootReviews.length} note{shootReviews.length === 1 ? '' : 's'}
                                                     </span>
                                                 </button>
                                             </td>
 
-                                            {/* Assigned Crew Chips */}
-                                            <td className="p-3">
-                                                <div className="flex items-center gap-1 flex-wrap max-w-[140px]">
+                                            {/* Crew (Hidden on mobile/tablet) */}
+                                            <td className="p-2.5 hidden lg:table-cell">
+                                                <div className="flex items-center gap-1 flex-wrap max-w-[140px] 2xl:max-w-[200px]">
                                                     {assignedCrew.length > 0 ? (
                                                         assignedCrew.slice(0, 2).map((c, i) => (
                                                             <span 
                                                                 key={i} 
-                                                                className="text-[10px] font-medium bg-muted text-muted-foreground px-1.5 py-0.5 rounded truncate max-w-[80px]"
+                                                                className="text-[10px] font-medium bg-muted text-muted-foreground px-1.5 py-0.5 rounded truncate max-w-[70px] 2xl:max-w-[90px]"
                                                                 title={c?.name}
                                                             >
                                                                 {c?.name}
@@ -1201,21 +1174,21 @@ export default function ShootReviewsDashboard() {
                                             </td>
 
                                             {/* Actions */}
-                                            <td className="p-3 text-right">
-                                                <div className="inline-flex items-center gap-1">
+                                            <td className="p-2.5 text-right pr-3 shrink-0 whitespace-nowrap">
+                                                <div className="inline-flex items-center gap-1 justify-end">
                                                     <button
                                                         type="button"
                                                         onClick={() => { setSelectedShoot(shoot); setIsReviewModalOpen(true); }}
-                                                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-2xs"
+                                                        className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-2xs"
                                                     >
                                                         Review
                                                     </button>
                                                     <Link
                                                         href={`/shoots/${shoot.id}`}
-                                                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                                                         title="View Shoot Details"
                                                     >
-                                                        <ChevronRight size={14} />
+                                                        <ChevronRight size={13} />
                                                     </Link>
                                                 </div>
                                             </td>
@@ -1228,45 +1201,45 @@ export default function ShootReviewsDashboard() {
                         </table>
                     </div>
 
-                    {/* Table Pagination Bar */}
-                    <div className="p-3 border-t border-border bg-muted/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    {/* Compact Pagination Bar */}
+                    <div className="px-3 py-2 border-t border-border bg-muted/25 flex items-center justify-between gap-2 text-xs shrink-0">
                         <div className="flex items-center gap-2 text-muted-foreground">
                             <span>
-                                Showing <strong className="text-foreground">{(currentPage - 1) * pageSize + 1}</strong> to <strong className="text-foreground">{Math.min(currentPage * pageSize, totalShoots)}</strong> of <strong className="text-foreground">{totalShoots}</strong> shoots
+                                <strong className="text-foreground">{(currentPage - 1) * pageSize + 1}</strong>–<strong className="text-foreground">{Math.min(currentPage * pageSize, totalShoots)}</strong> of <strong className="text-foreground">{totalShoots}</strong> shoots
                             </span>
-                            <span className="text-muted-foreground/40">•</span>
+                            <span className="text-muted-foreground/30">•</span>
                             <select
                                 value={pageSize}
                                 onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                                className="px-2 py-0.5 rounded-lg border border-input bg-background text-foreground text-xs focus:outline-none"
+                                className="px-1.5 py-0.5 rounded border border-input bg-background text-foreground text-xs focus:outline-none"
                             >
-                                <option value={15}>15 per page</option>
-                                <option value={25}>25 per page</option>
-                                <option value={50}>50 per page</option>
-                                <option value={100}>100 per page</option>
+                                <option value={20}>20</option>
+                                <option value={30}>30</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
                             </select>
                         </div>
 
-                        {/* Page Numbers */}
+                        {/* Page Navigation */}
                         <div className="flex items-center gap-1">
                             <button
                                 type="button"
                                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                 disabled={currentPage === 1}
-                                className="p-1.5 rounded-lg border border-border bg-background text-foreground disabled:opacity-40 hover:bg-muted cursor-pointer"
+                                className="p-1 rounded border border-border bg-background text-foreground disabled:opacity-40 hover:bg-muted cursor-pointer"
                             >
-                                <ChevronLeft size={14} />
+                                <ChevronLeft size={13} />
                             </button>
-                            <span className="px-2.5 font-bold text-foreground">
+                            <span className="px-1.5 font-bold text-foreground">
                                 {currentPage} / {totalPages}
                             </span>
                             <button
                                 type="button"
                                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                 disabled={currentPage === totalPages}
-                                className="p-1.5 rounded-lg border border-border bg-background text-foreground disabled:opacity-40 hover:bg-muted cursor-pointer"
+                                className="p-1 rounded border border-border bg-background text-foreground disabled:opacity-40 hover:bg-muted cursor-pointer"
                             >
-                                <ChevronRight size={14} />
+                                <ChevronRight size={13} />
                             </button>
                         </div>
                     </div>
@@ -1274,88 +1247,69 @@ export default function ShootReviewsDashboard() {
 
             ) : (
                 
-                /* ========================
-                   CARD VIEW (VISUAL GRID)
-                   ======================== */
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                /* =========================================================================
+                   CARD VIEW (Responsive Grid)
+                   ========================================================================= */
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-3 custom-scrollbar pr-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">
                         {paginatedShoots.map(shoot => {
                             const isDone = shoot.reviewStatus === 'DONE';
                             const isSelected = selectedShootIds.includes(shoot.id);
                             const shootReviews = reviewsByShoot.get(shoot.id) || [];
-                            const shootAssignments = assignments.filter(a => a.shootId === shoot.id);
-                            const assignedCrew = shootAssignments.map(a => users.find(u => u.id === a.userId)).filter(Boolean);
-
                             const ratings = shootReviews.map(r => r.rating).filter(Boolean) as number[];
                             const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
 
                             return (
                                 <div
                                     key={shoot.id}
-                                    className={`rounded-2xl border transition-all duration-200 bg-card p-4 shadow-2xs hover:shadow-md flex flex-col justify-between ${
+                                    className={`rounded-xl border transition-all duration-150 bg-card p-3 shadow-2xs hover:shadow-md flex flex-col justify-between ${
                                         isSelected 
-                                            ? 'border-primary ring-2 ring-primary/40 bg-primary/5' 
+                                            ? 'border-primary ring-1 ring-primary/40 bg-primary/5' 
                                             : isDone 
-                                            ? 'border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-400' 
-                                            : 'border-amber-200/80 dark:border-amber-900/40 hover:border-amber-400'
+                                            ? 'border-emerald-200/80 dark:border-emerald-900/40' 
+                                            : 'border-amber-200/80 dark:border-amber-900/40'
                                     }`}
                                 >
-                                    <div className="space-y-3">
-                                        
-                                        {/* Card Header: Checkbox, Shoot #, Badges */}
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="flex items-center gap-2">
+                                    <div className="space-y-2">
+                                        <div className="flex items-start justify-between gap-1.5">
+                                            <div className="flex items-center gap-1.5">
                                                 <button
                                                     type="button"
                                                     onClick={() => toggleSelectShoot(shoot.id)}
                                                     className="cursor-pointer text-muted-foreground hover:text-foreground"
                                                 >
                                                     {isSelected ? (
-                                                        <CheckSquare size={16} className="text-primary" />
+                                                        <CheckSquare size={15} className="text-primary" />
                                                     ) : (
-                                                        <Square size={16} />
+                                                        <Square size={15} />
                                                     )}
                                                 </button>
                                                 {shoot.shootNumber && (
-                                                    <span className="font-mono font-bold text-xs bg-muted text-foreground px-2 py-0.5 rounded-md">
+                                                    <span className="font-mono font-bold text-xs bg-muted text-foreground px-1.5 py-0.2 rounded">
                                                         #{shoot.shootNumber}
                                                     </span>
                                                 )}
-                                                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted px-1.5 py-0.5 rounded">
+                                                <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted px-1.5 py-0.2 rounded">
                                                     {shoot.status}
                                                 </span>
                                             </div>
 
-                                            {/* Status Button */}
                                             <button
                                                 type="button"
                                                 onClick={() => handleToggleQuickStatus(shoot)}
                                                 disabled={togglingShootId === shoot.id}
-                                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
                                                     isDone 
-                                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
-                                                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200' 
+                                                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200'
                                                 }`}
                                             >
-                                                {togglingShootId === shoot.id ? (
-                                                    <RefreshCw size={11} className="animate-spin" />
-                                                ) : isDone ? (
-                                                    <>
-                                                        <CheckCircle2 size={11} className="text-emerald-600" />
-                                                        <span>Done</span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Clock size={11} className="text-amber-600" />
-                                                        <span>Pending</span>
-                                                    </>
-                                                )}
+                                                {isDone ? 'Done' : 'Pending'}
                                             </button>
                                         </div>
 
-                                        {/* Title & Date */}
                                         <div>
-                                            <h3 className="font-bold text-base text-foreground line-clamp-1">
+                                            <h3 className="font-bold text-sm text-foreground line-clamp-1">
                                                 <Link 
                                                     href={`/shoots/${shoot.id}`}
                                                     className="hover:text-primary transition-colors"
@@ -1363,44 +1317,39 @@ export default function ShootReviewsDashboard() {
                                                     {shoot.title}
                                                 </Link>
                                             </h3>
-                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                            <p className="text-[11px] text-muted-foreground truncate">
                                                 {shoot.startTime ? format(parseISO(shoot.startTime), 'MMM d, yyyy') : 'Date TBD'}
                                                 {shoot.location && ` • ${shoot.location}`}
                                             </p>
                                         </div>
 
-                                        {/* Video Link */}
-                                        <div className="pt-1">
-                                            {shoot.reviewVideoUrl ? (
-                                                <a
-                                                    href={shoot.reviewVideoUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors w-full justify-center"
-                                                >
-                                                    <Play size={11} className="fill-current" />
-                                                    <span>Watch Video ({getVideoDomainLabel(shoot.reviewVideoUrl)})</span>
-                                                    <ExternalLink size={11} />
-                                                </a>
-                                            ) : (
-                                                <button
-                                                    onClick={() => { setSelectedShoot(shoot); setIsReviewModalOpen(true); }}
-                                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 hover:bg-amber-100/70 transition-colors w-full justify-center cursor-pointer"
-                                                >
-                                                    <Video size={12} />
-                                                    <span>+ Add Video Link</span>
-                                                </button>
-                                            )}
-                                        </div>
-
+                                        {shoot.reviewVideoUrl ? (
+                                            <a
+                                                href={shoot.reviewVideoUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 w-full justify-center"
+                                            >
+                                                <Play size={10} className="fill-current" />
+                                                <span>Watch Video</span>
+                                                <ExternalLink size={10} />
+                                            </a>
+                                        ) : (
+                                            <button
+                                                onClick={() => { setSelectedShoot(shoot); setIsReviewModalOpen(true); }}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200/80 w-full justify-center cursor-pointer"
+                                            >
+                                                <Video size={11} />
+                                                <span>+ Add Video Link</span>
+                                            </button>
+                                        )}
                                     </div>
 
-                                    {/* Card Footer: Rating, Notes, Review Button */}
-                                    <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
-                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                    <div className="mt-3 pt-2 border-t border-border flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1 text-muted-foreground text-[11px]">
                                             {avgRating && (
-                                                <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
-                                                    <Star size={11} className="fill-amber-400 text-amber-400" />
+                                                <span className="font-bold text-amber-600 flex items-center gap-0.5">
+                                                    <Star size={10} className="fill-amber-400 text-amber-400" />
                                                     {avgRating}
                                                 </span>
                                             )}
@@ -1410,7 +1359,7 @@ export default function ShootReviewsDashboard() {
                                         <button
                                             type="button"
                                             onClick={() => { setSelectedShoot(shoot); setIsReviewModalOpen(true); }}
-                                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                                            className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
                                         >
                                             Review
                                         </button>
@@ -1419,33 +1368,6 @@ export default function ShootReviewsDashboard() {
                             );
                         })}
                     </div>
-
-                    {/* Card Pagination */}
-                    {totalPages > 1 && (
-                        <div className="p-3 border border-border bg-card rounded-2xl flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">
-                                Page <strong className="text-foreground">{currentPage}</strong> of <strong className="text-foreground">{totalPages}</strong>
-                            </span>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                    disabled={currentPage === 1}
-                                    className="px-3 py-1 rounded-lg border border-border bg-background disabled:opacity-40 hover:bg-muted cursor-pointer"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                    disabled={currentPage === totalPages}
-                                    className="px-3 py-1 rounded-lg border border-border bg-background disabled:opacity-40 hover:bg-muted cursor-pointer"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             )}
 
