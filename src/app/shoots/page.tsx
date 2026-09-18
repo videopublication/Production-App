@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage'; // Still used for type referencing if valid, or remove if unused, but kept for safety. Ideally hooks replace it but types might be needed. Alternatively just imports.
-import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X, IndianRupee, RefreshCw, CheckCircle2, SlidersHorizontal, GripVertical, MoreVertical } from 'lucide-react';
+import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X, IndianRupee, RefreshCw, CheckCircle2, SlidersHorizontal, GripVertical, MoreVertical, Film } from 'lucide-react';
 import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, generateShootWhatsAppPayload, generateBulkShootsWhatsAppPayload, openWhatsApp } from '@/lib/whatsapp';
@@ -63,6 +63,7 @@ export default function ShootList() {
     const { user } = useAuth();
     const { department } = useDepartment();
     const labels = getDepartmentLabels(department);
+    const isShootReviewsEnabled = !department || department.slug === 'vp' || department.enabledFeatures?.includes('shoot_reviews');
 
     // React Query Hooks
     const { data: shoots = [], isLoading: shootsLoading, refetch: refetchShoots } = useShoots();
@@ -1483,6 +1484,20 @@ export default function ShootList() {
                                         <span className="sm:hidden">Jira</span>
                                     </button>
 
+                                    {isShootReviewsEnabled && (
+                                        <Link href="/shoots/reviews" className="shrink-0">
+                                            <button
+                                                type="button"
+                                                className="flex items-center gap-1.5 px-2.5 sm:px-3 2xl:px-3.5 py-1 rounded-lg 2xl:rounded-xl text-xs 2xl:text-sm font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80 hover:bg-amber-100/70 dark:hover:bg-amber-900/40 transition-all shadow-2xs cursor-pointer h-8 sm:h-8.5 2xl:h-9.5"
+                                                title="Video Shoot Reviews Dashboard"
+                                            >
+                                                <Film size={12} className="2xl:size-3.5" />
+                                                <span className="hidden sm:inline">Reviews</span>
+                                                <span className="sm:hidden">Reviews</span>
+                                            </button>
+                                        </Link>
+                                    )}
+
                                     <Link href="/shoots/new" className="shrink-0">
                                         <button
                                             type="button"
@@ -1896,12 +1911,33 @@ export default function ShootList() {
                                                     </div>
                                                 )}
                                             </div>
-                                            <span
-                                                style={{ backgroundColor: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.border}` }}
-                                                className="text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider shrink-0"
-                                            >
-                                                {shoot.status}
-                                            </span>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                {isShootReviewsEnabled && (
+                                                    shoot.reviewStatus === 'DONE' ? (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                                                            title="Shoot Review Completed"
+                                                        >
+                                                            <CheckCircle2 size={10} className="shrink-0" />
+                                                            Done
+                                                        </span>
+                                                    ) : (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                                                            title="Shoot Review Pending"
+                                                        >
+                                                            <Film size={10} className="shrink-0" />
+                                                            Review
+                                                        </span>
+                                                    )
+                                                )}
+                                                <span
+                                                    style={{ backgroundColor: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.border}` }}
+                                                    className="text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider shrink-0"
+                                                >
+                                                    {shoot.status}
+                                                </span>
+                                            </div>
                                         </div>
 
                                         {/* Title & Description */}
@@ -2744,17 +2780,38 @@ export default function ShootList() {
 
                                                     {/* 10. Status */}
                                                     {colKey === 'status' && (
-                                                        <span
-                                                            style={{
-                                                                backgroundColor: statusStyle.bg,
-                                                                color: statusStyle.text,
-                                                                border: `1px solid ${statusStyle.border}`,
-                                                            }}
-                                                            className="text-[9px] xl:text-[9.5px] 2xl:text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight shrink-0 inline-flex items-center justify-center whitespace-nowrap max-w-full truncate"
-                                                            title={statusStyle.label || shoot.status.replace(/_/g, ' ')}
-                                                        >
-                                                            {statusStyle.label || shoot.status.replace(/_/g, ' ')}
-                                                        </span>
+                                                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                                            <span
+                                                                style={{
+                                                                    backgroundColor: statusStyle.bg,
+                                                                    color: statusStyle.text,
+                                                                    border: `1px solid ${statusStyle.border}`,
+                                                                }}
+                                                                className="text-[9px] xl:text-[9.5px] 2xl:text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight shrink-0 inline-flex items-center justify-center whitespace-nowrap max-w-full truncate"
+                                                                title={statusStyle.label || shoot.status.replace(/_/g, ' ')}
+                                                            >
+                                                                {statusStyle.label || shoot.status.replace(/_/g, ' ')}
+                                                            </span>
+                                                            {isShootReviewsEnabled && (
+                                                                shoot.reviewStatus === 'DONE' ? (
+                                                                    <span 
+                                                                        className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0 inline-flex items-center gap-0.5" 
+                                                                        title="Shoot Review Completed"
+                                                                    >
+                                                                        <CheckCircle2 size={9} className="shrink-0" />
+                                                                        Done
+                                                                    </span>
+                                                                ) : (
+                                                                    <span 
+                                                                        className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shrink-0 inline-flex items-center gap-0.5" 
+                                                                        title="Shoot Review Pending"
+                                                                    >
+                                                                        <Film size={9} className="shrink-0" />
+                                                                        Review
+                                                                    </span>
+                                                                )
+                                                            )}
+                                                        </div>
                                                     )}
 
                                                     {/* 11. Actions & WhatsApp */}

@@ -12,9 +12,11 @@ import { Button } from '@/components/Button';
 import { APP_CONFIG } from '@/lib/config';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
-import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal, ChevronDown, ExternalLink, Calendar, MapPin, User as UserIcon, FileText, Globe, Layers, MessageSquare, Clock, Send, RefreshCw, Check, X, Pencil, Search, AlertTriangle, CheckCircle, Info, ShieldCheck, Filter, Wrench, Package, Star, Sparkles, UserCheck, Lock, Pin, PinOff, ArrowUpDown, Share2, Bold, Italic, List, Link2, Quote, History, Phone } from 'lucide-react';
+import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal, ChevronDown, ExternalLink, Calendar, MapPin, User as UserIcon, FileText, Globe, Layers, MessageSquare, Clock, Send, RefreshCw, Check, X, Pencil, Search, AlertTriangle, CheckCircle, Info, ShieldCheck, Filter, Wrench, Package, Star, Sparkles, UserCheck, Lock, Pin, PinOff, ArrowUpDown, Share2, Bold, Italic, List, Link2, Quote, History, Phone, Film } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/lib/toast-context';
+import { ShootReviewModal } from '@/components/ShootReviewModal';
+import { useShootReviews } from '@/hooks/useShootReviews';
 
 import { useShoot, useShoots, useSaveShoot } from '@/hooks/useShoots';
 import { useLeaves } from '@/hooks/useLeaves';
@@ -73,6 +75,10 @@ export default function ShootDetailsPage() {
     const [logs, setLogs] = useState<Log[]>([]);
     const [shootDraftAssignments, setShootDraftAssignments] = useState<PlannerDraftAssignment[]>([]);
     const { mutateAsync: saveShoot } = useSaveShoot();
+
+    // Shoot Reviews
+    const { data: shootReviews = [] } = useShootReviews(shoot?.id || '');
+    const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
     const loading = shootLoading || assignmentsLoading || usersLoading;
     const [isSyncing, setIsSyncing] = useState(false);
@@ -1697,6 +1703,22 @@ export default function ShootDetailsPage() {
 
                         {/* Right: Sleek Compact Action Toolbar */}
                         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                            {/* Shoot Review Button */}
+                            {(!pageDepartment || pageDepartment.slug === 'vp' || pageDepartment.enabledFeatures.includes('shoot_reviews')) && (
+                                <button
+                                    onClick={() => setIsReviewModalOpen(true)}
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-xs whitespace-nowrap cursor-pointer ${
+                                        shoot.reviewStatus === 'DONE'
+                                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                            : 'bg-amber-500 hover:bg-amber-600 text-black'
+                                    }`}
+                                    title="Video Output Review"
+                                >
+                                    <Film size={13} />
+                                    <span>{shoot.reviewStatus === 'DONE' ? 'Review Done' : 'Review Video'}</span>
+                                </button>
+                            )}
+
                             {/* WhatsApp */}
                             <button
                                 onClick={() => {
@@ -2854,6 +2876,82 @@ export default function ShootDetailsPage() {
 
                 {/* Right Column (5 cols): Linked Transactions, Project Expenses & Shoot Overview */}
                 <div className="lg:col-span-5 space-y-3.5 sm:space-y-4">
+                    {/* Video & Output Review Card (Video Publication) */}
+                    {(!pageDepartment || pageDepartment.slug === 'vp' || pageDepartment.enabledFeatures.includes('shoot_reviews')) && (
+                        <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3">
+                            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <Film size={16} className="text-primary" />
+                                    <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">Video & Output Review</h2>
+                                </div>
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    shoot.reviewStatus === 'DONE'
+                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                }`}>
+                                    {shoot.reviewStatus === 'DONE' ? (
+                                        <>
+                                            <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
+                                            <span>Review Done</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Clock size={11} className="text-amber-600 dark:text-amber-400" />
+                                            <span>Pending Review</span>
+                                        </>
+                                    )}
+                                </span>
+                            </div>
+
+                            {/* Video link preview / player */}
+                            {shoot.reviewVideoUrl ? (
+                                <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80">
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                                            <Video size={14} />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
+                                            {shoot.reviewVideoUrl}
+                                        </span>
+                                    </div>
+                                    <a
+                                        href={shoot.reviewVideoUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors shrink-0 ml-2 shadow-2xs"
+                                    >
+                                        <span>Watch</span>
+                                        <ExternalLink size={11} />
+                                    </a>
+                                </div>
+                            ) : (
+                                <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
+                                    <span>No video link added yet</span>
+                                    <button
+                                        onClick={() => setIsReviewModalOpen(true)}
+                                        className="text-xs font-bold text-primary hover:underline cursor-pointer"
+                                    >
+                                        + Add Video Link
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Review status details & Action */}
+                            <div className="flex items-center justify-between pt-1">
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    {shootReviews.length} feedback entr{shootReviews.length === 1 ? 'y' : 'ies'}
+                                </span>
+                                <button
+                                    onClick={() => setIsReviewModalOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                                >
+                                    <MessageSquare size={13} />
+                                    <span>Open Review & Feedback</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Google Calendar Banner (if not synced and confirmed) */}
                     {!shoot.googleEventId && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && shoot.status === 'CONFIRMED' && (
                         <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3.5 space-y-2">
@@ -3415,6 +3513,14 @@ export default function ShootDetailsPage() {
                     departmentId={shoot.departmentId}
                 />
             )}
+
+            {/* Shoot Review Modal */}
+            <ShootReviewModal
+                isOpen={isReviewModalOpen}
+                onClose={() => setIsReviewModalOpen(false)}
+                shoot={shoot}
+                users={users}
+            />
         </div>
     );
 }

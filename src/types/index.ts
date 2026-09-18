@@ -250,6 +250,23 @@ export interface ShootExpense {
     campaign?: string;
 }
 
+export interface ShootReview {
+    id: string;
+    shootId: string;
+    departmentId?: string;
+    userId: string;
+    userName: string;
+    userRole: Role;
+    feedback: string;
+    rating?: number; // 1 to 5 stars
+    tags?: string[]; // e.g. ['Camera / Framing', 'Audio', 'Lighting', 'Color / Grade', 'Content / Pacing', 'Technical']
+    videoUrl?: string;
+    createdAt: string;
+    updatedAt?: string;
+}
+
+export type ShootReviewStatus = 'PENDING' | 'DONE';
+
 export interface Shoot {
     id: string;
     title: string;
@@ -269,6 +286,11 @@ export interface Shoot {
     departmentId?: string;
     expenses?: ShootExpense[];
     createdAt?: string;
+    reviewStatus?: ShootReviewStatus;
+    reviewVideoUrl?: string;
+    reviewCompletedAt?: string;
+    reviewCompletedBy?: string;
+    reviews?: ShootReview[];
 }
 
 export interface Assignment {

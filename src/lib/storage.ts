@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { User, Equipment, Transaction, Log, Shoot, Assignment, Department, Leave, PlannerDraftAssignment, AssignmentSegment } from '@/types';
+import { User, Equipment, Transaction, Log, Shoot, Assignment, Department, Leave, PlannerDraftAssignment, AssignmentSegment, ShootReview, ShootReviewStatus } from '@/types';
 import { decodeTransactionNotes, encodeTransactionNotes } from './transaction-manual-items';
 
 /**
@@ -886,25 +886,40 @@ class StorageService {
             return [];
         }
 
-        return data.map((s: any) => ({
-            id: s.id,
-            title: s.title,
-            description: s.description,
-            location: s.location,
-            status: s.status,
-            startTime: s.start_time,
-            endTime: s.end_time,
-            pocName: s.poc_name,
-            pocContact: s.poc_contact,
-            requiredRoles: s.required_roles,
-            createdBy: s.created_by,
-            googleEventId: s.google_event_id, // Map DB column to type
-            ...(s.cancellation_reason ? { cancellationReason: s.cancellation_reason } : {}),
-            shootNumber: s.shoot_number,
-            jiraTicketId: s.jira_ticket_id,
-            departmentId: s.department_id,
-            expenses: s.expenses || []
-        })) as Shoot[];
+        // Fetch fallback review metadata to merge
+        const reviewStore = await this._getFallbackReviewStore();
+
+        return data.map((s: any) => {
+            const meta = reviewStore.shootMeta[s.id];
+            const reviewStatus = meta?.reviewStatus || s.review_status || 'PENDING';
+            const reviewVideoUrl = meta?.reviewVideoUrl || s.review_video_url || undefined;
+            const reviewCompletedAt = meta?.reviewCompletedAt || s.review_completed_at || undefined;
+            const reviewCompletedBy = meta?.reviewCompletedBy || s.review_completed_by || undefined;
+
+            return {
+                id: s.id,
+                title: s.title,
+                description: s.description,
+                location: s.location,
+                status: s.status,
+                startTime: s.start_time,
+                endTime: s.end_time,
+                pocName: s.poc_name,
+                pocContact: s.poc_contact,
+                requiredRoles: s.required_roles,
+                createdBy: s.created_by,
+                googleEventId: s.google_event_id, // Map DB column to type
+                ...(s.cancellation_reason ? { cancellationReason: s.cancellation_reason } : {}),
+                shootNumber: s.shoot_number,
+                jiraTicketId: s.jira_ticket_id,
+                departmentId: s.department_id,
+                expenses: s.expenses || [],
+                reviewStatus,
+                reviewVideoUrl,
+                reviewCompletedAt,
+                reviewCompletedBy
+            };
+        }) as Shoot[];
     }
 
     async saveShoot(shoot: Shoot): Promise<void> {
@@ -1430,6 +1445,231 @@ class StorageService {
             console.error('Error deleting leave:', error);
             throw error;
         }
+    }
+
+    // ==========================================
+    // Shoot Video Reviews (Video Publication)
+    // ==========================================
+    private async _getFallbackReviewStore(): Promise<{
+        reviews: ShootReview[];
+        shootMeta: Record<string, {
+            reviewStatus?: ShootReviewStatus;
+            reviewVideoUrl?: string;
+            reviewCompletedAt?: string;
+            reviewCompletedBy?: string;
+        }>;
+    }> {
+        try {
+            const { data, error } = await supabase
+                .from('whatsapp_sessions')
+                .select('data')
+                .eq('id', 'shoot_reviews_store_v1')
+                .maybeSingle();
+            if (data?.data && typeof data.data === 'object') {
+                return {
+                    reviews: Array.isArray(data.data.reviews) ? data.data.reviews : [],
+                    shootMeta: data.data.shootMeta || {}
+                };
+            }
+        } catch (err) {
+            console.warn('Error reading fallback review store:', err);
+        }
+        return { reviews: [], shootMeta: {} };
+    }
+
+    private async _saveFallbackReviewStore(store: {
+        reviews: ShootReview[];
+        shootMeta: Record<string, {
+            reviewStatus?: ShootReviewStatus;
+            reviewVideoUrl?: string;
+            reviewCompletedAt?: string;
+            reviewCompletedBy?: string;
+        }>;
+    }): Promise<void> {
+        try {
+            await supabase
+                .from('whatsapp_sessions')
+                .upsert({
+                    id: 'shoot_reviews_store_v1',
+                    data: store,
+                    updated_at: new Date().toISOString()
+                });
+        } catch (err) {
+            console.warn('Error saving fallback review store:', err);
+        }
+    }
+
+    async getShootReviews(shootId: string): Promise<ShootReview[]> {
+        try {
+            const { data, error } = await supabase
+                .from('shoot_reviews')
+                .select('*')
+                .eq('shoot_id', shootId)
+                .order('created_at', { ascending: false });
+
+            if (!error && data) {
+                return data.map((r: any) => ({
+                    id: r.id,
+                    shootId: r.shoot_id,
+                    departmentId: r.department_id,
+                    userId: r.user_id,
+                    userName: r.user_name || 'User',
+                    userRole: r.user_role || 'CREW',
+                    feedback: r.feedback,
+                    rating: r.rating,
+                    tags: r.tags || [],
+                    videoUrl: r.video_url,
+                    createdAt: r.created_at,
+                    updatedAt: r.updated_at
+                }));
+            }
+        } catch (err) {
+            // Fall through to fallback store
+        }
+
+        const store = await this._getFallbackReviewStore();
+        return store.reviews
+            .filter(r => r.shootId === shootId)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+
+    async getAllShootReviews(departmentId?: string | null): Promise<ShootReview[]> {
+        try {
+            let query = supabase.from('shoot_reviews').select('*').order('created_at', { ascending: false });
+            if (departmentId) {
+                query = query.or(`department_id.eq.${departmentId},department_id.is.null`);
+            }
+            const { data, error } = await query;
+            if (!error && data) {
+                return data.map((r: any) => ({
+                    id: r.id,
+                    shootId: r.shoot_id,
+                    departmentId: r.department_id,
+                    userId: r.user_id,
+                    userName: r.user_name || 'User',
+                    userRole: r.user_role || 'CREW',
+                    feedback: r.feedback,
+                    rating: r.rating,
+                    tags: r.tags || [],
+                    videoUrl: r.video_url,
+                    createdAt: r.created_at,
+                    updatedAt: r.updated_at
+                }));
+            }
+        } catch (err) {
+            // Fall through to fallback store
+        }
+
+        const store = await this._getFallbackReviewStore();
+        if (departmentId) {
+            return store.reviews.filter(r => !r.departmentId || r.departmentId === departmentId);
+        }
+        return store.reviews;
+    }
+
+    async addShootReview(review: Omit<ShootReview, 'id' | 'createdAt'>): Promise<ShootReview> {
+        const newReview: ShootReview = {
+            ...review,
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString()
+        };
+
+        try {
+            await supabase.from('shoot_reviews').insert({
+                id: newReview.id,
+                shoot_id: newReview.shootId,
+                department_id: newReview.departmentId,
+                user_id: newReview.userId,
+                user_name: newReview.userName,
+                user_role: newReview.userRole,
+                feedback: newReview.feedback,
+                rating: newReview.rating,
+                tags: newReview.tags || [],
+                video_url: newReview.videoUrl,
+                created_at: newReview.createdAt,
+                updated_at: newReview.createdAt
+            });
+        } catch (err) {
+            console.warn('Could not insert directly to shoot_reviews table, will sync in fallback store:', err);
+        }
+
+        // Always sync in fallback store for resilience
+        const store = await this._getFallbackReviewStore();
+        store.reviews = [newReview, ...store.reviews.filter(r => r.id !== newReview.id)];
+        if (newReview.videoUrl) {
+            store.shootMeta[newReview.shootId] = {
+                ...(store.shootMeta[newReview.shootId] || {}),
+                reviewVideoUrl: newReview.videoUrl
+            };
+        }
+        await this._saveFallbackReviewStore(store);
+
+        // Also update shoots table video_url if provided
+        if (newReview.videoUrl) {
+            try {
+                await supabase.from('shoots').update({ review_video_url: newReview.videoUrl }).eq('id', newReview.shootId);
+            } catch {}
+        }
+
+        return newReview;
+    }
+
+    async deleteShootReview(id: string): Promise<void> {
+        try {
+            await supabase.from('shoot_reviews').delete().eq('id', id);
+        } catch {}
+
+        const store = await this._getFallbackReviewStore();
+        store.reviews = store.reviews.filter(r => r.id !== id);
+        await this._saveFallbackReviewStore(store);
+    }
+
+    async updateShootReviewStatus(
+        shootId: string,
+        status: ShootReviewStatus,
+        completedBy?: string,
+        videoUrl?: string
+    ): Promise<void> {
+        const completedAt = status === 'DONE' ? new Date().toISOString() : undefined;
+
+        // Try updating shoots table
+        try {
+            const updates: Record<string, unknown> = {
+                review_status: status,
+                review_completed_at: completedAt || null,
+                review_completed_by: completedBy || null
+            };
+            if (videoUrl !== undefined) {
+                updates.review_video_url = videoUrl;
+            }
+            await supabase.from('shoots').update(updates).eq('id', shootId);
+        } catch (err) {
+            console.warn('Could not update shoots review columns:', err);
+        }
+
+        // Always save in fallback store
+        const store = await this._getFallbackReviewStore();
+        store.shootMeta[shootId] = {
+            ...(store.shootMeta[shootId] || {}),
+            reviewStatus: status,
+            reviewCompletedAt: completedAt,
+            reviewCompletedBy: completedBy,
+            ...(videoUrl !== undefined ? { reviewVideoUrl: videoUrl } : {})
+        };
+        await this._saveFallbackReviewStore(store);
+    }
+
+    async updateShootVideoUrl(shootId: string, videoUrl: string): Promise<void> {
+        try {
+            await supabase.from('shoots').update({ review_video_url: videoUrl }).eq('id', shootId);
+        } catch {}
+
+        const store = await this._getFallbackReviewStore();
+        store.shootMeta[shootId] = {
+            ...(store.shootMeta[shootId] || {}),
+            reviewVideoUrl: videoUrl
+        };
+        await this._saveFallbackReviewStore(store);
     }
 }
 
