@@ -1659,6 +1659,39 @@ class StorageService {
         await this._saveFallbackReviewStore(store);
     }
 
+    async bulkUpdateShootReviewStatus(
+        shootIds: string[],
+        status: ShootReviewStatus,
+        completedBy?: string
+    ): Promise<void> {
+        if (!shootIds || shootIds.length === 0) return;
+        const completedAt = status === 'DONE' ? new Date().toISOString() : undefined;
+
+        // Try updating shoots table in a single batch
+        try {
+            const updates: Record<string, unknown> = {
+                review_status: status,
+                review_completed_at: completedAt || null,
+                review_completed_by: completedBy || null
+            };
+            await supabase.from('shoots').update(updates).in('id', shootIds);
+        } catch (err) {
+            console.warn('Could not bulk update shoots review columns:', err);
+        }
+
+        // Update in fallback store
+        const store = await this._getFallbackReviewStore();
+        for (const sId of shootIds) {
+            store.shootMeta[sId] = {
+                ...(store.shootMeta[sId] || {}),
+                reviewStatus: status,
+                reviewCompletedAt: completedAt,
+                reviewCompletedBy: completedBy,
+            };
+        }
+        await this._saveFallbackReviewStore(store);
+    }
+
     async updateShootVideoUrl(shootId: string, videoUrl: string): Promise<void> {
         try {
             await supabase.from('shoots').update({ review_video_url: videoUrl }).eq('id', shootId);

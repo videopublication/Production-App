@@ -85,6 +85,26 @@ export function useUpdateShootReviewStatus() {
     });
 }
 
+export function useBulkUpdateShootReviewStatus() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            shootIds,
+            status,
+            completedBy
+        }: {
+            shootIds: string[];
+            status: ShootReviewStatus;
+            completedBy?: string;
+        }) => storage.bulkUpdateShootReviewStatus(shootIds, status, completedBy),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.all });
+        },
+    });
+}
+
 export function useUpdateShootVideoUrl() {
     const queryClient = useQueryClient();
 
