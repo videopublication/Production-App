@@ -38,8 +38,7 @@ type SortField = 'shootNumber' | 'title' | 'date' | 'reviewStatus' | 'rating' | 
 type SortDirection = 'asc' | 'desc';
 
 import { ShootWorkflowStage, getShootReviewStage, isServerStoragePath, getFootageSourceLabel } from '@/lib/shootReviewWorkflow';
-export type { ShootWorkflowStage };
-export { getShootReviewStage };
+// Note: Next.js pages can't export arbitrary values; import helpers from '@/lib/shootReviewWorkflow' instead.
 
 // Shared button styles (consistent 32px / 36px on 2xl sizing across the page)
 const ICON_BTN =
