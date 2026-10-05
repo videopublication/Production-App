@@ -117,3 +117,70 @@ export function useUpdateShootVideoUrl() {
         },
     });
 }
+
+export function useAssignShootReview() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (params: {
+            shootId: string;
+            reviewerId: string;
+            reviewerName: string;
+            scheduledStartTime: string;
+            scheduledEndTime: string;
+            notes?: string;
+            scheduleOnCalendar?: boolean;
+        }) => storage.assignShootReview(params),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: ['assignments'] });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.all });
+        },
+    });
+}
+
+export function useUnassignShootReview() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (shootId: string) => storage.unassignShootReview(shootId),
+        onSuccess: (_data, shootId) => {
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.detail(shootId) });
+            queryClient.invalidateQueries({ queryKey: ['assignments'] });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.byShoot(shootId) });
+        },
+    });
+}
+
+export function useAddToReview() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (shootId: string) => storage.addToReview(shootId),
+        onSuccess: (_data, shootId) => {
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.detail(shootId) });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.byShoot(shootId) });
+        },
+    });
+}
+
+export function useRemoveFromReview() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (shootId: string) => storage.removeFromReview(shootId),
+        onSuccess: (_data, shootId) => {
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_KEYS.detail(shootId) });
+            queryClient.invalidateQueries({ queryKey: ['assignments'] });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: SHOOT_REVIEW_KEYS.byShoot(shootId) });
+        },
+    });
+}
+
+

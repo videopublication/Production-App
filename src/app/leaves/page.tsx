@@ -501,6 +501,47 @@ export default function LeavesPage() {
         }
     };
 
+    // KPI card: compact stacked layout on phones, icon+label header on larger screens
+    const renderKpiCard = ({
+        icon, iconClass, label, mobileLabel, value, sub, pulse, onClick, activeClass,
+    }: {
+        icon: React.ReactNode;
+        iconClass: string;
+        label: string;
+        mobileLabel: string;
+        value: number;
+        sub: string;
+        pulse?: boolean;
+        onClick?: () => void;
+        activeClass?: string;
+    }) => (
+        <div
+            onClick={onClick}
+            className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all bg-white dark:bg-[#1c1c1e] min-w-0 ${
+                onClick ? 'cursor-pointer active:scale-[0.98]' : ''
+            } ${
+                activeClass || 'border-gray-200/80 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 shadow-2xs'
+            }`}
+        >
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                    <div className={`p-1.5 rounded-lg shrink-0 ${iconClass}`}>{icon}</div>
+                    <span className="hidden sm:inline text-xs font-semibold text-gray-600 dark:text-gray-300 truncate">
+                        {label}
+                    </span>
+                </div>
+                {pulse && <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />}
+            </div>
+            <div className="flex items-baseline gap-2 mt-1.5 sm:mt-2">
+                <span className="text-2xl font-black text-gray-900 dark:text-white leading-none sm:leading-normal">{value}</span>
+                <span className="hidden sm:inline text-[11px] text-gray-400 truncate">{sub}</span>
+            </div>
+            <span className="sm:hidden block mt-1 text-[11px] font-semibold leading-tight text-gray-500 dark:text-gray-400 line-clamp-2">
+                {mobileLabel}
+            </span>
+        </div>
+    );
+
     if (isLoading) {
         return (
             <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 py-4 space-y-4">
@@ -523,7 +564,7 @@ export default function LeavesPage() {
 
     return (
         <div
-            className="w-full max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 py-2.5 sm:py-4 space-y-3.5 sm:space-y-4 pb-24 md:pb-6 relative transition-transform duration-200 ease-out"
+            className="w-full max-w-[1600px] mx-auto px-0.5 sm:px-5 lg:px-6 py-2 sm:py-4 space-y-3 sm:space-y-4 pb-24 md:pb-6 relative transition-transform duration-200 ease-out"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -548,46 +589,50 @@ export default function LeavesPage() {
             </div>
 
             {/* Top Executive Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+                <div className="min-w-0">
                     <div className="flex items-center gap-2.5">
-                        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                            Leaves & Team Time Off
+                        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+                            Leaves &amp; Team Time Off
                         </h1>
                         <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                             {filteredLeaves.length} {filteredLeaves.length === 1 ? 'request' : 'requests'}
                         </span>
                     </div>
-                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    <p className="hidden sm:block text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                         Review leave applications, manage team availability, and check for shoot conflicts.
                     </p>
                 </div>
 
-                {/* Top Actions */}
-                <div className="flex items-center flex-wrap gap-2 shrink-0">
+                {/* Top Actions: one row on mobile (icon-only secondary + full-width primary) */}
+                <div className="flex items-center gap-2 shrink-0">
                     <Link
                         href="/calendar"
-                        className="h-9 px-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:border-primary hover:text-primary transition-colors flex items-center gap-1.5 shadow-2xs"
+                        aria-label="Open calendar"
+                        title="Open calendar"
+                        className="h-10 w-10 sm:h-9 sm:w-auto sm:px-3.5 justify-center rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:border-primary hover:text-primary transition-colors flex items-center gap-1.5 shadow-2xs shrink-0"
                     >
-                        <Calendar size={14} className="text-gray-400" />
-                        <span>Calendar</span>
-                        <ExternalLink size={12} className="opacity-60" />
+                        <Calendar size={16} className="text-gray-500 sm:w-3.5 sm:h-3.5" />
+                        <span className="hidden sm:inline">Calendar</span>
+                        <ExternalLink size={12} className="opacity-60 hidden sm:inline" />
                     </Link>
 
                     {isAdmin && (
                         <>
                             <button
                                 onClick={handleExport}
-                                className="h-9 px-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors flex items-center gap-1.5 shadow-2xs"
+                                aria-label="Export CSV"
+                                title="Export CSV"
+                                className="h-10 w-10 sm:h-9 sm:w-auto sm:px-3.5 justify-center rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors flex items-center gap-1.5 shadow-2xs shrink-0"
                             >
-                                <Download size={14} className="text-gray-400" />
-                                <span>Export CSV</span>
+                                <Download size={16} className="text-gray-500 sm:w-3.5 sm:h-3.5" />
+                                <span className="hidden sm:inline">Export CSV</span>
                             </button>
                             <button
                                 onClick={() => setIsAdminModalOpen(true)}
-                                className="h-9 px-3.5 rounded-xl bg-gray-900 hover:bg-black text-white dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs"
+                                className="h-10 sm:h-9 flex-1 sm:flex-none justify-center px-4 sm:px-3.5 rounded-xl bg-gray-900 hover:bg-black text-white dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 text-sm sm:text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs active:scale-[0.98]"
                             >
-                                <Plus size={15} />
+                                <Plus size={16} />
                                 <span>Record Absence</span>
                             </button>
                         </>
@@ -596,9 +641,9 @@ export default function LeavesPage() {
                     {!isAdmin && (
                         <Button
                             onClick={() => setIsApplying(!isApplying)}
-                            className="h-9 rounded-xl px-4 text-xs font-bold gap-1.5 shadow-xs"
+                            className="h-10 sm:h-9 flex-1 sm:flex-none rounded-xl px-4 text-sm sm:text-xs font-bold gap-1.5 shadow-xs"
                         >
-                            {isApplying ? <X size={15} /> : <Plus size={15} />}
+                            {isApplying ? <X size={16} /> : <Plus size={16} />}
                             {isApplying ? 'Cancel Form' : 'Apply for Leave'}
                         </Button>
                     )}
@@ -607,120 +652,63 @@ export default function LeavesPage() {
 
             {/* KPI Ribbon (Clean, modern Apple-style cards) */}
             {isAdmin ? (
-                <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-                    <div
-                        onClick={() => setStatusFilter('PENDING')}
-                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] ${
-                            statusFilter === 'PENDING'
-                                ? 'border-amber-400 dark:border-amber-500 shadow-xs ring-1 ring-amber-400/40'
-                                : 'border-gray-200/80 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 shadow-2xs'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
-                                    <Clock size={14} />
-                                </div>
-                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                    Pending Review
-                                </span>
-                            </div>
-                            {statsData.pending > 0 && (
-                                <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                            )}
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-2">
-                            <span className="text-2xl font-black text-gray-900 dark:text-white">
-                                {statsData.pending}
-                            </span>
-                            <span className="text-[11px] text-gray-400">
-                                awaiting action
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="p-3 sm:p-3.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400">
-                                    <Users size={14} />
-                                </div>
-                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                    Out Today
-                                </span>
-                            </div>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-2">
-                            <span className="text-2xl font-black text-gray-900 dark:text-white">
-                                {statsData.onLeaveToday}
-                            </span>
-                            <span className="text-[11px] text-gray-400">
-                                staff member{statsData.onLeaveToday === 1 ? '' : 's'}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div
-                        onClick={() => setStatusFilter('APPROVED')}
-                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer bg-white dark:bg-[#1c1c1e] ${
-                            statusFilter === 'APPROVED'
-                                ? 'border-emerald-400 dark:border-emerald-500 shadow-xs ring-1 ring-emerald-400/40'
-                                : 'border-gray-200/80 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 shadow-2xs'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
-                                    <CalendarCheck2 size={14} />
-                                </div>
-                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                    Approved This Month
-                                </span>
-                            </div>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-2">
-                            <span className="text-2xl font-black text-gray-900 dark:text-white">
-                                {statsData.approvedThisMonth}
-                            </span>
-                            <span className="text-[11px] text-gray-400">
-                                approved leaves
-                            </span>
-                        </div>
-                    </div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    {renderKpiCard({
+                        icon: <Clock size={14} />,
+                        iconClass: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400',
+                        label: 'Pending Review',
+                        mobileLabel: 'Pending review',
+                        value: statsData.pending,
+                        sub: 'awaiting action',
+                        pulse: statsData.pending > 0,
+                        onClick: () => setStatusFilter('PENDING'),
+                        activeClass: statusFilter === 'PENDING'
+                            ? 'border-amber-400 dark:border-amber-500 shadow-xs ring-1 ring-amber-400/40'
+                            : undefined,
+                    })}
+                    {renderKpiCard({
+                        icon: <Users size={14} />,
+                        iconClass: 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400',
+                        label: 'Out Today',
+                        mobileLabel: 'Out today',
+                        value: statsData.onLeaveToday,
+                        sub: `staff member${statsData.onLeaveToday === 1 ? '' : 's'}`,
+                    })}
+                    {renderKpiCard({
+                        icon: <CalendarCheck2 size={14} />,
+                        iconClass: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400',
+                        label: 'Approved This Month',
+                        mobileLabel: 'Approved this month',
+                        value: statsData.approvedThisMonth,
+                        sub: 'approved leaves',
+                        onClick: () => setStatusFilter('APPROVED'),
+                        activeClass: statusFilter === 'APPROVED'
+                            ? 'border-emerald-400 dark:border-emerald-500 shadow-xs ring-1 ring-emerald-400/40'
+                            : undefined,
+                    })}
                 </div>
             ) : myStats && (
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs">
-                        <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
-                                <Calendar size={14} />
-                            </div>
-                            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                Days Taken This Year
-                            </span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-2">
-                            <span className="text-2xl font-black text-gray-900 dark:text-white">{myStats.daysThisYear}</span>
-                            <span className="text-[11px] text-gray-400">approved days</span>
-                        </div>
-                    </div>
-                    <div
-                        onClick={() => setStatusFilter('PENDING')}
-                        className="p-3.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs cursor-pointer hover:border-gray-300 transition-colors"
-                    >
-                        <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
-                                <Clock size={14} />
-                            </div>
-                            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                Pending Approvals
-                            </span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-2">
-                            <span className="text-2xl font-black text-gray-900 dark:text-white">{myStats.pending}</span>
-                            <span className="text-[11px] text-gray-400">awaiting manager</span>
-                        </div>
-                    </div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    {renderKpiCard({
+                        icon: <Calendar size={14} />,
+                        iconClass: 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400',
+                        label: 'Days Taken This Year',
+                        mobileLabel: 'Days taken this year',
+                        value: myStats.daysThisYear,
+                        sub: 'approved days',
+                    })}
+                    {renderKpiCard({
+                        icon: <Clock size={14} />,
+                        iconClass: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400',
+                        label: 'Pending Approvals',
+                        mobileLabel: 'Pending approvals',
+                        value: myStats.pending,
+                        sub: 'awaiting manager',
+                        onClick: () => setStatusFilter('PENDING'),
+                        activeClass: statusFilter === 'PENDING'
+                            ? 'border-amber-400 dark:border-amber-500 shadow-xs ring-1 ring-amber-400/40'
+                            : undefined,
+                    })}
                 </div>
             )}
 
@@ -809,14 +797,14 @@ export default function LeavesPage() {
             <div className="p-2 sm:p-2.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] shadow-2xs space-y-2">
                 <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2">
                     {/* Status segmented tabs */}
-                    <div className="inline-flex p-1 bg-gray-100/90 dark:bg-gray-800/80 rounded-xl overflow-x-auto shrink-0">
+                    <div className="grid grid-cols-4 sm:inline-flex p-1 bg-gray-100/90 dark:bg-gray-800/80 rounded-xl shrink-0 gap-0.5">
                         {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as LeaveStatus[]).map(status => {
                             const isSelected = statusFilter === status;
                             return (
                                 <button
                                     key={status}
                                     onClick={() => setStatusFilter(status)}
-                                    className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                                    className={`h-8 px-1 sm:px-3 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center justify-center gap-1 sm:gap-1.5 min-w-0 ${
                                         isSelected
                                             ? 'bg-white dark:bg-[#252528] text-gray-900 dark:text-white shadow-2xs'
                                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -837,16 +825,16 @@ export default function LeavesPage() {
                         })}
                     </div>
 
-                    {/* Search & Month Picker */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 lg:max-w-xl lg:justify-end">
-                        <div className="relative flex-1">
+                    {/* Search & Month Picker (single row on all sizes) */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0 lg:max-w-xl lg:justify-end">
+                        <div className="relative flex-1 min-w-0">
                             <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input
                                 type="text"
                                 placeholder={isAdmin ? "Search member or reason..." : "Search reason..."}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className="h-8.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-8.5 pr-7 text-xs text-gray-900 dark:text-white outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary"
+                                className="h-9 sm:h-8.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-8.5 pr-7 text-xs text-gray-900 dark:text-white outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-primary"
                             />
                             {searchQuery && (
                                 <button
@@ -861,24 +849,34 @@ export default function LeavesPage() {
 
                         {isAdmin && (
                             <div
-                                className="relative cursor-pointer shrink-0 sm:w-[150px]"
+                                className={`relative cursor-pointer shrink-0 w-[112px] sm:w-[150px] h-9 sm:h-8.5 rounded-xl border bg-gray-50 dark:bg-gray-800 flex items-center gap-1.5 pl-2.5 pr-2 text-xs transition-all ${
+                                    monthFilter
+                                        ? 'border-primary/40 text-gray-900 dark:text-white font-semibold'
+                                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                                }`}
                                 onClick={() => {
                                     const el = monthInputRef.current;
                                     if (!el) return;
-                                    if (typeof el.showPicker === 'function') el.showPicker();
-                                    else el.focus();
+                                    try {
+                                        if (typeof el.showPicker === 'function') el.showPicker();
+                                        else el.focus();
+                                    } catch {
+                                        el.focus();
+                                    }
                                 }}
                             >
-                                <Calendar size={13} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gray-400" />
+                                <Calendar size={13} className={`shrink-0 ${monthFilter ? 'text-primary' : 'text-gray-400'}`} />
+                                <span className="truncate">
+                                    {monthFilter ? format(parseISO(`${monthFilter}-01`), 'MMM yyyy') : 'All months'}
+                                </span>
+                                {/* Native month input kept invisible so the browser picker still works */}
                                 <input
                                     ref={monthInputRef}
                                     type="month"
                                     value={monthFilter}
                                     onChange={e => setMonthFilter(e.target.value)}
                                     aria-label="Filter by month"
-                                    className={`h-8.5 w-full cursor-pointer rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-8 pr-2.5 text-xs outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary ${
-                                        monthFilter ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-400'
-                                    }`}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                 />
                             </div>
                         )}
@@ -886,9 +884,12 @@ export default function LeavesPage() {
                         {(searchQuery || monthFilter) && (
                             <button
                                 onClick={() => { setSearchQuery(''); setMonthFilter(''); }}
-                                className="h-8.5 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                                aria-label="Clear filters"
+                                title="Clear filters"
+                                className="h-9 w-9 sm:h-8.5 sm:w-auto sm:px-3 shrink-0 inline-flex items-center justify-center gap-1 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
                             >
-                                Clear
+                                <X size={14} className="sm:hidden" />
+                                <span className="hidden sm:inline">Clear</span>
                             </button>
                         )}
                     </div>

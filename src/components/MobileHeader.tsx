@@ -42,6 +42,7 @@ export const MobileHeader = () => {
     // ... (getPageName function remains same)
 
     const getPageName = () => {
+        if (pathname === '/shoots/reviews' || pathname.startsWith('/shoots/reviews/')) return 'Shoot Reviews';
         if (pageNames[pathname]) return pageNames[pathname];
         for (const [path, name] of Object.entries(pageNames)) {
             if (pathname.startsWith(path + '/')) {
@@ -68,7 +69,7 @@ export const MobileHeader = () => {
                         {(pathname === '/profile' ||
                             pathname === '/notifications' ||
                             (pathname.startsWith('/inventory/') && pathname !== '/inventory') ||
-                            (pathname.startsWith('/shoots/') && pathname !== '/shoots') ||
+                            (pathname.startsWith('/shoots/') && pathname !== '/shoots' && !pathname.startsWith('/shoots/reviews')) ||
                             (pathname.startsWith('/transactions/') && pathname !== '/transactions') ||
                             (pathname.startsWith('/admin/users/') && pathname !== '/admin/users')
                         ) && (

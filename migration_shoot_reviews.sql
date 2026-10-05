@@ -40,3 +40,18 @@ WHERE review_status IS NULL
 UPDATE public.departments
 SET enabled_features = array_append(enabled_features, 'shoot_reviews')
 WHERE slug = 'vp' AND NOT ('shoot_reviews' = ANY(enabled_features));
+
+-- 5. Add Admin Review Decision & Scheduling fields to shoots table
+-- CRITICAL REQUIREMENT: Admin only decides which shoot review is required (defaults to FALSE).
+-- Only once shoot is closed can an Admin assign review & schedule crew time log.
+ALTER TABLE public.shoots
+ADD COLUMN IF NOT EXISTS review_required BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS review_assigned_to TEXT,
+ADD COLUMN IF NOT EXISTS review_assigned_to_name TEXT,
+ADD COLUMN IF NOT EXISTS review_scheduled_start_time TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS review_scheduled_end_time TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS review_notes TEXT,
+ADD COLUMN IF NOT EXISTS linked_review_shoot_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_shoots_review_required ON public.shoots(review_required);
+CREATE INDEX IF NOT EXISTS idx_shoots_review_assigned_to ON public.shoots(review_assigned_to);

@@ -36,6 +36,8 @@ function describeSupabaseError(error: unknown): string {
 }
 
 class StorageService {
+    private _hasShootReviewColumns: boolean | null = null;
+
     // Departments
     async getDepartments(): Promise<Department[]> {
         const { data, error } = await supabase
@@ -891,10 +893,32 @@ class StorageService {
 
         return data.map((s: any) => {
             const meta = reviewStore.shootMeta[s.id];
-            const reviewStatus = meta?.reviewStatus || s.review_status || 'PENDING';
+            const reviewRequired = meta?.reviewRequired !== undefined 
+                ? Boolean(meta.reviewRequired) 
+                : Boolean(s.review_required);
+            const reviewStatus = (meta?.reviewStatus || s.review_status || 'PENDING') as ShootReviewStatus;
             const reviewVideoUrl = meta?.reviewVideoUrl || s.review_video_url || undefined;
             const reviewCompletedAt = meta?.reviewCompletedAt || s.review_completed_at || undefined;
             const reviewCompletedBy = meta?.reviewCompletedBy || s.review_completed_by || undefined;
+            const reviewAssignedTo = meta?.reviewAssignedTo || s.review_assigned_to || undefined;
+            const reviewAssignedToName = meta?.reviewAssignedToName || s.review_assigned_to_name || undefined;
+            const reviewScheduledStartTime = meta?.reviewScheduledStartTime || s.review_scheduled_start_time || undefined;
+            const reviewScheduledEndTime = meta?.reviewScheduledEndTime || s.review_scheduled_end_time || undefined;
+            const reviewNotes = meta?.reviewNotes || s.review_notes || undefined;
+            const linkedReviewShootId = meta?.linkedReviewShootId || s.linked_review_shoot_id || undefined;
+
+            const isKnownNonShoot = Boolean(
+                s.title && (
+                    s.title.toLowerCase().startsWith('[non-shoot]') ||
+                    s.title.toLowerCase().includes('equipment orientation') ||
+                    s.title.toLowerCase().includes('equipment segregation') ||
+                    s.title.toLowerCase().includes('assets checking') ||
+                    s.title.toLowerCase().includes('asset check')
+                )
+            );
+            const isNonShoot = s.is_non_shoot !== undefined 
+                ? Boolean(s.is_non_shoot) 
+                : (meta?.isNonShoot !== undefined ? meta.isNonShoot : isKnownNonShoot);
 
             return {
                 id: s.id,
@@ -917,7 +941,15 @@ class StorageService {
                 reviewStatus,
                 reviewVideoUrl,
                 reviewCompletedAt,
-                reviewCompletedBy
+                reviewCompletedBy,
+                isNonShoot,
+                reviewRequired,
+                reviewAssignedTo,
+                reviewAssignedToName,
+                reviewScheduledStartTime,
+                reviewScheduledEndTime,
+                reviewNotes,
+                linkedReviewShootId
             };
         }) as Shoot[];
     }
@@ -970,24 +1002,88 @@ class StorageService {
             poc_contact: shoot.pocContact,
             required_roles: shoot.requiredRoles,
             created_by: shoot.createdBy,
-            google_event_id: shoot.googleEventId || null, // Save to DB, ensure null if undefined
+            google_event_id: shoot.googleEventId || null,
             jira_ticket_id: shoot.jiraTicketId || null,
             department_id: shoot.departmentId,
             expenses: shoot.expenses || [],
             ...(shootNumber ? { shoot_number: shootNumber } : {})
         };
 
-        if (shoot.cancellationReason !== undefined) {
-            dbShoot.cancellation_reason = shoot.cancellationReason || null;
+        const OPTIONAL_REVIEW_COLS = [
+            'is_non_shoot', 'review_required', 'review_status', 
+            'review_assigned_to', 'review_assigned_to_name', 
+            'review_scheduled_start_time', 'review_scheduled_end_time', 
+            'review_notes', 'linked_review_shoot_id'
+        ];
+
+        if (this._hasShootReviewColumns !== false) {
+            if (shoot.isNonShoot !== undefined) dbShoot.is_non_shoot = shoot.isNonShoot;
+            if (shoot.reviewRequired !== undefined) dbShoot.review_required = shoot.reviewRequired;
+            if (shoot.reviewStatus !== undefined) dbShoot.review_status = shoot.reviewStatus;
+            if (shoot.reviewAssignedTo !== undefined) dbShoot.review_assigned_to = shoot.reviewAssignedTo || null;
+            if (shoot.reviewAssignedToName !== undefined) dbShoot.review_assigned_to_name = shoot.reviewAssignedToName || null;
+            if (shoot.reviewScheduledStartTime !== undefined) dbShoot.review_scheduled_start_time = shoot.reviewScheduledStartTime || null;
+            if (shoot.reviewScheduledEndTime !== undefined) dbShoot.review_scheduled_end_time = shoot.reviewScheduledEndTime || null;
+            if (shoot.reviewNotes !== undefined) dbShoot.review_notes = shoot.reviewNotes || null;
+            if (shoot.linkedReviewShootId !== undefined) dbShoot.linked_review_shoot_id = shoot.linkedReviewShootId || null;
         }
 
-        const { error } = await supabase
-            .from('shoots')
-            .upsert(dbShoot);
+        const isColumnMissingError = (msg?: string) => {
+            if (!msg) return false;
+            return msg.includes('schema cache') || msg.includes('column') || msg.includes('does not exist');
+        };
 
-        if (error) {
-            console.error('Error saving shoot:', error.message, error.details, error);
-            throw error;
+        try {
+            const { error } = await supabase.from('shoots').upsert(dbShoot);
+            if (error) {
+                if (isColumnMissingError(error.message)) {
+                    this._hasShootReviewColumns = false;
+                    for (const col of OPTIONAL_REVIEW_COLS) {
+                        delete dbShoot[col];
+                    }
+                    const { error: retryErr } = await supabase.from('shoots').upsert(dbShoot);
+                    if (retryErr && !isColumnMissingError(retryErr.message)) {
+                        console.error('Error saving shoot:', retryErr.message, retryErr.details, retryErr);
+                        throw retryErr;
+                    }
+                } else {
+                    console.error('Error saving shoot:', error.message, error.details, error);
+                    throw error;
+                }
+            } else if (this._hasShootReviewColumns === null) {
+                this._hasShootReviewColumns = true;
+            }
+        } catch (err: any) {
+            if (isColumnMissingError(err?.message)) {
+                this._hasShootReviewColumns = false;
+                for (const col of OPTIONAL_REVIEW_COLS) {
+                    delete dbShoot[col];
+                }
+                const { error: retryErr } = await supabase.from('shoots').upsert(dbShoot);
+                if (retryErr && !isColumnMissingError(retryErr.message)) throw retryErr;
+            } else {
+                throw err;
+            }
+        }
+
+        // Always persist to resilient fallback store
+        try {
+            const store = await this._getFallbackReviewStore();
+            store.shootMeta[shoot.id] = {
+                ...store.shootMeta[shoot.id],
+                ...(shoot.isNonShoot !== undefined ? { isNonShoot: shoot.isNonShoot } : {}),
+                ...(shoot.reviewRequired !== undefined ? { reviewRequired: shoot.reviewRequired } : {}),
+                ...(shoot.reviewStatus !== undefined ? { reviewStatus: shoot.reviewStatus } : {}),
+                ...(shoot.reviewAssignedTo !== undefined ? { reviewAssignedTo: shoot.reviewAssignedTo } : {}),
+                ...(shoot.reviewAssignedToName !== undefined ? { reviewAssignedToName: shoot.reviewAssignedToName } : {}),
+                ...(shoot.reviewScheduledStartTime !== undefined ? { reviewScheduledStartTime: shoot.reviewScheduledStartTime } : {}),
+                ...(shoot.reviewScheduledEndTime !== undefined ? { reviewScheduledEndTime: shoot.reviewScheduledEndTime } : {}),
+                ...(shoot.reviewNotes !== undefined ? { reviewNotes: shoot.reviewNotes } : {}),
+                ...(shoot.linkedReviewShootId !== undefined ? { linkedReviewShootId: shoot.linkedReviewShootId } : {})
+            };
+            await this._saveFallbackReviewStore(store);
+        } catch (err) {
+            console.warn('Could not sync shoot metadata in fallback store:', err);
         }
     }
 
@@ -1039,6 +1135,76 @@ class StorageService {
             dbUpdates.department_id = updates.departmentId;
             delete dbUpdates.departmentId;
         }
+        if (updates.isNonShoot !== undefined) {
+            dbUpdates.is_non_shoot = updates.isNonShoot;
+            delete dbUpdates.isNonShoot;
+        }
+        if (updates.reviewRequired !== undefined) {
+            dbUpdates.review_required = updates.reviewRequired;
+            delete dbUpdates.reviewRequired;
+        }
+        if (updates.reviewStatus !== undefined) {
+            dbUpdates.review_status = updates.reviewStatus;
+            delete dbUpdates.reviewStatus;
+        }
+        if (updates.reviewAssignedTo !== undefined) {
+            dbUpdates.review_assigned_to = updates.reviewAssignedTo || null;
+            delete dbUpdates.reviewAssignedTo;
+        }
+        if (updates.reviewAssignedToName !== undefined) {
+            dbUpdates.review_assigned_to_name = updates.reviewAssignedToName || null;
+            delete dbUpdates.reviewAssignedToName;
+        }
+        if (updates.reviewScheduledStartTime !== undefined) {
+            dbUpdates.review_scheduled_start_time = updates.reviewScheduledStartTime || null;
+            delete dbUpdates.reviewScheduledStartTime;
+        }
+        if (updates.reviewScheduledEndTime !== undefined) {
+            dbUpdates.review_scheduled_end_time = updates.reviewScheduledEndTime || null;
+            delete dbUpdates.reviewScheduledEndTime;
+        }
+        if (updates.reviewNotes !== undefined) {
+            dbUpdates.review_notes = updates.reviewNotes || null;
+            delete dbUpdates.reviewNotes;
+        }
+        if (updates.linkedReviewShootId !== undefined) {
+            dbUpdates.linked_review_shoot_id = updates.linkedReviewShootId || null;
+            delete dbUpdates.linkedReviewShootId;
+        }
+
+        // Always sync metadata to fallback store
+        try {
+            const store = await this._getFallbackReviewStore();
+            store.shootMeta[id] = {
+                ...store.shootMeta[id],
+                ...(updates.isNonShoot !== undefined ? { isNonShoot: updates.isNonShoot } : {}),
+                ...(updates.reviewRequired !== undefined ? { reviewRequired: updates.reviewRequired } : {}),
+                ...(updates.reviewStatus !== undefined ? { reviewStatus: updates.reviewStatus } : {}),
+                ...(updates.reviewAssignedTo !== undefined ? { reviewAssignedTo: updates.reviewAssignedTo } : {}),
+                ...(updates.reviewAssignedToName !== undefined ? { reviewAssignedToName: updates.reviewAssignedToName } : {}),
+                ...(updates.reviewScheduledStartTime !== undefined ? { reviewScheduledStartTime: updates.reviewScheduledStartTime } : {}),
+                ...(updates.reviewScheduledEndTime !== undefined ? { reviewScheduledEndTime: updates.reviewScheduledEndTime } : {}),
+                ...(updates.reviewNotes !== undefined ? { reviewNotes: updates.reviewNotes } : {}),
+                ...(updates.linkedReviewShootId !== undefined ? { linkedReviewShootId: updates.linkedReviewShootId } : {})
+            };
+            await this._saveFallbackReviewStore(store);
+        } catch (err) {
+            console.warn('Could not sync shoot metadata in fallback store on update:', err);
+        }
+
+        const cleanOptionalFields = (obj: Record<string, unknown>, errMsg: string) => {
+            const optionalCols = [
+                'is_non_shoot', 'review_required', 'review_status', 
+                'review_assigned_to', 'review_assigned_to_name', 
+                'review_scheduled_start_time', 'review_scheduled_end_time', 
+                'review_notes', 'linked_review_shoot_id'
+            ];
+            for (const col of optionalCols) {
+                if (errMsg.includes(col)) {
+                    delete obj[col];
+                }
+            }
+        };
 
         const { error } = await supabase
             .from('shoots')
@@ -1046,8 +1212,15 @@ class StorageService {
             .eq('id', id);
 
         if (error) {
-            console.error('Error updating shoot:', error);
-            throw error;
+            cleanOptionalFields(dbUpdates, error.message || '');
+            const { error: retryErr } = await supabase
+                .from('shoots')
+                .update(dbUpdates)
+                .eq('id', id);
+            if (retryErr) {
+                console.error('Error updating shoot:', error);
+                throw retryErr;
+            }
         }
     }
 
@@ -1457,6 +1630,14 @@ class StorageService {
             reviewVideoUrl?: string;
             reviewCompletedAt?: string;
             reviewCompletedBy?: string;
+            isNonShoot?: boolean;
+            reviewRequired?: boolean;
+            reviewAssignedTo?: string;
+            reviewAssignedToName?: string;
+            reviewScheduledStartTime?: string;
+            reviewScheduledEndTime?: string;
+            reviewNotes?: string;
+            linkedReviewShootId?: string;
         }>;
     }> {
         try {
@@ -1484,6 +1665,14 @@ class StorageService {
             reviewVideoUrl?: string;
             reviewCompletedAt?: string;
             reviewCompletedBy?: string;
+            isNonShoot?: boolean;
+            reviewRequired?: boolean;
+            reviewAssignedTo?: string;
+            reviewAssignedToName?: string;
+            reviewScheduledStartTime?: string;
+            reviewScheduledEndTime?: string;
+            reviewNotes?: string;
+            linkedReviewShootId?: string;
         }>;
     }): Promise<void> {
         try {
@@ -1633,18 +1822,23 @@ class StorageService {
         const completedAt = status === 'DONE' ? new Date().toISOString() : undefined;
 
         // Try updating shoots table
-        try {
-            const updates: Record<string, unknown> = {
-                review_status: status,
-                review_completed_at: completedAt || null,
-                review_completed_by: completedBy || null
-            };
-            if (videoUrl !== undefined) {
-                updates.review_video_url = videoUrl;
+        if (this._hasShootReviewColumns !== false) {
+            try {
+                const updates: Record<string, unknown> = {
+                    review_status: status,
+                    review_completed_at: completedAt || null,
+                    review_completed_by: completedBy || null
+                };
+                if (videoUrl !== undefined) {
+                    updates.review_video_url = videoUrl;
+                }
+                const { error } = await supabase.from('shoots').update(updates).eq('id', shootId);
+                if (error && (error.message.includes('schema cache') || error.message.includes('column'))) {
+                    this._hasShootReviewColumns = false;
+                }
+            } catch (err) {
+                console.warn('Could not update shoots review columns:', err);
             }
-            await supabase.from('shoots').update(updates).eq('id', shootId);
-        } catch (err) {
-            console.warn('Could not update shoots review columns:', err);
         }
 
         // Always save in fallback store
@@ -1704,6 +1898,181 @@ class StorageService {
         };
         await this._saveFallbackReviewStore(store);
     }
+
+    async assignShootReview(params: {
+        shootId: string;
+        reviewerId: string;
+        reviewerName: string;
+        scheduledStartTime: string;
+        scheduledEndTime: string;
+        notes?: string;
+        scheduleOnCalendar?: boolean;
+    }): Promise<{ reviewActivityId?: string }> {
+        const shoots = await this.getShoots();
+        const shoot = shoots.find(s => s.id === params.shootId);
+        if (!shoot) throw new Error('Shoot not found');
+
+        let reviewActivityId = shoot.linkedReviewShootId;
+
+        if (params.scheduleOnCalendar !== false) {
+            if (!reviewActivityId) {
+                reviewActivityId = crypto.randomUUID();
+            }
+
+            const shootNumStr = shoot.shootNumber ? `#${shoot.shootNumber} ` : '';
+            const reviewShootTitle = `Review: ${shootNumStr}${shoot.title}`;
+            const reviewShootDesc = `Quality review for closed shoot ${shootNumStr}(${shoot.title})${params.notes ? `\n\nNotes: ${params.notes}` : ''}`;
+
+            const reviewShoot: Shoot = {
+                id: reviewActivityId,
+                title: reviewShootTitle,
+                description: reviewShootDesc,
+                location: shoot.location || 'Studio / Review Room',
+                status: 'CONFIRMED',
+                startTime: params.scheduledStartTime,
+                endTime: params.scheduledEndTime,
+                isNonShoot: true,
+                departmentId: shoot.departmentId,
+                requiredRoles: [],
+                createdBy: params.reviewerId,
+                linkedReviewShootId: shoot.id
+            };
+
+            await this.saveShoot(reviewShoot);
+
+            // Create assignment for reviewer so it appears in planner & user time log
+            const existingAssignments = await this.getAssignments(shoot.departmentId);
+            const existingReviewAssignment = existingAssignments.find(a => a.shootId === reviewActivityId);
+            const assignmentId = existingReviewAssignment?.id || crypto.randomUUID();
+
+            await this.saveAssignments([{
+                id: assignmentId,
+                shootId: reviewActivityId,
+                userId: params.reviewerId,
+                role: 'Reviewer',
+                status: 'ACCEPTED',
+                departmentId: shoot.departmentId
+            }]);
+        }
+
+        // Update original shoot
+        const updatedShoot: Shoot = {
+            ...shoot,
+            reviewRequired: true,
+            reviewStatus: shoot.reviewStatus === 'DONE' ? 'DONE' : 'PENDING',
+            reviewAssignedTo: params.reviewerId,
+            reviewAssignedToName: params.reviewerName,
+            reviewScheduledStartTime: params.scheduledStartTime,
+            reviewScheduledEndTime: params.scheduledEndTime,
+            reviewNotes: params.notes || undefined,
+            linkedReviewShootId: reviewActivityId
+        };
+
+        await this.saveShoot(updatedShoot);
+        return { reviewActivityId };
+    }
+
+    async addToReview(shootId: string): Promise<void> {
+        const shoots = await this.getShoots();
+        const shoot = shoots.find(s => s.id === shootId);
+        if (!shoot) return;
+
+        const updatedStatus = shoot.reviewStatus === 'DONE' ? 'DONE' : 'PENDING';
+
+        if (this._hasShootReviewColumns !== false) {
+            try {
+                const { error } = await supabase.from('shoots').update({
+                    review_required: true,
+                    review_status: updatedStatus
+                }).eq('id', shootId);
+                if (error && (error.message.includes('schema cache') || error.message.includes('column'))) {
+                    this._hasShootReviewColumns = false;
+                }
+            } catch (err) {
+                console.warn('Could not update shoots table for review_required:', err);
+            }
+        }
+
+        const store = await this._getFallbackReviewStore();
+        store.shootMeta[shootId] = {
+            ...(store.shootMeta[shootId] || {}),
+            reviewRequired: true,
+            reviewStatus: updatedStatus
+        };
+        await this._saveFallbackReviewStore(store);
+
+        const updatedShoot: Shoot = {
+            ...shoot,
+            reviewRequired: true,
+            reviewStatus: updatedStatus
+        };
+
+        await this.saveShoot(updatedShoot);
+    }
+
+    async removeFromReview(shootId: string): Promise<void> {
+        await this.unassignShootReview(shootId);
+    }
+
+    async unassignShootReview(shootId: string): Promise<void> {
+        const shoots = await this.getShoots();
+        const shoot = shoots.find(s => s.id === shootId);
+        if (!shoot) return;
+
+        // If there was a linked review activity shoot, delete it and its assignments
+        if (shoot.linkedReviewShootId) {
+            try {
+                await this.deleteShoot(shoot.linkedReviewShootId);
+                await supabase.from('assignments').delete().eq('shoot_id', shoot.linkedReviewShootId);
+            } catch (err) {
+                console.warn('Error deleting linked review activity:', err);
+            }
+        }
+
+        if (this._hasShootReviewColumns !== false) {
+            try {
+                const { error } = await supabase.from('shoots').update({
+                    review_required: false,
+                    review_assigned_to: null,
+                    review_assigned_to_name: null,
+                    review_scheduled_start_time: null,
+                    review_scheduled_end_time: null,
+                    review_notes: null,
+                    linked_review_shoot_id: null
+                }).eq('id', shootId);
+                if (error && (error.message.includes('schema cache') || error.message.includes('column'))) {
+                    this._hasShootReviewColumns = false;
+                }
+            } catch (err) {
+                console.warn('Could not update shoots table on unassignShootReview:', err);
+            }
+        }
+
+        const store = await this._getFallbackReviewStore();
+        if (store.shootMeta[shootId]) {
+            store.shootMeta[shootId].reviewRequired = false;
+            store.shootMeta[shootId].reviewAssignedTo = undefined;
+            store.shootMeta[shootId].reviewAssignedToName = undefined;
+            store.shootMeta[shootId].reviewScheduledStartTime = undefined;
+            store.shootMeta[shootId].reviewScheduledEndTime = undefined;
+            store.shootMeta[shootId].reviewNotes = undefined;
+            store.shootMeta[shootId].linkedReviewShootId = undefined;
+            await this._saveFallbackReviewStore(store);
+        }
+
+        const updatedShoot: Shoot = {
+            ...shoot,
+            reviewRequired: false,
+            reviewAssignedTo: undefined,
+            reviewAssignedToName: undefined,
+            reviewScheduledStartTime: undefined,
+            reviewScheduledEndTime: undefined,
+            reviewNotes: undefined,
+            linkedReviewShootId: undefined
+        };
+
+        await this.saveShoot(updatedShoot);
+    }
 }
 
 const rawStorage = new StorageService();
@@ -1739,7 +2108,9 @@ export const storage = new Proxy(rawStorage, {
                                    propStr.startsWith('bulk') || 
                                    propStr.startsWith('mark') || 
                                    propStr.startsWith('reset') ||
-                                   propStr.startsWith('upsert');
+                                   propStr.startsWith('upsert') ||
+                                   propStr.startsWith('assign') ||
+                                   propStr.startsWith('unassign');
                                    
                 if (isMutation) {
                     dispatchMutationEvent();

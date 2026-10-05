@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { storage } from '@/lib/storage'; // Still used for type referencing if valid, or remove if unused, but kept for safety. Ideally hooks replace it but types might be needed. Alternatively just imports.
 import { Plus, Calendar, MapPin, Clock, Search, Grid3X3, List, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Users, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, FileText, X, IndianRupee, RefreshCw, CheckCircle2, SlidersHorizontal, GripVertical, MoreVertical, Film } from 'lucide-react';
-import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO, isAfter, isBefore, isToday, isWithinInterval, startOfDay, endOfDay, subDays } from 'date-fns';
 import { Button } from '@/components/Button';
 import { formatWhatsAppMessage, generateShootWhatsAppPayload, generateBulkShootsWhatsAppPayload, openWhatsApp } from '@/lib/whatsapp';
 import { WhatsAppDispatchModal } from '@/components/WhatsAppDispatchModal';
@@ -26,7 +26,8 @@ import { JiraIcon } from '@/components/icons/JiraIcon';
 
 type ViewMode = 'card' | 'list';
 type StatusFilter = 'ALL' | 'OPEN' | 'WAITING_FOR_REQUESTER' | 'PENDING_PRODUCTION_SETUP' | 'READY_FOR_SHOOT' | 'CONFIRMED' | 'SHOOT_IN_PROGRESS' | 'ON_HOLD' | 'CLOSED' | 'CANCELLED' | 'DRAFT';
-type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'PAST' | 'CUSTOM';
+type TimeFilter = 'ALL' | 'TODAY' | 'UPCOMING' | 'LAST_WEEK' | 'LAST_MONTH' | 'PAST' | 'CUSTOM';
+type ActivityTypeFilter = 'ALL' | 'SHOOTS' | 'NON_SHOOTS';
 type SortField = 'title' | 'date' | 'location' | 'crew' | 'status' | 'shootNumber' | 'expenses' | 'jiraTicket' | 'createdAt' | 'poc';
 type ColumnKey = 'shootNumber' | 'title' | 'jiraTicket' | 'date' | 'location' | 'crew' | 'status' | 'actions' | 'poc' | 'createdAt' | 'expenses';
 
@@ -58,6 +59,10 @@ const ALL_STATUS_OPTIONS: { value: StatusFilter; label: string; bg: string; text
     { value: 'CANCELLED', label: 'Cancelled', bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
     { value: 'DRAFT', label: 'Draft', bg: '#f3f4f6', text: '#4b5563', border: '#d1d5db' },
 ];
+
+// POC filter helpers: group POC names case/whitespace-insensitively
+const NO_POC_KEY = '__NO_POC__';
+const normalizePocName = (name?: string | null) => (name || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 export default function ShootList() {
     const { user } = useAuth();
@@ -121,6 +126,14 @@ export default function ShootList() {
     const [crewFilter, setCrewFilter] = useState<string[]>(() => parseSavedCrewFilter(getSavedState()?.crewFilter));
     const [categoryFilter, setCategoryFilter] = useState<string>(() => getSavedState()?.categoryFilter || 'ALL');
     const [expenseFilter, setExpenseFilter] = useState<string>(() => getSavedState()?.expenseFilter || 'ALL');
+    const [activityTypeFilter, setActivityTypeFilter] = useState<ActivityTypeFilter>(() => getSavedState()?.activityTypeFilter || 'ALL');
+    // POC filter: normalized POC name keys (empty array = no POC filter). NO_POC_KEY matches shoots without a POC.
+    const [pocFilter, setPocFilter] = useState<string[]>(() => {
+        const saved = getSavedState()?.pocFilter;
+        return Array.isArray(saved) ? saved.filter((v: unknown) => typeof v === 'string') : [];
+    });
+    const [pocSearchQuery, setPocSearchQuery] = useState('');
+    const isPocFiltered = pocFilter.length > 0;
     const [showFilters, setShowFilters] = useState<boolean>(() => getSavedState()?.showFilters ?? false);
     const [isCrewFilterOpen, setIsCrewFilterOpen] = useState(false);
     const [crewSearchQuery, setCrewSearchQuery] = useState('');
@@ -158,6 +171,8 @@ export default function ShootList() {
                     crewFilter,
                     categoryFilter,
                     expenseFilter,
+                    activityTypeFilter,
+                    pocFilter,
                     showFilters,
                     sortField,
                     sortDirection,
@@ -166,7 +181,7 @@ export default function ShootList() {
                 }));
             } catch {}
         }
-    }, [viewMode, searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, categoryFilter, expenseFilter, showFilters, sortField, sortDirection, pageSize, currentPage]);
+    }, [viewMode, searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, categoryFilter, expenseFilter, activityTypeFilter, pocFilter, showFilters, sortField, sortDirection, pageSize, currentPage]);
 
     // Default Column Configuration
     const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
@@ -620,7 +635,7 @@ export default function ShootList() {
             return;
         }
         setCurrentPage(1);
-    }, [searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, categoryFilter, expenseFilter, sortField, sortDirection]);
+    }, [searchQuery, statusFilter, timeFilter, customDateRange, crewFilter, categoryFilter, expenseFilter, activityTypeFilter, pocFilter, sortField, sortDirection]);
 
     // Close crew filter on outside click
     useEffect(() => {
@@ -717,6 +732,8 @@ export default function ShootList() {
                     crewFilter,
                     categoryFilter,
                     expenseFilter,
+                    activityTypeFilter,
+                    pocFilter,
                     sortField,
                     sortDirection,
                     showFilters,
@@ -817,20 +834,45 @@ export default function ShootList() {
 
             // Time filter
             let matchesTime = true;
-            if (timeFilter !== 'ALL' && shoot.startTime) {
-                const shootDate = parseISO(shoot.startTime);
-                const now = new Date();
+            if (timeFilter !== 'ALL') {
+                if (!shoot.startTime) {
+                    matchesTime = false;
+                } else {
+                    const shootDate = parseISO(shoot.startTime);
+                    const now = new Date();
 
-                if (timeFilter === 'TODAY') {
-                    matchesTime = isToday(shootDate);
-                } else if (timeFilter === 'UPCOMING') {
-                    matchesTime = isAfter(shootDate, now);
-                } else if (timeFilter === 'PAST') {
-                    matchesTime = isBefore(shootDate, now) && !isToday(shootDate);
-                } else if (timeFilter === 'CUSTOM' && customDateRange.start && customDateRange.end) {
-                    const startDate = startOfDay(parseISO(customDateRange.start));
-                    const endDate = endOfDay(parseISO(customDateRange.end));
-                    matchesTime = isWithinInterval(shootDate, { start: startDate, end: endDate });
+                    if (timeFilter === 'TODAY') {
+                        matchesTime = isToday(shootDate);
+                    } else if (timeFilter === 'UPCOMING') {
+                        matchesTime = isAfter(shootDate, now);
+                    } else if (timeFilter === 'LAST_WEEK') {
+                        const weekAgo = startOfDay(subDays(now, 7));
+                        const todayEnd = endOfDay(now);
+                        matchesTime = isWithinInterval(shootDate, { start: weekAgo, end: todayEnd });
+                    } else if (timeFilter === 'LAST_MONTH') {
+                        const monthAgo = startOfDay(subDays(now, 30));
+                        const todayEnd = endOfDay(now);
+                        matchesTime = isWithinInterval(shootDate, { start: monthAgo, end: todayEnd });
+                    } else if (timeFilter === 'PAST') {
+                        matchesTime = isBefore(shootDate, now) && !isToday(shootDate);
+                    } else if (timeFilter === 'CUSTOM') {
+                        if (customDateRange.start && customDateRange.end) {
+                            const startDate = startOfDay(parseISO(customDateRange.start));
+                            const endDate = endOfDay(parseISO(customDateRange.end));
+                            const actualStart = startDate <= endDate ? startDate : endDate;
+                            const actualEnd = startDate <= endDate ? endDate : startDate;
+                            matchesTime = isWithinInterval(shootDate, { start: actualStart, end: actualEnd });
+                        } else if (customDateRange.start && !customDateRange.end) {
+                            const singleDayStart = startOfDay(parseISO(customDateRange.start));
+                            const singleDayEnd = endOfDay(parseISO(customDateRange.start));
+                            matchesTime = isWithinInterval(shootDate, { start: singleDayStart, end: singleDayEnd });
+                        } else if (!customDateRange.start && customDateRange.end) {
+                            const endDate = endOfDay(parseISO(customDateRange.end));
+                            matchesTime = isBefore(shootDate, endDate);
+                        } else {
+                            matchesTime = true;
+                        }
+                    }
                 }
             }
 
@@ -869,9 +911,24 @@ export default function ShootList() {
                 else if (expenseFilter === 'NO_EXPENSES') matchesExpense = totalExp === 0;
             }
 
-            return matchesSearch && matchesStatus && matchesTime && matchesCrew && matchesCategory && matchesExpense;
+            // Activity Type Filter (Shoot vs Non-Shoot Task)
+            let matchesActivityType = true;
+            if (activityTypeFilter === 'SHOOTS') {
+                matchesActivityType = !shoot.isNonShoot;
+            } else if (activityTypeFilter === 'NON_SHOOTS') {
+                matchesActivityType = !!shoot.isNonShoot;
+            }
+
+            // POC Filter (multi-select by normalized POC name, or shoots with no POC)
+            let matchesPoc = true;
+            if (pocFilter.length > 0) {
+                const pocKey = normalizePocName(shoot.pocName);
+                matchesPoc = pocFilter.includes(pocKey || NO_POC_KEY);
+            }
+
+            return matchesSearch && matchesStatus && matchesTime && matchesCrew && matchesCategory && matchesExpense && matchesActivityType && matchesPoc;
         });
-    }, [shoots, deferredSearchQuery, statusFilter, timeFilter, crewFilter, categoryFilter, expenseFilter, user, assignmentsByShootId, shootCrewCache, customDateRange]);
+    }, [shoots, deferredSearchQuery, statusFilter, timeFilter, crewFilter, categoryFilter, expenseFilter, activityTypeFilter, pocFilter, user, assignmentsByShootId, shootCrewCache, customDateRange]);
 
     // Extract unique categories for the filter
     const availableCategories = useMemo(() => {
@@ -882,6 +939,44 @@ export default function ShootList() {
         });
         return Array.from(categories).sort();
     }, [shoots]);
+
+    // Unique POC people (grouped case-insensitively) with shoot counts, scoped to shoots the user can see
+    const pocOptions = useMemo(() => {
+        const map = new Map<string, { key: string; label: string; contact?: string; count: number }>();
+        let noPocCount = 0;
+        shoots.forEach(shoot => {
+            if (user?.role === 'CREW') {
+                const shootAssignments = assignmentsByShootId.get(shoot.id) || [];
+                if (!shootAssignments.some(a => a.userId === user.id)) return;
+            }
+            const key = normalizePocName(shoot.pocName);
+            if (!key) {
+                noPocCount++;
+                return;
+            }
+            const existing = map.get(key);
+            if (existing) {
+                existing.count++;
+                if (!existing.contact && shoot.pocContact) existing.contact = shoot.pocContact;
+            } else {
+                map.set(key, {
+                    key,
+                    label: (shoot.pocName || '').trim().replace(/\s+/g, ' '),
+                    contact: shoot.pocContact || undefined,
+                    count: 1,
+                });
+            }
+        });
+        const people = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+        return { people, noPocCount };
+    }, [shoots, user, assignmentsByShootId]);
+
+    const getPocLabel = (key: string) =>
+        key === NO_POC_KEY ? 'No POC' : (pocOptions.people.find(p => p.key === key)?.label || key);
+
+    const togglePocFilter = (key: string) => {
+        setPocFilter(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+    };
 
     // Sorted shoots for list view
     const sortedShoots = useMemo(() => {
@@ -1187,13 +1282,13 @@ export default function ShootList() {
             setFilterAnchor(null);
         } else {
             const rect = e.currentTarget.getBoundingClientRect();
-            const popoverWidth = colKey === 'status' ? 280 : colKey === 'crew' ? 280 : 220;
+            const popoverWidth = ['status', 'crew', 'date', 'poc'].includes(colKey) ? 288 : 220;
             let left = rect.left;
             if (left + popoverWidth > window.innerWidth - 16) {
                 left = window.innerWidth - popoverWidth - 16;
             }
             let top = rect.bottom + 6;
-            const estimatedHeight = colKey === 'status' ? 380 : colKey === 'crew' ? 380 : 260;
+            const estimatedHeight = ['status', 'crew', 'date', 'poc'].includes(colKey) ? 380 : 260;
             if (top + estimatedHeight > window.innerHeight - 16 && rect.top > estimatedHeight) {
                 top = Math.max(16, rect.top - estimatedHeight - 6);
             }
@@ -1375,26 +1470,28 @@ export default function ShootList() {
                             <button
                                 onClick={() => setShowFilters(!showFilters)}
                                 className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 2xl:px-3.5 py-1.5 rounded-lg 2xl:rounded-xl text-xs 2xl:text-sm font-medium transition-all cursor-pointer h-8 sm:h-8.5 2xl:h-9.5 ${
-                                    showFilters || (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL')
+                                    showFilters || (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || isPocFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || activityTypeFilter !== 'ALL')
                                         ? 'bg-primary/10 text-primary border border-primary/25 font-semibold'
                                         : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent'
                                 }`}
                                 title={
-                                    (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL')
+                                    (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || isPocFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || activityTypeFilter !== 'ALL')
                                         ? 'Active filters applied. Click to toggle panel'
                                         : 'Filter shoots'
                                 }
                             >
                                 <Filter size={12} className="2xl:size-3.5" />
                                 <span className="hidden sm:inline">Filters</span>
-                                {(isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL') && (
+                                {(isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || isPocFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || activityTypeFilter !== 'ALL') && (
                                     <span className="flex items-center justify-center min-w-[15px] h-[15px] px-1 bg-primary text-primary-foreground text-[9px] 2xl:text-[10px] font-bold rounded-full">
                                         {[
                                             isStatusFiltered,
                                             timeFilter !== 'ALL',
                                             isCrewFiltered,
+                                            isPocFiltered,
                                             categoryFilter !== 'ALL',
-                                            expenseFilter !== 'ALL'
+                                            expenseFilter !== 'ALL',
+                                            activityTypeFilter !== 'ALL'
                                         ].filter(Boolean).length}
                                     </span>
                                 )}
@@ -1513,7 +1610,7 @@ export default function ShootList() {
                     </div>
 
                     {/* ALWAYS-VISIBLE ACTIVE FILTER CHIPS (Only shown when filter panel is collapsed) */}
-                    {!showFilters && (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || searchQuery.trim()) && (
+                    {!showFilters && (isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || isPocFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || searchQuery.trim()) && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-800/80 animate-in fade-in duration-150">
                             <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 flex items-center gap-1 mr-0.5">
                                 <Filter size={11} className="text-primary" />
@@ -1552,7 +1649,27 @@ export default function ShootList() {
 
                             {timeFilter !== 'ALL' && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary/10 text-primary border border-primary/25 shadow-2xs">
-                                    <span className="opacity-70 font-normal">When:</span> {timeFilter === 'CUSTOM' ? `${customDateRange.start} → ${customDateRange.end}` : timeFilter}
+                                    <span className="opacity-70 font-normal">When:</span> {
+                                        timeFilter === 'CUSTOM'
+                                            ? (customDateRange.start && customDateRange.end
+                                                ? (customDateRange.start === customDateRange.end ? customDateRange.start : `${customDateRange.start} → ${customDateRange.end}`)
+                                                : customDateRange.start
+                                                ? `Date: ${customDateRange.start}`
+                                                : customDateRange.end
+                                                ? `Until ${customDateRange.end}`
+                                                : 'Custom Date')
+                                            : timeFilter === 'LAST_WEEK'
+                                            ? 'Last 1 Week'
+                                            : timeFilter === 'LAST_MONTH'
+                                            ? 'Last 1 Month'
+                                            : timeFilter === 'TODAY'
+                                            ? 'Today'
+                                            : timeFilter === 'UPCOMING'
+                                            ? 'Upcoming'
+                                            : timeFilter === 'PAST'
+                                            ? 'Past Shoots'
+                                            : timeFilter
+                                    }
                                     <button
                                         onClick={() => {
                                             setTimeFilter('ALL');
@@ -1573,6 +1690,22 @@ export default function ShootList() {
                                         <span className="opacity-70 font-normal">Crew:</span> {name}
                                         <button
                                             onClick={() => toggleCrewFilter(cId)}
+                                            className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                            title={`Remove ${name} filter`}
+                                        >
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                );
+                            })}
+
+                            {isPocFiltered && pocFilter.map(key => {
+                                const name = getPocLabel(key);
+                                return (
+                                    <span key={`poc-${key}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shadow-2xs">
+                                        <span className="opacity-70 font-normal">POC:</span> {name}
+                                        <button
+                                            onClick={() => togglePocFilter(key)}
                                             className="hover:text-red-500 ml-0.5 cursor-pointer"
                                             title={`Remove ${name} filter`}
                                         >
@@ -1608,13 +1741,28 @@ export default function ShootList() {
                                 </span>
                             )}
 
+                            {activityTypeFilter !== 'ALL' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 shadow-2xs">
+                                    <span className="opacity-70 font-normal">Type:</span> {activityTypeFilter === 'SHOOTS' ? 'Shoots Only' : 'Non-Shoot Tasks'}
+                                    <button
+                                        onClick={() => setActivityTypeFilter('ALL')}
+                                        className="hover:text-red-500 ml-0.5 cursor-pointer"
+                                        title="Remove type filter"
+                                    >
+                                        <X size={11} />
+                                    </button>
+                                </span>
+                            )}
+
                             <button
                                 onClick={() => {
                                     setStatusFilter(['ALL']);
                                     setTimeFilter('ALL');
                                     setCrewFilter(['ALL']);
+                                    setPocFilter([]);
                                     setCategoryFilter('ALL');
                                     setExpenseFilter('ALL');
+                                    setActivityTypeFilter('ALL');
                                     setCustomDateRange({ start: '', end: '' });
                                     setSearchQuery('');
                                 }}
@@ -1652,24 +1800,40 @@ export default function ShootList() {
                             </button>
 
                             {/* 2. When / Date Filter */}
-                            <div className="relative flex items-center shrink-0">
-                                <select
-                                    value={timeFilter}
-                                    onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
-                                    className={`h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary ${
-                                        timeFilter !== 'ALL'
-                                            ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
-                                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                                    }`}
-                                >
-                                    <option value="ALL">Date: All</option>
-                                    <option value="TODAY">Date: Today</option>
-                                    <option value="UPCOMING">Date: Upcoming</option>
-                                    <option value="PAST">Date: Past</option>
-                                    <option value="CUSTOM">Date: Custom Range...</option>
-                                </select>
-                                <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
-                            </div>
+                            <button
+                                type="button"
+                                data-filter-trigger="date"
+                                onClick={(e) => toggleFilterMenu('date', e)}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer h-7.5 shadow-2xs shrink-0 ${
+                                    timeFilter !== 'ALL'
+                                        ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                }`}
+                            >
+                                <span className="text-gray-400 dark:text-gray-500 font-normal">Date:</span>
+                                <span className="truncate max-w-[130px]">
+                                    {timeFilter === 'ALL'
+                                        ? 'All'
+                                        : timeFilter === 'TODAY'
+                                        ? 'Today'
+                                        : timeFilter === 'UPCOMING'
+                                        ? 'Upcoming'
+                                        : timeFilter === 'LAST_WEEK'
+                                        ? 'Last 1 Week'
+                                        : timeFilter === 'LAST_MONTH'
+                                        ? 'Last 1 Month'
+                                        : timeFilter === 'PAST'
+                                        ? 'Past Shoots'
+                                        : customDateRange.start && customDateRange.end
+                                        ? (customDateRange.start === customDateRange.end ? customDateRange.start : `${customDateRange.start} → ${customDateRange.end}`)
+                                        : customDateRange.start
+                                        ? customDateRange.start
+                                        : customDateRange.end
+                                        ? `Until ${customDateRange.end}`
+                                        : 'Custom Date'}
+                                </span>
+                                <ChevronDown size={11} className="text-gray-400 shrink-0" />
+                            </button>
 
                             {timeFilter === 'CUSTOM' && (
                                 <div className="flex items-center gap-1 animate-in fade-in duration-150 shrink-0">
@@ -1677,14 +1841,16 @@ export default function ShootList() {
                                         type="date"
                                         value={customDateRange.start}
                                         onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))}
-                                        className="h-7.5 px-2 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs"
+                                        className="h-7.5 px-2 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary"
+                                        title="Start Date"
                                     />
                                     <span className="text-gray-400 text-xs">-</span>
                                     <input
                                         type="date"
                                         value={customDateRange.end}
                                         onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))}
-                                        className="h-7.5 px-2 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs"
+                                        className="h-7.5 px-2 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary"
+                                        title="End Date (optional)"
                                     />
                                 </div>
                             )}
@@ -1712,6 +1878,28 @@ export default function ShootList() {
                                     <ChevronDown size={11} className="text-gray-400 shrink-0" />
                                 </button>
                             )}
+
+                            {/* 3b. POC (Point of Contact) Filter */}
+                            <button
+                                type="button"
+                                data-filter-trigger="poc"
+                                onClick={(e) => toggleFilterMenu('poc', e)}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer h-7.5 shadow-2xs shrink-0 ${
+                                    isPocFiltered
+                                        ? 'bg-primary/10 text-primary border-primary/40 font-semibold'
+                                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                }`}
+                            >
+                                <span className="text-gray-400 dark:text-gray-500 font-normal">POC:</span>
+                                <span className="truncate max-w-[120px]">
+                                    {!isPocFiltered
+                                        ? 'All'
+                                        : pocFilter.length === 1
+                                        ? getPocLabel(pocFilter[0])
+                                        : `${pocFilter.length} people`}
+                                </span>
+                                <ChevronDown size={11} className="text-gray-400 shrink-0" />
+                            </button>
 
                             {/* 4. Category Filter */}
                             <div className="relative flex items-center shrink-0">
@@ -1753,16 +1941,36 @@ export default function ShootList() {
                                 </div>
                             )}
 
+                            {/* 6. Activity Type Filter (Shoot vs Non-Shoot Task) */}
+                            <div className="relative flex items-center shrink-0">
+                                <select
+                                    value={activityTypeFilter}
+                                    onChange={(e) => setActivityTypeFilter(e.target.value as ActivityTypeFilter)}
+                                    className={`h-7.5 pl-2.5 pr-6 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer shadow-2xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary ${
+                                        activityTypeFilter !== 'ALL'
+                                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/40 font-semibold'
+                                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <option value="ALL">Activity: All</option>
+                                    <option value="SHOOTS">Shoots Only</option>
+                                    <option value="NON_SHOOTS">Non-Shoot Tasks</option>
+                                </select>
+                                <ChevronDown size={11} className="absolute right-2 text-gray-400 pointer-events-none" />
+                            </div>
+
                             {/* Reset Filters Action Button */}
-                            {(isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL') && (
+                            {(isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || isPocFiltered || categoryFilter !== 'ALL' || expenseFilter !== 'ALL' || activityTypeFilter !== 'ALL') && (
                                 <button
                                     type="button"
                                     onClick={() => {
                                         setStatusFilter(['ALL']);
                                         setTimeFilter('ALL');
                                         setCrewFilter(['ALL']);
+                                        setPocFilter([]);
                                         setCategoryFilter('ALL');
                                         setExpenseFilter('ALL');
+                                        setActivityTypeFilter('ALL');
                                         setCustomDateRange({ start: '', end: '' });
                                     }}
                                     className="h-7.5 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 transition-colors cursor-pointer shrink-0"
@@ -1832,7 +2040,7 @@ export default function ShootList() {
                                 <Calendar size={28} className="text-gray-400 dark:text-gray-500" />
                             </div>
                             <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-                                {searchQuery || isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered ? `No ${labels.workPluralLower} found` : `No ${labels.workPluralLower} yet`}
+                                {searchQuery || isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered || isPocFiltered ? `No ${labels.workPluralLower} found` : `No ${labels.workPluralLower} yet`}
                             </h3>
                             <p className="max-w-sm mx-auto mb-4 text-gray-500 dark:text-gray-400">
                                 {searchQuery || isStatusFiltered || timeFilter !== 'ALL' || isCrewFiltered
@@ -1912,7 +2120,7 @@ export default function ShootList() {
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-1.5 shrink-0">
-                                                {isShootReviewsEnabled && (
+                                                {isShootReviewsEnabled && !shoot.isNonShoot && Boolean(shoot.reviewRequired) && (
                                                     shoot.reviewStatus === 'DONE' ? (
                                                         <span
                                                             className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
@@ -1923,11 +2131,11 @@ export default function ShootList() {
                                                         </span>
                                                     ) : (
                                                         <span
-                                                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-                                                            title="Shoot Review Pending"
+                                                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
+                                                            title={shoot.reviewAssignedToName ? `Review Pending (Assigned to ${shoot.reviewAssignedToName})` : "Review Pending"}
                                                         >
-                                                            <Film size={10} className="shrink-0" />
-                                                            Review
+                                                            <Clock size={10} className="shrink-0" />
+                                                            Review Pending
                                                         </span>
                                                     )
                                                 )}
@@ -1942,6 +2150,13 @@ export default function ShootList() {
 
                                         {/* Title & Description */}
                                         <div className="mb-4">
+                                            {shoot.isNonShoot && (
+                                                <div className="mb-1.5">
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shadow-2xs">
+                                                        Non-Shoot Activity
+                                                    </span>
+                                                </div>
+                                            )}
                                             <h3 className="mb-1 text-lg font-bold leading-snug text-foreground transition-colors line-clamp-1">
                                                 <Link
                                                     href={`/shoots/${shoot.id}`}
@@ -2258,7 +2473,21 @@ export default function ShootList() {
                                                                     ? 'bg-primary text-white shadow-xs'
                                                                     : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
                                                             }`}
-                                                            title={`Filter by Event Timing (${timeFilter})`}
+                                                            title={`Filter Schedule (${
+                                                                timeFilter === 'ALL'
+                                                                    ? 'All'
+                                                                    : timeFilter === 'TODAY'
+                                                                    ? 'Today'
+                                                                    : timeFilter === 'UPCOMING'
+                                                                    ? 'Upcoming'
+                                                                    : timeFilter === 'LAST_WEEK'
+                                                                    ? 'Last 1 Week'
+                                                                    : timeFilter === 'LAST_MONTH'
+                                                                    ? 'Last 1 Month'
+                                                                    : timeFilter === 'PAST'
+                                                                    ? 'Past'
+                                                                    : 'Custom Date'
+                                                            })`}
                                                         >
                                                             <Filter size={11} className={timeFilter !== 'ALL' ? 'fill-current' : ''} />
                                                         </button>
@@ -2302,12 +2531,30 @@ export default function ShootList() {
                                                 )}
 
                                                 {colKey === 'poc' && (
-                                                    <button
-                                                        onClick={() => handleSort('poc')}
-                                                        className={`flex items-center gap-1 font-bold transition-colors text-left truncate ${sortField === 'poc' ? 'text-primary' : 'hover:text-gray-900 dark:hover:text-white'}`}
-                                                    >
-                                                        POC <SortIndicator field="poc" />
-                                                    </button>
+                                                    <div className="flex items-center justify-between w-full min-w-0 pr-0.5">
+                                                        <button
+                                                            onClick={() => handleSort('poc')}
+                                                            className={`flex items-center gap-1 font-bold transition-colors text-left truncate ${sortField === 'poc' ? 'text-primary' : 'hover:text-gray-900 dark:hover:text-white'}`}
+                                                        >
+                                                            POC <SortIndicator field="poc" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            data-filter-trigger="poc"
+                                                            onClick={(e) => toggleFilterMenu('poc', e)}
+                                                            className={`p-1 rounded transition-all shrink-0 flex items-center gap-0.5 ${
+                                                                isPocFiltered
+                                                                    ? 'bg-primary text-white shadow-xs px-1.5'
+                                                                    : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700'
+                                                            }`}
+                                                            title={`Filter by POC (${isPocFiltered ? `${pocFilter.length} selected` : 'All'})`}
+                                                        >
+                                                            <Filter size={11} className={isPocFiltered ? 'fill-current' : ''} />
+                                                            {isPocFiltered && (
+                                                                <span className="text-[10px] font-bold leading-none">{pocFilter.length}</span>
+                                                            )}
+                                                        </button>
+                                                    </div>
                                                 )}
 
                                                 {colKey === 'createdAt' && (
@@ -2607,6 +2854,14 @@ export default function ShootList() {
                                                     {/* 2. Shoot Title */}
                                                     {colKey === 'title' && (
                                                         <div className="flex items-center gap-1.5 min-w-0 w-full">
+                                                            {shoot.isNonShoot && (
+                                                                <span 
+                                                                    className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shrink-0"
+                                                                    title="Internal / Non-Shoot Activity"
+                                                                >
+                                                                    Non-Shoot
+                                                                </span>
+                                                            )}
                                                             <Link
                                                                 href={`/shoots/${shoot.id}`}
                                                                 onClick={() => handleShootClick(shoot.id)}
@@ -2732,9 +2987,18 @@ export default function ShootList() {
                                                     {/* 7. POC */}
                                                     {colKey === 'poc' && (
                                                         shoot.pocName ? (
-                                                            <span className="text-xs text-gray-800 dark:text-gray-200 truncate block w-full" title={`${shoot.pocName}${shoot.pocContact ? ` (${shoot.pocContact})` : ''}`}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    setPocFilter([normalizePocName(shoot.pocName)]);
+                                                                }}
+                                                                className="text-xs text-gray-800 dark:text-gray-200 truncate block w-full text-left hover:text-primary hover:underline underline-offset-2 cursor-pointer"
+                                                                title={`${shoot.pocName}${shoot.pocContact ? ` (${shoot.pocContact})` : ''} — click to see all shoots with this POC`}
+                                                            >
                                                                 {shoot.pocName}
-                                                            </span>
+                                                            </button>
                                                         ) : (
                                                             <span className="text-xs text-gray-300 dark:text-gray-600">-</span>
                                                         )
@@ -2792,7 +3056,7 @@ export default function ShootList() {
                                                             >
                                                                 {statusStyle.label || shoot.status.replace(/_/g, ' ')}
                                                             </span>
-                                                            {isShootReviewsEnabled && (
+                                                            {isShootReviewsEnabled && !shoot.isNonShoot && Boolean(shoot.reviewRequired) && (
                                                                 shoot.reviewStatus === 'DONE' ? (
                                                                     <span 
                                                                         className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0 inline-flex items-center gap-0.5" 
@@ -2803,11 +3067,11 @@ export default function ShootList() {
                                                                     </span>
                                                                 ) : (
                                                                     <span 
-                                                                        className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shrink-0 inline-flex items-center gap-0.5" 
-                                                                        title="Shoot Review Pending"
+                                                                        className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800 shrink-0 inline-flex items-center gap-0.5" 
+                                                                        title={shoot.reviewAssignedToName ? `Review Pending (Assigned to ${shoot.reviewAssignedToName})` : "Review Pending"}
                                                                     >
-                                                                        <Film size={9} className="shrink-0" />
-                                                                        Review
+                                                                        <Clock size={9} className="shrink-0" />
+                                                                        Review Pending
                                                                     </span>
                                                                 )
                                                             )}
@@ -3212,15 +3476,16 @@ export default function ShootList() {
 
                     {filterAnchor.colKey === 'date' && (
                         <>
-                            <div className="flex items-center justify-between px-2 py-1.5 border-b border-gray-100 dark:border-gray-800 mb-1">
-                                <span className="font-bold text-gray-900 dark:text-white">Filter Schedule</span>
+                            <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 dark:border-gray-800 mb-1.5">
+                                <span className="font-bold text-gray-900 dark:text-white text-xs">Filter Schedule</span>
                                 {timeFilter !== 'ALL' && (
                                     <button
                                         onClick={() => {
                                             setTimeFilter('ALL');
+                                            setCustomDateRange({ start: '', end: '' });
                                             setFilterAnchor(null);
                                         }}
-                                        className="text-[11px] font-semibold text-primary hover:underline"
+                                        className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
                                     >
                                         Reset Filter
                                     </button>
@@ -3232,27 +3497,226 @@ export default function ShootList() {
                                     { value: 'ALL' as TimeFilter, label: 'All Dates' },
                                     { value: 'TODAY' as TimeFilter, label: 'Today Only' },
                                     { value: 'UPCOMING' as TimeFilter, label: 'Upcoming Shoots' },
+                                    { value: 'LAST_WEEK' as TimeFilter, label: 'Last 1 Week' },
+                                    { value: 'LAST_MONTH' as TimeFilter, label: 'Last 1 Month' },
                                     { value: 'PAST' as TimeFilter, label: 'Past Shoots' },
+                                    { value: 'CUSTOM' as TimeFilter, label: 'Custom Date / Range' },
                                 ].map((opt) => (
                                     <button
                                         key={opt.value}
                                         type="button"
                                         onClick={() => {
                                             setTimeFilter(opt.value);
-                                            setFilterAnchor(null);
+                                            if (opt.value !== 'CUSTOM') {
+                                                setFilterAnchor(null);
+                                            }
                                         }}
-                                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer text-xs ${
                                             timeFilter === opt.value
                                                 ? 'bg-primary/10 text-primary font-bold'
                                                 : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                                         }`}
                                     >
                                         <span>{opt.label}</span>
+                                        {timeFilter === opt.value && (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                        )}
                                     </button>
                                 ))}
                             </div>
+
+                            {/* Custom Date Pickers */}
+                            {timeFilter === 'CUSTOM' && (
+                                <div className="mt-2.5 pt-2.5 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                                    <div className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                                        Select Date or Range:
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <div>
+                                            <label className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block mb-0.5">
+                                                From Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={customDateRange.start}
+                                                onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                                className="w-full h-8 px-2.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block mb-0.5">
+                                                To Date <span className="normal-case text-gray-400 font-normal">(optional for single day)</span>
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={customDateRange.end}
+                                                onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                                className="w-full h-8 px-2.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCustomDateRange({ start: '', end: '' })}
+                                            className="text-[11px] text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 cursor-pointer"
+                                        >
+                                            Clear
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFilterAnchor(null)}
+                                            className="px-3 py-1 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 cursor-pointer shadow-2xs"
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
+
+                    {filterAnchor.colKey === 'poc' && (() => {
+                        const q = pocSearchQuery.trim().toLowerCase();
+                        const visiblePeople = q
+                            ? pocOptions.people.filter(p => p.label.toLowerCase().includes(q) || (p.contact || '').toLowerCase().includes(q))
+                            : pocOptions.people;
+                        const renderCheck = (checked: boolean) => (
+                            <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                checked
+                                    ? 'border-primary bg-primary text-white'
+                                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                            }`}>
+                                {checked && (
+                                    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                )}
+                            </span>
+                        );
+                        return (
+                            <div className="flex flex-col max-h-[380px]">
+                                {/* Header */}
+                                <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 dark:border-gray-800 mb-1 shrink-0">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="font-bold text-gray-900 dark:text-white text-xs">Filter by POC</span>
+                                        {isPocFiltered && (
+                                            <span className="px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-bold text-[10px]">
+                                                {pocFilter.length}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {isPocFiltered && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setPocFilter([])}
+                                            className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Search Box */}
+                                <div className="px-1 pb-1.5 shrink-0">
+                                    <div className="relative">
+                                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={pocSearchQuery}
+                                            onChange={(e) => setPocSearchQuery(e.target.value)}
+                                            placeholder="Search POC name or number..."
+                                            aria-label="Search POC"
+                                            className="w-full text-xs pl-7 pr-7 py-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-1 focus:ring-primary text-gray-900 dark:text-white placeholder-gray-400"
+                                            autoFocus
+                                        />
+                                        {pocSearchQuery && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPocSearchQuery('')}
+                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer"
+                                                title="Clear search"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* POC List */}
+                                <div className="space-y-0.5 overflow-y-auto pr-1 scrollbar-thin flex-1 min-h-0">
+                                    {!q && pocOptions.noPocCount > 0 && (
+                                        <>
+                                            <div
+                                                onClick={() => togglePocFilter(NO_POC_KEY)}
+                                                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer select-none ${
+                                                    pocFilter.includes(NO_POC_KEY)
+                                                        ? 'bg-primary/10 text-primary font-bold'
+                                                        : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    {renderCheck(pocFilter.includes(NO_POC_KEY))}
+                                                    <span className="text-xs italic">No POC set</span>
+                                                </div>
+                                                <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 ml-2">{pocOptions.noPocCount}</span>
+                                            </div>
+                                            <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
+                                        </>
+                                    )}
+
+                                    {visiblePeople.map(p => {
+                                        const isChecked = pocFilter.includes(p.key);
+                                        return (
+                                            <div
+                                                key={p.key}
+                                                onClick={() => togglePocFilter(p.key)}
+                                                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer select-none ${
+                                                    isChecked
+                                                        ? 'bg-primary/10 text-primary font-bold'
+                                                        : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                                }`}
+                                                title={p.contact ? `${p.label} (${p.contact})` : p.label}
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    {renderCheck(isChecked)}
+                                                    <div className="min-w-0">
+                                                        <span className="truncate text-xs block">{p.label}</span>
+                                                        {p.contact && (
+                                                            <span className="truncate text-[10px] font-normal text-gray-400 dark:text-gray-500 block">{p.contact}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 ml-2">{p.count}</span>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {visiblePeople.length === 0 && (
+                                        <p className="px-2.5 py-4 text-center text-[11px] text-gray-400">
+                                            {q ? `No POC matches “${pocSearchQuery}”` : 'No POCs found'}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="pt-2 mt-1.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
+                                    <span className="text-[10px] text-gray-400">
+                                        {isPocFiltered
+                                            ? `${pocFilter.length} selected • ${filteredShoots.length} ${labels.workPluralLower}`
+                                            : `${pocOptions.people.length} POCs`}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterAnchor(null)}
+                                        className="px-3 py-1 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 cursor-pointer shadow-2xs"
+                                    >
+                                        Done
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {filterAnchor.colKey === 'crew' && (
                         <div className="flex flex-col max-h-[380px]">

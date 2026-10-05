@@ -45,6 +45,7 @@ export const ShootForm: React.FC<ShootFormProps> = ({
         location: '',
         pocName: '',
         pocContact: '',
+        isNonShoot: initialData.isNonShoot || false,
         ...initialData,
         status: initialData.status === 'CANCELLED' ? 'CONFIRMED' : (initialData.status || (initialCrewIds.length > 0 ? 'READY_FOR_SHOOT' : 'OPEN')),
         startTime: initialData.startTime ? format(new Date(initialData.startTime), "yyyy-MM-dd'T'HH:mm") : '',
@@ -402,6 +403,32 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                     </div>
 
                     <div className="space-y-5 pt-1">
+                        {/* Non-Shoot / Internal Task Switch */}
+                        <div className="flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-200/70 dark:border-amber-700/50">
+                            <div className="space-y-0.5 pr-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                        Non-Shoot / Internal Activity
+                                    </span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                                        Activity Type
+                                    </span>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Tick for internal tasks (e.g. Equipment Orientation, Segregation, Assets Checking, Maintenance). Crew assigned will be booked on calendar & time logs as usual.
+                                </p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input
+                                    type="checkbox"
+                                    checked={!!formData.isNonShoot}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, isNonShoot: e.target.checked }))}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-amber-600"></div>
+                            </label>
+                        </div>
+
                         {/* Jira Ticket Section - Optional */}
                         <div className="relative bg-gray-50/80 dark:bg-gray-800/40 p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-gray-200/80 dark:border-gray-700/60">
                             <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
@@ -434,12 +461,12 @@ export const ShootForm: React.FC<ShootFormProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div className="w-full">
                                 <label className="block text-sm font-medium text-[#424245] dark:text-gray-300 mb-2">
-                                    {labels.workSingular} Title <span className="text-red-500">*</span>
+                                    {formData.isNonShoot ? 'Activity Title' : `${labels.workSingular} Title`} <span className="text-red-500">*</span>
                                 </label>
                                 <textarea
                                     value={formData.title}
                                     onChange={e => setFormData({ ...formData, title: e.target.value })}
-                                    placeholder="e.g. Summer Campaign 2024"
+                                    placeholder={formData.isNonShoot ? "e.g. Equipment Orientation, Segregation, Assets Checking" : "e.g. Summer Campaign 2024"}
                                     rows={3}
                                     className="flex w-full rounded-2xl border-0 bg-[#f5f5f7] dark:bg-gray-800 px-4 py-3 text-[15px] text-[#1d1d1f] dark:text-white placeholder:text-[#86868b] dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y min-h-[80px]"
                                 />

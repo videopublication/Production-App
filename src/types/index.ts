@@ -291,6 +291,14 @@ export interface Shoot {
     reviewCompletedAt?: string;
     reviewCompletedBy?: string;
     reviews?: ShootReview[];
+    isNonShoot?: boolean;
+    reviewRequired?: boolean;
+    reviewAssignedTo?: string;
+    reviewAssignedToName?: string;
+    reviewScheduledStartTime?: string;
+    reviewScheduledEndTime?: string;
+    reviewNotes?: string;
+    linkedReviewShootId?: string;
 }
 
 export interface Assignment {

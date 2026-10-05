@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Shoot, ShootReview, ShootReviewStatus, User } from '@/types';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast-context';
@@ -12,12 +13,12 @@ import {
     useUpdateShootVideoUrl 
 } from '@/hooks/useShootReviews';
 import { 
-    X, Star, Video, ExternalLink, CheckCircle2, Clock, 
-    MessageSquare, Tag, Trash2, Send, ShieldCheck, 
-    AlertCircle, Sparkles, RefreshCw, Check, Link2, 
-    Film, Edit2
+    X, Video, ExternalLink, CheckCircle2, Clock, 
+    MessageSquare, Send, RefreshCw, Check, Link2, 
+    Film, Edit2, Copy, Trash2, ArrowUpRight
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { isServerStoragePath, isDirectVideoUrl } from '@/lib/shootReviewWorkflow';
 
 interface ShootReviewModalProps {
     isOpen: boolean;
@@ -26,15 +27,8 @@ interface ShootReviewModalProps {
     users: User[];
 }
 
-const REVIEW_TAGS = [
-    'Audio Quality',
-    'Lighting & Exposure',
-    'Camera & Framing',
-    'Pacing & Editing',
-    'Color Grading',
-    'Graphics / Titles',
-    'General / Other'
-];
+// Temporary toggle: Keep false until data management team builds storage paths
+const SHOW_FOOTAGE_PATHS = false;
 
 export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewModalProps) {
     const { user } = useAuth();
@@ -48,19 +42,19 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
     const { mutateAsync: updateVideoUrl, isPending: updatingVideoUrl } = useUpdateShootVideoUrl();
 
     // Form state
-    const [rating, setRating] = useState<number>(5);
     const [feedback, setFeedback] = useState<string>('');
-    const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [videoUrlInput, setVideoUrlInput] = useState<string>('');
     const [isEditingVideoUrl, setIsEditingVideoUrl] = useState<boolean>(false);
+    const [hasCopiedPath, setHasCopiedPath] = useState<boolean>(false);
+    const [isSubmittingAndDone, setIsSubmittingAndDone] = useState<boolean>(false);
 
     useEffect(() => {
         if (shoot) {
             setVideoUrlInput(shoot.reviewVideoUrl || '');
             setIsEditingVideoUrl(!shoot.reviewVideoUrl);
-            setRating(5);
             setFeedback('');
-            setSelectedTags([]);
+            setHasCopiedPath(false);
+            setIsSubmittingAndDone(false);
         }
     }, [shoot]);
 
@@ -80,66 +74,68 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
     const isDone = shoot.reviewStatus === 'DONE';
     const canManageStatus = ['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '');
 
-    const toggleTag = (tag: string) => {
-        setSelectedTags(prev => 
-            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-        );
-    };
-
     const handleSaveVideoUrl = async () => {
         if (!videoUrlInput.trim()) {
-            showToast('Please enter a valid video link', 'warning');
+            showToast('Please enter a video link or server footage path', 'warning');
             return;
         }
         try {
             await updateVideoUrl({ shootId: shoot.id, videoUrl: videoUrlInput.trim() });
             setIsEditingVideoUrl(false);
-            showToast('Video link saved successfully', 'success');
+            showToast('Footage location saved successfully', 'success');
         } catch (error) {
-            showToast('Failed to save video link', 'error');
+            showToast('Failed to save footage location', 'error');
         }
     };
 
-    const handleToggleStatus = async () => {
-        const newStatus: ShootReviewStatus = isDone ? 'PENDING' : 'DONE';
-        try {
-            await updateStatus({
-                shootId: shoot.id,
-                status: newStatus,
-                completedBy: user?.name || user?.email || 'Admin'
-            });
-            showToast(
-                newStatus === 'DONE' ? 'Review marked as Done!' : 'Review reopened as Pending',
-                'success'
-            );
-        } catch (error) {
-            showToast('Failed to update review status', 'error');
-        }
-    };
-
-    const handleSubmitFeedback = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // Submits feedback, optionally marking review as DONE atomically
+    const handleSubmitFeedback = async (andMarkDone: boolean = false) => {
         if (!feedback.trim()) {
-            showToast('Please enter your feedback note', 'warning');
+            showToast('Please enter your feedback notes before submitting', 'warning');
             return;
         }
+
+        if (andMarkDone) setIsSubmittingAndDone(true);
 
         try {
             await addReview({
                 shootId: shoot.id,
                 departmentId: shoot.departmentId,
                 userId: user?.id || 'guest',
-                userName: user?.name || user?.email || 'Anonymous',
+                userName: user?.name || user?.email || 'Crew Member',
                 userRole: user?.role || 'CREW',
-                rating,
-                feedback: feedback.trim(),
-                tags: selectedTags
+                feedback: feedback.trim()
             });
+
+            if (andMarkDone) {
+                await updateStatus({
+                    shootId: shoot.id,
+                    status: 'DONE',
+                    completedBy: user?.name || user?.email || 'Reviewer'
+                });
+                showToast('Review submitted and marked as Done! ✓', 'success');
+                onClose();
+            } else {
+                showToast('Feedback submitted successfully!', 'success');
+            }
+
             setFeedback('');
-            setSelectedTags([]);
-            showToast('Feedback submitted successfully', 'success');
         } catch (error) {
             showToast('Failed to submit feedback', 'error');
+        } finally {
+            setIsSubmittingAndDone(false);
+        }
+    };
+
+    const handleReopen = async () => {
+        try {
+            await updateStatus({
+                shootId: shoot.id,
+                status: 'PENDING'
+            });
+            showToast('Review re-opened for feedback', 'info');
+        } catch (error) {
+            showToast('Failed to re-open review', 'error');
         }
     };
 
@@ -154,40 +150,50 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200">
-            <div className="w-full max-w-2xl bg-white dark:bg-[#1c1c1e] rounded-3xl border border-gray-200/90 dark:border-zinc-800 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-200">
+            <div className="w-full sm:max-w-xl bg-white dark:bg-[#1c1c1e] rounded-t-[28px] sm:rounded-3xl border-t sm:border border-gray-200/90 dark:border-zinc-800 shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden">
                 
+                {/* Mobile Drawer Drag Indicator */}
+                <div className="sm:hidden flex justify-center pt-2.5 pb-0.5 shrink-0">
+                    <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-zinc-700" />
+                </div>
+
                 {/* Modal Header */}
-                <div className="p-4 sm:p-5 border-b border-gray-100 dark:border-zinc-800 flex items-start justify-between gap-3 shrink-0 bg-gray-50/50 dark:bg-zinc-900/40">
+                <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-gray-100 dark:border-zinc-800 flex items-start justify-between gap-3 shrink-0 bg-gray-50/60 dark:bg-zinc-900/40">
                     <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                            {shoot.shootNumber && (
-                                <span className="font-mono font-bold text-xs bg-gray-200/80 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200 px-2 py-0.5 rounded-md">
-                                    #{shoot.shootNumber}
-                                </span>
-                            )}
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                            {shoot.shootNumber ? (
+                                <Link
+                                    href={`/shoots/${shoot.id}`}
+                                    className="font-mono font-bold text-xs bg-gray-200/80 hover:bg-primary/10 dark:bg-zinc-800 text-primary hover:text-primary hover:underline px-2 py-0.5 rounded-md inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                    title="Open Shoot Page"
+                                >
+                                    <span>#{shoot.shootNumber}</span>
+                                    <ArrowUpRight size={10} className="opacity-70" />
+                                </Link>
+                            ) : null}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                                 isDone 
                                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
                                     : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
                             }`}>
                                 {isDone ? (
                                     <>
-                                        <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />
+                                        <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
                                         <span>Review Done</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Clock size={12} className="text-amber-600 dark:text-amber-400" />
+                                        <Clock size={11} className="text-amber-600 dark:text-amber-400" />
                                         <span>Pending Review</span>
                                     </>
                                 )}
                             </span>
                         </div>
-                        <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate leading-snug" title={shoot.title}>
+                        <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate leading-snug" title={shoot.title}>
                             {shoot.title}
                         </h2>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                        <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                             {shoot.startTime ? format(parseISO(shoot.startTime), 'MMM d, yyyy') : ''} • {shoot.location || 'Location TBD'}
                         </p>
                     </div>
@@ -202,222 +208,180 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
                 </div>
 
                 {/* Modal Body */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 space-y-4 custom-scrollbar">
                     
-                    {/* Video URL Section */}
-                    <div className="rounded-2xl border border-gray-200/80 dark:border-zinc-800 bg-gray-50/70 dark:bg-zinc-900/30 p-3.5 sm:p-4">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                            <label className="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                                <Video size={14} className="text-primary" />
-                                Shoot Video Link
-                            </label>
-                            {shoot.reviewVideoUrl && !isEditingVideoUrl && (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsEditingVideoUrl(true)}
-                                    className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
-                                >
-                                    <Edit2 size={11} />
-                                    Change Link
-                                </button>
-                            )}
-                        </div>
-
-                        {isEditingVideoUrl ? (
-                            <div className="flex items-center gap-2">
-                                <div className="relative flex-1">
-                                    <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                    <input
-                                        type="url"
-                                        value={videoUrlInput}
-                                        onChange={(e) => setVideoUrlInput(e.target.value)}
-                                        placeholder="Paste YouTube, Vimeo, Google Drive, or video link..."
-                                        className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40"
-                                    />
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={handleSaveVideoUrl}
-                                    disabled={updatingVideoUrl}
-                                    className="px-3 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
-                                >
-                                    {updatingVideoUrl ? 'Saving...' : 'Save'}
-                                </button>
-                                {shoot.reviewVideoUrl && (
+                    {/* Optional Footage Location (Hidden by default until data team builds server paths) */}
+                    {SHOW_FOOTAGE_PATHS && (
+                        <div className="rounded-2xl border border-gray-200/80 dark:border-zinc-800 bg-gray-50/70 dark:bg-zinc-900/30 p-3 sm:p-3.5">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <label className="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Video size={14} className="text-primary" />
+                                    Footage Location
+                                </label>
+                                {shoot.reviewVideoUrl && !isEditingVideoUrl && (
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setVideoUrlInput(shoot.reviewVideoUrl || '');
-                                            setIsEditingVideoUrl(false);
-                                        }}
-                                        className="px-2.5 py-2 rounded-xl text-xs font-medium text-gray-500 hover:bg-gray-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                                        onClick={() => setIsEditingVideoUrl(true)}
+                                        className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
                                     >
-                                        Cancel
+                                        <Edit2 size={11} />
+                                        Change
                                     </button>
                                 )}
                             </div>
-                        ) : (
-                            <div className="flex items-center justify-between gap-3 bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-gray-200/80 dark:border-zinc-800">
-                                <a
-                                    href={shoot.reviewVideoUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline truncate flex items-center gap-1.5"
-                                >
-                                    <ExternalLink size={13} className="shrink-0" />
-                                    <span className="truncate">{shoot.reviewVideoUrl}</span>
-                                </a>
-                                <a
-                                    href={shoot.reviewVideoUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors shrink-0 flex items-center gap-1"
-                                >
-                                    <span>Watch</span>
-                                    <ExternalLink size={11} />
-                                </a>
-                            </div>
-                        )}
-                    </div>
 
-                    {/* Status Action Card for Managers/Admins */}
-                    <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                            {isEditingVideoUrl ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                        <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={videoUrlInput}
+                                            onChange={(e) => setVideoUrlInput(e.target.value)}
+                                            placeholder="Drive link OR server path..."
+                                            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveVideoUrl}
+                                        disabled={updatingVideoUrl}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+                                    >
+                                        {updatingVideoUrl ? 'Saving...' : 'Save'}
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between gap-2 bg-white dark:bg-zinc-900 p-2 rounded-xl border border-gray-200/80 dark:border-zinc-800">
+                                    <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate">
+                                        {shoot.reviewVideoUrl}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(shoot.reviewVideoUrl || '');
+                                            setHasCopiedPath(true);
+                                            showToast('Path copied to clipboard!', 'success');
+                                            setTimeout(() => setHasCopiedPath(false), 2000);
+                                        }}
+                                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-zinc-200 shrink-0 flex items-center gap-1 cursor-pointer"
+                                    >
+                                        {hasCopiedPath ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+                                        <span>{hasCopiedPath ? 'Copied' : 'Copy'}</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Status Summary Banner */}
+                    <div className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
                         isDone 
-                            ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/60' 
-                            : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-800/60'
+                            ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/50' 
+                            : 'bg-blue-50/60 dark:bg-blue-950/20 border-blue-200/80 dark:border-blue-800/50'
                     }`}>
                         <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm">
                                 {isDone ? (
                                     <span className="text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                                        <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
-                                        Review is Completed
+                                        <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400" />
+                                        Review Closed / Done
                                     </span>
                                 ) : (
-                                    <span className="text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                                        <Clock size={16} className="text-amber-600 dark:text-amber-400" />
-                                        Review is Pending
+                                    <span className="text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
+                                        <Clock size={15} className="text-blue-600 dark:text-blue-400" />
+                                        Review in Progress
                                     </span>
                                 )}
                             </div>
-                            <p className="text-[11px] sm:text-xs text-muted-foreground">
+                            <p className="text-[11px] text-gray-600 dark:text-gray-400">
                                 {isDone ? (
                                     shoot.reviewCompletedBy 
-                                        ? `Approved by ${shoot.reviewCompletedBy}${shoot.reviewCompletedAt ? ` on ${format(parseISO(shoot.reviewCompletedAt), 'MMM d, h:mm a')}` : ''}`
-                                        : 'Shoot video has been reviewed and verified.'
+                                        ? `Completed by ${shoot.reviewCompletedBy}${shoot.reviewCompletedAt ? ` on ${format(parseISO(shoot.reviewCompletedAt), 'MMM d, h:mm a')}` : ''}. Review is closed and locked.`
+                                        : 'Shoot review is marked as Done and locked.'
+                                ) : reviews.length === 0 ? (
+                                    'To complete this review, enter your rating and shoot feedback notes below.'
                                 ) : (
-                                    'Crew & managers can add feedback. Mark done when all quality criteria pass.'
+                                    `${reviews.length} feedback note${reviews.length === 1 ? '' : 's'} logged.`
                                 )}
                             </p>
                         </div>
 
-                        {canManageStatus && (
-                            <button
-                                type="button"
-                                onClick={handleToggleStatus}
-                                disabled={updatingStatus}
-                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer ${
-                                    isDone
-                                        ? 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100'
-                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-                                }`}
-                            >
-                                {updatingStatus ? (
-                                    <span className="flex items-center gap-1">
-                                        <RefreshCw size={12} className="animate-spin" />
-                                        Updating...
-                                    </span>
-                                ) : isDone ? (
-                                    'Re-open Review'
-                                ) : (
-                                    '✓ Mark as Review Done'
-                                )}
-                            </button>
+                        {/* Status Action Buttons (Reopen only for Admin/Manager when closed) */}
+                        {canManageStatus && isDone && (
+                            <div className="shrink-0 flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleReopen}
+                                    disabled={updatingStatus}
+                                    className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl text-xs font-semibold text-gray-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors cursor-pointer shadow-2xs"
+                                >
+                                    Reopen Review
+                                </button>
+                            </div>
                         )}
                     </div>
 
-                    {/* Submit New Review Form */}
-                    <form onSubmit={handleSubmitFeedback} className="rounded-2xl border border-gray-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-4 space-y-3.5">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                <Sparkles size={14} className="text-amber-500" />
-                                Add Your Feedback
-                            </span>
-
-                            {/* Star Rating Picker */}
-                            <div className="flex items-center gap-1">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                    <button
-                                        key={star}
-                                        type="button"
-                                        onClick={() => setRating(star)}
-                                        className="p-1 text-gray-300 dark:text-zinc-600 hover:scale-110 transition-transform cursor-pointer"
-                                        title={`${star} Star${star > 1 ? 's' : ''}`}
-                                    >
-                                        <Star 
-                                            size={18} 
-                                            className={star <= rating ? 'fill-amber-400 text-amber-400' : 'currentColor'} 
-                                        />
-                                    </button>
-                                ))}
-                                <span className="text-xs font-bold ml-1 text-amber-600 dark:text-amber-400">
-                                    {rating}/5
+                    {/* Add Feedback Form - Only available when review is active/open */}
+                    {isDone ? (
+                        <div className="rounded-2xl border border-gray-200/90 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/40 p-4 text-center space-y-1.5">
+                            <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">
+                                This review is closed. No additional feedback can be posted.
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                                {canManageStatus
+                                    ? 'Admins can click "Reopen Review" above if more feedback is needed.'
+                                    : 'Review has been finalized. Contact an admin if you need to reopen it.'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="rounded-2xl border border-gray-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-3.5 sm:p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                                    <MessageSquare size={14} className="text-primary" />
+                                    Add Your Feedback
                                 </span>
                             </div>
-                        </div>
 
-                        {/* Aspect Tags */}
-                        <div>
-                            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 block mb-1.5">
-                                Select Focus Areas (Optional):
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                                {REVIEW_TAGS.map(tag => {
-                                    const isSelected = selectedTags.includes(tag);
-                                    return (
-                                        <button
-                                            key={tag}
-                                            type="button"
-                                            onClick={() => toggleTag(tag)}
-                                            className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
-                                                isSelected
-                                                    ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
-                                                    : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:bg-gray-200'
-                                            }`}
-                                        >
-                                            {tag}
-                                        </button>
-                                    );
-                                })}
+                            {/* Feedback Textarea */}
+                            <div>
+                                <textarea
+                                    value={feedback}
+                                    onChange={(e) => setFeedback(e.target.value)}
+                                    placeholder="Enter your shoot feedback notes..."
+                                    rows={4}
+                                    className="w-full p-3 text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50/50 dark:bg-zinc-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+                                />
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => handleSubmitFeedback(false)}
+                                    disabled={submittingReview || !feedback.trim()}
+                                    className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                                >
+                                    <Send size={12} />
+                                    <span>{submittingReview && !isSubmittingAndDone ? 'Saving...' : 'Post Note Only'}</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleSubmitFeedback(true)}
+                                    disabled={submittingReview || !feedback.trim()}
+                                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                                    title="Submits feedback and closes this review as completed"
+                                >
+                                    <CheckCircle2 size={13} />
+                                    <span>{isSubmittingAndDone ? 'Completing...' : 'Submit & Mark Done ✓'}</span>
+                                </button>
                             </div>
                         </div>
-
-                        {/* Feedback Text Area */}
-                        <div>
-                            <textarea
-                                value={feedback}
-                                onChange={(e) => setFeedback(e.target.value)}
-                                rows={3}
-                                placeholder="Enter specific feedback, timestamp notes, edits required, audio/lighting observations..."
-                                className="w-full p-3 text-xs sm:text-sm rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50/50 dark:bg-zinc-950 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
-                            />
-                        </div>
-
-                        {/* Submit Button */}
-                        <div className="flex justify-end">
-                            <button
-                                type="submit"
-                                disabled={submittingReview || !feedback.trim()}
-                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
-                            >
-                                <Send size={12} />
-                                <span>{submittingReview ? 'Submitting...' : 'Post Feedback'}</span>
-                            </button>
-                        </div>
-                    </form>
+                    )}
 
                     {/* Feedback History List */}
-                    <div className="space-y-3 pt-2">
+                    <div className="space-y-2.5 pt-1">
                         <div className="flex items-center justify-between">
                             <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                                 <MessageSquare size={13} className="text-primary" />
@@ -432,57 +396,41 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
                             </div>
                         ) : reviews.length === 0 ? (
                             <div className="text-center py-6 border border-dashed border-gray-200 dark:border-zinc-800 rounded-2xl bg-gray-50/40 dark:bg-zinc-900/20">
-                                <Film size={28} className="mx-auto text-gray-300 dark:text-zinc-700 mb-1.5" />
+                                <Film size={26} className="mx-auto text-gray-300 dark:text-zinc-700 mb-1.5" />
                                 <p className="text-xs font-medium text-gray-600 dark:text-zinc-400">No feedback entries yet</p>
-                                <p className="text-[11px] text-gray-400 dark:text-zinc-500">Be the first to review this shoot video above</p>
+                                <p className="text-[11px] text-gray-400 dark:text-zinc-500">Be the first crew member to share feedback above</p>
                             </div>
                         ) : (
-                            <div className="space-y-2.5">
+                            <div className="space-y-2">
                                 {reviews.map((rev) => {
-                                    const canDelete = user?.id === rev.userId || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
+                                    const canDelete = !isDone && (user?.id === rev.userId || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || ''));
 
                                     return (
                                         <div
                                             key={rev.id}
-                                            className="p-3.5 rounded-2xl border border-gray-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2"
+                                            className="p-3 sm:p-3.5 rounded-2xl border border-gray-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2"
                                         >
                                             <div className="flex items-start justify-between gap-2">
-                                                <div className="flex items-center gap-2">
-                                                    {/* User Avatar Initial */}
-                                                    <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                                                         {(rev.userName || 'U').charAt(0).toUpperCase()}
                                                     </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <span className="text-xs font-bold text-gray-900 dark:text-white truncate">
                                                                 {rev.userName}
                                                             </span>
-                                                            <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${
-                                                                rev.userRole === 'ADMIN' || rev.userRole === 'SUPER_ADMIN'
-                                                                    ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-800'
-                                                                    : rev.userRole === 'MANAGER'
-                                                                    ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800'
-                                                                    : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700'
-                                                            }`}>
+                                                            <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.2 rounded border bg-gray-100 text-gray-600 border-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700">
                                                                 {rev.userRole}
                                                             </span>
                                                         </div>
-                                                        <span className="text-[10px] text-gray-400">
+                                                        <span className="text-[10px] text-gray-400 block">
                                                             {format(parseISO(rev.createdAt), 'MMM d, yyyy • h:mm a')}
                                                         </span>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex items-center gap-2">
-                                                    {/* Stars */}
-                                                    {rev.rating && (
-                                                        <div className="flex items-center gap-0.5 text-amber-500">
-                                                            {Array.from({ length: rev.rating }).map((_, i) => (
-                                                                <Star key={i} size={11} className="fill-amber-400 text-amber-400" />
-                                                            ))}
-                                                        </div>
-                                                    )}
-
+                                                <div className="flex items-center gap-2 shrink-0">
                                                     {canDelete && (
                                                         <button
                                                             onClick={() => handleDeleteReview(rev.id)}
@@ -495,7 +443,6 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
                                                 </div>
                                             </div>
 
-                                            {/* Tags */}
                                             {rev.tags && rev.tags.length > 0 && (
                                                 <div className="flex flex-wrap gap-1">
                                                     {rev.tags.map(t => (
@@ -509,7 +456,6 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
                                                 </div>
                                             )}
 
-                                            {/* Feedback Text */}
                                             <p className="text-xs text-gray-700 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">
                                                 {rev.feedback}
                                             </p>
@@ -523,11 +469,11 @@ export function ShootReviewModal({ isOpen, onClose, shoot, users }: ShootReviewM
                 </div>
 
                 {/* Modal Footer */}
-                <div className="p-3 sm:p-4 border-t border-gray-100 dark:border-zinc-800 flex justify-end gap-2 shrink-0 bg-gray-50/50 dark:bg-zinc-900/40">
+                <div className="px-4 py-3 sm:px-5 sm:py-3.5 border-t border-gray-100 dark:border-zinc-800 flex justify-end gap-2 shrink-0 bg-gray-50/60 dark:bg-zinc-900/40">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                        className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 transition-colors cursor-pointer text-center"
                     >
                         Close
                     </button>

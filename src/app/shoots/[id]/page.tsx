@@ -12,11 +12,13 @@ import { Button } from '@/components/Button';
 import { APP_CONFIG } from '@/lib/config';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
-import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal, ChevronDown, ExternalLink, Calendar, MapPin, User as UserIcon, FileText, Globe, Layers, MessageSquare, Clock, Send, RefreshCw, Check, X, Pencil, Search, AlertTriangle, CheckCircle, Info, ShieldCheck, Filter, Wrench, Package, Star, Sparkles, UserCheck, Lock, Pin, PinOff, ArrowUpDown, Share2, Bold, Italic, List, Link2, Quote, History, Phone, Film } from 'lucide-react';
+import { ArrowLeft, Edit, XCircle, Plus, Trash2, IndianRupee, Receipt, Home, Plane, Video, Users, MoreHorizontal, ChevronDown, ExternalLink, Calendar, MapPin, User as UserIcon, FileText, Globe, Layers, MessageSquare, Clock, Send, RefreshCw, Check, X, Pencil, Search, AlertTriangle, CheckCircle, Info, ShieldCheck, Filter, Wrench, Package, Star, Sparkles, UserCheck, Lock, Pin, PinOff, ArrowUpDown, Share2, Bold, Italic, List, Link2, Quote, History, Phone, Film, HardDrive, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/lib/toast-context';
 import { ShootReviewModal } from '@/components/ShootReviewModal';
-import { useShootReviews } from '@/hooks/useShootReviews';
+import { useShootReviews, useAddToReview, useRemoveFromReview, useUpdateShootReviewStatus } from '@/hooks/useShootReviews';
+import { getShootReviewStage, isServerStoragePath } from '@/lib/shootReviewWorkflow';
+
 
 import { useShoot, useShoots, useSaveShoot } from '@/hooks/useShoots';
 import { useLeaves } from '@/hooks/useLeaves';
@@ -79,6 +81,46 @@ export default function ShootDetailsPage() {
     // Shoot Reviews
     const { data: shootReviews = [] } = useShootReviews(shoot?.id || '');
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+    const { mutateAsync: addToReview, isPending: isAddingToReview } = useAddToReview();
+    const { mutateAsync: removeFromReview, isPending: isRemovingFromReview } = useRemoveFromReview();
+    const { mutateAsync: updateReviewStatus, isPending: isUpdatingReviewStatus } = useUpdateShootReviewStatus();
+    const isTogglingReview = isAddingToReview || isRemovingFromReview || isUpdatingReviewStatus;
+
+    const handleAddToReview = async () => {
+        if (!shoot) return;
+        try {
+            await addToReview(shoot.id);
+            showToast('Shoot added to Reviews', 'success');
+        } catch (error) {
+            console.error('Failed to add shoot to review:', error);
+            showToast('Failed to add shoot to review', 'error');
+        }
+    };
+
+    const handleRemoveFromReview = async () => {
+        if (!shoot) return;
+        try {
+            await removeFromReview(shoot.id);
+            showToast('Removed from Shoot Reviews', 'info');
+        } catch (error) {
+            console.error('Failed to remove shoot from review:', error);
+            showToast('Failed to remove shoot from review', 'error');
+        }
+    };
+
+    const handleReopenReview = async () => {
+        if (!shoot) return;
+        try {
+            await updateReviewStatus({
+                shootId: shoot.id,
+                status: 'PENDING'
+            });
+            showToast('Review re-opened for feedback', 'info');
+        } catch (error) {
+            console.error('Failed to re-open review:', error);
+            showToast('Failed to re-open review', 'error');
+        }
+    };
 
     const loading = shootLoading || assignmentsLoading || usersLoading;
     const [isSyncing, setIsSyncing] = useState(false);
@@ -1704,20 +1746,72 @@ export default function ShootDetailsPage() {
                         {/* Right: Sleek Compact Action Toolbar */}
                         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
                             {/* Shoot Review Button */}
-                            {(!pageDepartment || pageDepartment.slug === 'vp' || pageDepartment.enabledFeatures.includes('shoot_reviews')) && (
-                                <button
-                                    onClick={() => setIsReviewModalOpen(true)}
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-xs whitespace-nowrap cursor-pointer ${
-                                        shoot.reviewStatus === 'DONE'
-                                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                            : 'bg-amber-500 hover:bg-amber-600 text-black'
-                                    }`}
-                                    title="Video Output Review"
-                                >
-                                    <Film size={13} />
-                                    <span>{shoot.reviewStatus === 'DONE' ? 'Review Done' : 'Review Video'}</span>
-                                </button>
-                            )}
+                            {(!pageDepartment || pageDepartment.slug === 'vp' || pageDepartment.enabledFeatures.includes('shoot_reviews')) && !shoot.isNonShoot && (() => {
+                                const isClosed = shoot.status === 'CLOSED';
+                                const isReviewRequired = Boolean(shoot.reviewRequired);
+                                const isDone = shoot.reviewStatus === 'DONE';
+                                const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '');
+
+                                if (!isClosed) return null;
+
+                                if (!isReviewRequired) {
+                                    if (!isAdmin) return null;
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddToReview}
+                                            disabled={isTogglingReview}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-xs whitespace-nowrap cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 disabled:opacity-50"
+                                            title="Add this closed shoot to Shoot Reviews for team feedback"
+                                        >
+                                            {isTogglingReview ? (
+                                                <Loader2 size={13} className="animate-spin text-blue-600" />
+                                            ) : (
+                                                <Star size={13} className="text-blue-600 fill-blue-600/30" />
+                                            )}
+                                            <span>Add to Review</span>
+                                        </button>
+                                    );
+                                }
+
+                                return (
+                                    <div className="inline-flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsReviewModalOpen(true)}
+                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-xs whitespace-nowrap cursor-pointer ${
+                                                isDone
+                                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+                                            }`}
+                                            title={isDone ? 'Review completed & approved' : 'Review in progress. Click to review & add feedback'}
+                                        >
+                                            {isDone ? (
+                                                <>
+                                                    <CheckCircle2 size={13} />
+                                                    <span>Review Done</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Star size={13} className="fill-white text-white" />
+                                                    <span>Review & Feedback</span>
+                                                </>
+                                            )}
+                                        </button>
+                                        {isAdmin && (
+                                            <button
+                                                type="button"
+                                                onClick={handleRemoveFromReview}
+                                                disabled={isTogglingReview}
+                                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                                                title="Remove from Shoot Reviews"
+                                            >
+                                                <X size={13} />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                             {/* WhatsApp */}
                             <button
@@ -1880,10 +1974,15 @@ export default function ShootDetailsPage() {
                                 </button>
                             </div>
                         ) : (
-                            <div className="flex items-center gap-2 group/title">
+                            <div className="flex items-center gap-2 group/title flex-wrap">
                                 <h1 className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight break-words">
                                     {shoot.title}
                                 </h1>
+                                {shoot.isNonShoot && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shadow-2xs">
+                                        Non-Shoot Activity
+                                    </span>
+                                )}
                                 {canEdit && (
                                     <button
                                         onClick={() => startEditSection('title')}
@@ -2877,80 +2976,150 @@ export default function ShootDetailsPage() {
                 {/* Right Column (5 cols): Linked Transactions, Project Expenses & Shoot Overview */}
                 <div className="lg:col-span-5 space-y-3.5 sm:space-y-4">
                     {/* Video & Output Review Card (Video Publication) */}
-                    {(!pageDepartment || pageDepartment.slug === 'vp' || pageDepartment.enabledFeatures.includes('shoot_reviews')) && (
-                        <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3">
-                            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
-                                <div className="flex items-center gap-2">
-                                    <Film size={16} className="text-primary" />
-                                    <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">Video & Output Review</h2>
-                                </div>
-                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    shoot.reviewStatus === 'DONE'
-                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                                }`}>
-                                    {shoot.reviewStatus === 'DONE' ? (
-                                        <>
-                                            <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
-                                            <span>Review Done</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Clock size={11} className="text-amber-600 dark:text-amber-400" />
-                                            <span>Pending Review</span>
-                                        </>
-                                    )}
-                                </span>
-                            </div>
+                    {(!pageDepartment || pageDepartment.slug === 'vp' || pageDepartment.enabledFeatures.includes('shoot_reviews')) && !shoot.isNonShoot && (() => {
+                        const isClosed = shoot.status === 'CLOSED';
+                        const isReviewRequired = Boolean(shoot.reviewRequired);
+                        const isDone = shoot.reviewStatus === 'DONE';
+                        const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'MANAGER'].includes(user?.role || '');
 
-                            {/* Video link preview / player */}
-                            {shoot.reviewVideoUrl ? (
-                                <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50/80 dark:bg-[#252528] border border-gray-200/70 dark:border-gray-800/80">
-                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                                            <Video size={14} />
-                                        </div>
-                                        <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
-                                            {shoot.reviewVideoUrl}
-                                        </span>
+                        return (
+                            <div className="rounded-2xl p-3.5 sm:p-4 bg-white dark:bg-[#1c1c1e] border border-gray-200/80 dark:border-gray-800 shadow-xs space-y-3">
+                                <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
+                                    <div className="flex items-center gap-2">
+                                        <Film size={16} className="text-primary" />
+                                        <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">Quality & Crew Review</h2>
                                     </div>
-                                    <a
-                                        href={shoot.reviewVideoUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors shrink-0 ml-2 shadow-2xs"
-                                    >
-                                        <span>Watch</span>
-                                        <ExternalLink size={11} />
-                                    </a>
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                        !isClosed
+                                            ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                                            : !isReviewRequired
+                                            ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                                            : isDone
+                                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                                            : 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30'
+                                    }`}>
+                                        {!isClosed ? (
+                                            <>
+                                                <Lock size={10} />
+                                                <span>Awaiting Close</span>
+                                            </>
+                                        ) : !isReviewRequired ? (
+                                            <>
+                                                <span>No Review Assigned</span>
+                                            </>
+                                        ) : isDone ? (
+                                            <>
+                                                <CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" />
+                                                <span>Review Done</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Clock size={11} className="text-blue-600 dark:text-blue-400" />
+                                                <span>In Review</span>
+                                            </>
+                                        )}
+                                    </span>
                                 </div>
-                            ) : (
-                                <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
-                                    <span>No video link added yet</span>
-                                    <button
-                                        onClick={() => setIsReviewModalOpen(true)}
-                                        className="text-xs font-bold text-primary hover:underline cursor-pointer"
-                                    >
-                                        + Add Video Link
-                                    </button>
-                                </div>
-                            )}
 
-                            {/* Review status details & Action */}
-                            <div className="flex items-center justify-between pt-1">
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                    {shootReviews.length} feedback entr{shootReviews.length === 1 ? 'y' : 'ies'}
-                                </span>
-                                <button
-                                    onClick={() => setIsReviewModalOpen(true)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
-                                >
-                                    <MessageSquare size={13} />
-                                    <span>Open Review & Feedback</span>
-                                </button>
+                                {!isClosed ? (
+                                    /* 1. Shoot is not closed yet */
+                                    <div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/40 border border-gray-200 dark:border-zinc-800 text-xs text-muted-foreground flex items-center gap-2">
+                                        <Info size={14} className="shrink-0 text-muted-foreground" />
+                                        <span>Quality review can only be assigned once this shoot wraps and is marked as <strong>CLOSED</strong>.</span>
+                                    </div>
+                                ) : !isReviewRequired ? (
+                                    /* 2. Shoot is closed, but review not requested */
+                                    <div className="p-3 rounded-xl bg-gray-50/70 dark:bg-zinc-900/40 border border-dashed border-gray-200 dark:border-zinc-800 text-xs space-y-2.5">
+                                        <p className="text-muted-foreground">
+                                            This shoot has not been added to Shoot Reviews.
+                                        </p>
+                                        {isAdmin && (
+                                            <div className="flex items-center justify-between pt-1">
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    Admin decides which shoots require review.
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddToReview}
+                                                    disabled={isTogglingReview}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+                                                >
+                                                    {isTogglingReview ? (
+                                                        <Loader2 size={13} className="animate-spin" />
+                                                    ) : (
+                                                        <MessageSquare size={13} />
+                                                    )}
+                                                    <span>Add to Review</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    /* 3. Shoot is closed and added to review */
+                                    <div className="space-y-2.5">
+                                        <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 text-xs space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5 font-bold text-blue-900 dark:text-blue-300">
+                                                    <MessageSquare size={13} className="text-blue-600" />
+                                                    <span>{isDone ? 'Review Completed' : 'Added to Shoot Reviews'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {isDone && isAdmin && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleReopenReview}
+                                                            disabled={isTogglingReview}
+                                                            className="text-[11px] text-amber-600 hover:text-amber-800 dark:text-amber-400 font-semibold hover:underline cursor-pointer disabled:opacity-50"
+                                                        >
+                                                            Reopen Review
+                                                        </button>
+                                                    )}
+                                                    {isAdmin && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleRemoveFromReview}
+                                                            disabled={isTogglingReview}
+                                                            className="text-[11px] text-red-600 hover:text-red-800 dark:text-red-400 font-semibold hover:underline cursor-pointer disabled:opacity-50"
+                                                        >
+                                                            Remove from Review
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {shoot.reviewAssignedToName && (
+                                                <div className="flex items-center gap-1.5 text-blue-800 dark:text-blue-300 pt-0.5">
+                                                    <UserIcon size={12} className="text-blue-600" />
+                                                    <span>Assigned Reviewer: {shoot.reviewAssignedToName}</span>
+                                                </div>
+                                            )}
+
+                                            {shoot.reviewNotes && (
+                                                <p className="text-[11px] text-muted-foreground italic border-t border-blue-200/40 dark:border-blue-800/30 pt-1 mt-1">
+                                                    Guidance: &ldquo;{shoot.reviewNotes}&rdquo;
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Status & Action */}
+                                        <div className="flex items-center justify-between pt-1">
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                {shootReviews.length} feedback note{shootReviews.length === 1 ? '' : 's'}
+                                                {shoot.reviewCompletedBy && isDone && ` • Completed by ${shoot.reviewCompletedBy}`}
+                                            </span>
+                                            <button
+                                                onClick={() => setIsReviewModalOpen(true)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+                                            >
+                                                <MessageSquare size={13} />
+                                                <span>{isDone ? 'View Review' : shootReviews.length > 0 ? 'View & Add Feedback' : 'Add Feedback'}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
 
                     {/* Google Calendar Banner (if not synced and confirmed) */}
                     {!shoot.googleEventId && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role || '') && shoot.status === 'CONFIRMED' && (
