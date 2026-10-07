@@ -872,26 +872,38 @@ class StorageService {
 
     // Shoots
     async getShoots(departmentId?: string | null): Promise<Shoot[]> {
-        let query = supabase
-            .from('shoots')
-            .select('*')
-            .order('start_time', { ascending: true });
+        const PAGE_SIZE = 1000;
+        let allShootsData: any[] = [];
+        let from = 0;
 
-        if (departmentId) {
-            query = query.or(`department_id.eq.${departmentId},department_id.is.null`);
-        }
+        while (true) {
+            let query = supabase
+                .from('shoots')
+                .select('*')
+                .order('start_time', { ascending: true })
+                .range(from, from + PAGE_SIZE - 1);
 
-        const { data, error } = await query;
+            if (departmentId) {
+                query = query.or(`department_id.eq.${departmentId},department_id.is.null`);
+            }
 
-        if (error) {
-            console.error('Error fetching shoots:', error);
-            return [];
+            const { data, error } = await query;
+
+            if (error) {
+                console.error('Error fetching shoots:', error);
+                break;
+            }
+
+            if (!data || data.length === 0) break;
+            allShootsData.push(...data);
+            if (data.length < PAGE_SIZE) break;
+            from += PAGE_SIZE;
         }
 
         // Fetch fallback review metadata to merge
         const reviewStore = await this._getFallbackReviewStore();
 
-        return data.map((s: any) => {
+        return allShootsData.map((s: any) => {
             const meta = reviewStore.shootMeta[s.id];
             const reviewRequired = meta?.reviewRequired !== undefined 
                 ? Boolean(meta.reviewRequired) 
@@ -1235,20 +1247,63 @@ class StorageService {
 
     // Assignments
     async getAssignments(departmentId?: string | null): Promise<Assignment[]> {
-        let query = supabase.from('assignments').select('*');
+        const PAGE_SIZE = 1000;
+        let allRows: any[] = [];
+        let from = 0;
 
-        if (departmentId) {
-            query = query.eq('department_id', departmentId);
+        while (true) {
+            let query = supabase
+                .from('assignments')
+                .select('*')
+                .range(from, from + PAGE_SIZE - 1);
+
+            if (departmentId) {
+                query = query.eq('department_id', departmentId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+                console.error('Error fetching assignments:', error);
+                break;
+            }
+
+            if (!data || data.length === 0) break;
+            allRows.push(...data);
+            if (data.length < PAGE_SIZE) break;
+            from += PAGE_SIZE;
         }
 
-        const { data, error } = await query;
+        return allRows.map((a: {
+            id: string;
+            shoot_id: string;
+            user_id: string;
+            role: string;
+            status: Assignment['status'];
+            department_id?: string;
+        }) => ({
+            id: a.id,
+            shootId: a.shoot_id,
+            userId: a.user_id,
+            role: a.role,
+            status: a.status,
+            departmentId: a.department_id
+        })) as Assignment[];
+    }
+
+    async getAssignmentsByShoot(shootId: string): Promise<Assignment[]> {
+        if (!shootId) return [];
+        const { data, error } = await supabase
+            .from('assignments')
+            .select('*')
+            .eq('shoot_id', shootId);
 
         if (error) {
-            console.error('Error fetching assignments:', error);
+            console.error('Error fetching assignments by shoot:', error);
             return [];
         }
 
-        return data.map((a: {
+        return (data || []).map((a: {
             id: string;
             shoot_id: string;
             user_id: string;
@@ -1266,6 +1321,7 @@ class StorageService {
     }
 
     async saveAssignments(assignments: Assignment[]): Promise<void> {
+        if (!assignments || assignments.length === 0) return;
         const dbAssignments = assignments.map(a => ({
             id: a.id,
             shoot_id: a.shootId,
@@ -1279,7 +1335,10 @@ class StorageService {
             .from('assignments')
             .upsert(dbAssignments);
 
-        if (error) console.error('Error saving assignments:', error);
+        if (error) {
+            console.error('Error saving assignments:', error);
+            throw error;
+        }
     }
 
     async deleteAssignment(id: string): Promise<void> {
@@ -1288,7 +1347,10 @@ class StorageService {
             .delete()
             .eq('id', id);
 
-        if (error) console.error('Error deleting assignment:', error);
+        if (error) {
+            console.error('Error deleting assignment:', error);
+            throw error;
+        }
     }
 
     // Planner draft assignments

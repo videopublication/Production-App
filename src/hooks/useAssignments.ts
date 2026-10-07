@@ -25,6 +25,16 @@ export function useAssignments() {
     });
 }
 
+export function useShootAssignments(shootId?: string | null) {
+    const { user } = useAuth();
+
+    return useQuery({
+        queryKey: ASSIGNMENT_KEYS.byShoot(shootId || ''),
+        queryFn: () => shootId ? storage.getAssignmentsByShoot(shootId) : Promise.resolve([]),
+        enabled: !!user && !!shootId,
+    });
+}
+
 export function useSaveAssignments() {
     const queryClient = useQueryClient();
 

@@ -185,7 +185,8 @@ function CrewAssignmentModalInner({
     const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds || []);
     const [selectedScopes, setSelectedScopes] = useState<Record<string, string>>(initialScopes || {});
     const [memberCustomHours, setMemberCustomHours] = useState<Record<string, CustomTiming>>(initialCustomHours || {});
-    const [inchargeId, setInchargeId] = useState<string>(initialInchargeId || '');
+    const derivedInitialIncharge = initialInchargeId || Object.keys(initialRoles).find(k => initialRoles[k] === 'Incharge') || '';
+    const [inchargeId, setInchargeId] = useState<string>(derivedInitialIncharge);
     const [memberDays, setMemberDays] = useState<Record<string, string[]>>({});
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<'ALL' | 'ASSIGNED' | 'AVAILABLE' | 'BUSY' | 'ON_LEAVE'>('ALL');
@@ -823,7 +824,7 @@ function CrewAssignmentModalInner({
             const rolesRecord: Record<string, string> = {};
             selectedIds.forEach(id => {
                 const u = users.find(x => x.id === id);
-                rolesRecord[id] = u?.role || 'Crew';
+                rolesRecord[id] = id === inchargeId ? 'Incharge' : (u?.role || 'Crew');
             });
             await onSave(selectedIds, rolesRecord, selectedScopes, inchargeId, memberDays, memberCustomHours, pendingSwaps);
             onClose();

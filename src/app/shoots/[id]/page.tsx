@@ -22,7 +22,7 @@ import { getShootReviewStage, isServerStoragePath } from '@/lib/shootReviewWorkf
 
 import { useShoot, useShoots, useSaveShoot } from '@/hooks/useShoots';
 import { useLeaves } from '@/hooks/useLeaves';
-import { useAssignments } from '@/hooks/useAssignments';
+import { useAssignments, useShootAssignments } from '@/hooks/useAssignments';
 import { useUsers } from '@/hooks/useUsers';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useQueryClient } from '@tanstack/react-query';
@@ -69,6 +69,7 @@ export default function ShootDetailsPage() {
     const { data: allShoots = [] } = useShoots();
     const { leaves: allLeaves = [] } = useLeaves();
     const { data: allAssignments = [], isLoading: assignmentsLoading } = useAssignments();
+    const { data: shootDirectAssignments = [] } = useShootAssignments(shoot?.id || id);
     const { data: users = [], isLoading: usersLoading } = useUsers();
     const { data: allTransactions = [], isLoading: transactionsLoading } = useTransactions();
     const pageDepartment = allDepartments.find(dept => dept.id === shoot?.departmentId) || department;
@@ -580,7 +581,18 @@ export default function ShootDetailsPage() {
     const [isSavingCrew, setIsSavingCrew] = useState(false);
 
     // Derived State
-    const liveAssignments = shoot ? allAssignments.filter(a => a.shootId === shoot.id) : [];
+    const liveAssignments = useMemo(() => {
+        if (!shoot) return [];
+        const seen = new Set<string>();
+        const result: Assignment[] = [];
+        for (const a of [...shootDirectAssignments, ...allAssignments.filter(a => a.shootId === shoot.id)]) {
+            if (a.shootId === shoot.id && a.userId && !seen.has(a.userId)) {
+                seen.add(a.userId);
+                result.push(a);
+            }
+        }
+        return result;
+    }, [shoot, allAssignments, shootDirectAssignments]);
     const assignments = shoot?.status === 'DRAFT' ? shootDraftAssignments : liveAssignments;
     const assignmentsForMessage: Assignment[] = assignments.map(a => (
         'status' in a ? a : {
@@ -1086,7 +1098,7 @@ export default function ShootDetailsPage() {
             }
         }
 
-        const currentAssignments = allAssignments.filter(a => a.shootId === shoot.id);
+        const currentAssignments = liveAssignments;
         const currentDraftAssignments = shootDraftAssignments.filter(a => a.shootId === shoot.id);
 
         if (shoot.status === 'DRAFT') {
@@ -1107,7 +1119,9 @@ export default function ShootDetailsPage() {
 
             const draftsToSave: PlannerDraftAssignment[] = crewIds.map(userId => {
                 const existing = currentDraftAssignments.find(a => a.userId === userId);
-                const assignedRole = rolesMap[userId] || (users.find(u => u.id === userId)?.role || 'Crew');
+                const assignedRole = userId === inchargeId
+                    ? 'Incharge'
+                    : (rolesMap[userId] || (users.find(u => u.id === userId)?.role || 'Crew'));
                 return {
                     id: existing?.id || crypto.randomUUID(),
                     shootId: shoot.id,
@@ -1134,7 +1148,9 @@ export default function ShootDetailsPage() {
 
             const toAdd = crewIds.filter(userId => !existingUserIds.includes(userId));
             const newAssignments = toAdd.map(userId => {
-                const assignedRole = rolesMap[userId] || (users.find(u => u.id === userId)?.role || 'Crew');
+                const assignedRole = userId === inchargeId
+                    ? 'Incharge'
+                    : (rolesMap[userId] || (users.find(u => u.id === userId)?.role || 'Crew'));
                 return {
                     id: crypto.randomUUID(),
                     shootId: shoot.id,
@@ -1149,7 +1165,15 @@ export default function ShootDetailsPage() {
             const assignmentsToUpdate: Assignment[] = [];
             for (const a of currentAssignments) {
                 if (crewIds.includes(a.userId)) {
-                    const targetRole = rolesMap[a.userId] || (users.find(u => u.id === a.userId)?.role || 'Crew');
+                    let targetRole = a.userId === inchargeId
+                        ? 'Incharge'
+                        : (rolesMap[a.userId] || (users.find(u => u.id === a.userId)?.role || 'Crew'));
+
+                    // If a user was previously Incharge but is NOT the selected incharge now, revert them to their base user role
+                    if (a.userId !== inchargeId && targetRole === 'Incharge') {
+                        targetRole = users.find(u => u.id === a.userId)?.role || 'Crew';
+                    }
+
                     if (a.role !== targetRole) {
                         assignmentsToUpdate.push({
                             ...a,
@@ -1168,7 +1192,13 @@ export default function ShootDetailsPage() {
             }
 
             // Save Assignment Segments with proper daily hours & custom timing calculation
-            const allCurrentAndNew = [...currentAssignments.filter(a => crewIds.includes(a.userId)), ...newAssignments];
+            const updatedCurrentAssignments = currentAssignments
+                .filter(a => crewIds.includes(a.userId))
+                .map(a => {
+                    const updated = assignmentsToUpdate.find(u => u.id === a.id);
+                    return updated || a;
+                });
+            const allCurrentAndNew = [...updatedCurrentAssignments, ...newAssignments];
             
             // Always clean up existing segments first
             if (allCurrentAndNew.length > 0) {
@@ -1693,12 +1723,12 @@ export default function ShootDetailsPage() {
         <div className="max-w-[1600px] mx-auto w-full space-y-3.5 sm:space-y-4 animate-fade-in pb-12 p-2.5 sm:p-4">
             {/* Unified Hero Header & Quick Specs Card */}
             <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-xs relative z-20">
-                {/* Main Header Row: Title & Action Toolbar */}
-                <div className="p-3.5 sm:p-4 border-b border-gray-100 dark:border-gray-800 space-y-2.5">
-                    {/* Top Row: Metadata Badges (Left) & Actions (Right) */}
-                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                {/* Main Header Row: Badges, Status, Title & Action Toolbar */}
+                <div className="p-3.5 sm:p-4 border-b border-gray-100 dark:border-gray-800 space-y-3">
+                    {/* Top Row: Metadata Badges (Left) & Status (Right) */}
+                    <div className="flex items-center justify-between gap-2">
                         {/* Left: Metadata badges */}
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
                             {shoot.shootNumber && (
                                 <span className="font-mono font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 px-2 py-0.5 rounded-md shrink-0">
                                     #{shoot.shootNumber}
@@ -1726,25 +1756,158 @@ export default function ShootDetailsPage() {
                                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-md transition-colors border border-primary/20 shrink-0"
                                     title="View in Google Calendar"
                                 >
-                                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" aria-hidden="true">
                                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                                         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                                         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z" />
                                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                                     </svg>
-                                    <span>Calendar Synced</span>
+                                    <span className="hidden sm:inline">Calendar Synced</span>
                                 </a>
+                            )}
+
+                            {shoot.isNonShoot && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shadow-2xs shrink-0">
+                                    Non-Shoot
+                                </span>
                             )}
 
                             <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
 
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                            <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">
                                 Added by <strong className="font-semibold text-gray-800 dark:text-gray-200">{getUserName(shoot.createdBy)}</strong>
                             </span>
                         </div>
 
-                        {/* Right: Sleek Compact Action Toolbar */}
-                        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                        {/* Right: Status Dropdown / Badge */}
+                        <div className="relative shrink-0" ref={actionStatusMenuRef}>
+                            {canEdit ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsActionStatusMenuOpen(!isActionStatusMenuOpen)}
+                                    disabled={isUpdatingStatus}
+                                    style={{
+                                        backgroundColor: currentStatusStyle.bg,
+                                        color: currentStatusStyle.text,
+                                        borderColor: currentStatusStyle.border,
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap border transition-all shadow-2xs hover:opacity-90 active:scale-95 cursor-pointer"
+                                    title="Change shoot status"
+                                >
+                                    {isUpdatingStatus ? (
+                                        <Loader2 size={13} className="animate-spin" />
+                                    ) : (
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: currentStatusStyle.text }} />
+                                    )}
+                                    <span>{currentStatusStyle.label || shoot.status.replace(/_/g, ' ')}</span>
+                                    <ChevronDown size={13} className={`transition-transform duration-200 opacity-70 ${isActionStatusMenuOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                            ) : (
+                                <div
+                                    style={{
+                                        backgroundColor: currentStatusStyle.bg,
+                                        color: currentStatusStyle.text,
+                                        borderColor: currentStatusStyle.border,
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold text-xs whitespace-nowrap border shrink-0"
+                                >
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: currentStatusStyle.text }} />
+                                    <span>{currentStatusStyle.label || shoot.status.replace(/_/g, ' ')}</span>
+                                </div>
+                            )}
+
+                            {canEdit && isActionStatusMenuOpen && (
+                                <div className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-[60] p-1.5 max-h-[80vh] overflow-y-auto scrollbar-thin">
+                                    <div className="px-3 py-1.5 mb-1 border-b border-gray-100 dark:border-gray-800">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Change Status</span>
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        {STATUS_OPTIONS.map((opt) => {
+                                            const isActive = shoot.status === opt.key || (opt.key === 'READY_FOR_SHOOT' && shoot.status === 'CONFIRMED');
+                                            return (
+                                                <button
+                                                    key={opt.key}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsActionStatusMenuOpen(false);
+                                                        handleUpdateStatus(opt.key);
+                                                    }}
+                                                    className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                                        isActive
+                                                            ? 'bg-primary/10 text-primary font-bold'
+                                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: opt.text }} />
+                                                        <p className="font-semibold truncate text-xs">{opt.label}</p>
+                                                    </div>
+                                                    {isActive && <CheckCircle2 size={14} className="text-primary shrink-0 ml-1" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Middle & Bottom: Title (Left) + Actions Toolbar (Right on desktop, dedicated row on mobile) */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-0.5">
+                        {/* Title Section */}
+                        <div className="min-w-0 flex-1">
+                            {editingSection === 'title' ? (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={formTitle}
+                                        onChange={(e) => setFormTitle(e.target.value)}
+                                        className="flex-1 text-base sm:text-xl font-bold rounded-xl border border-primary/50 bg-white dark:bg-zinc-800 px-3 py-1.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40 shadow-xs"
+                                        placeholder="Shoot Title"
+                                        autoFocus
+                                    />
+                                    <button
+                                        onClick={() => saveEditSection('title')}
+                                        disabled={isSavingField}
+                                        className="p-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shrink-0 shadow-xs cursor-pointer"
+                                        title="Save Title"
+                                    >
+                                        {isSavingField ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                                    </button>
+                                    <button
+                                        onClick={cancelEditSection}
+                                        disabled={isSavingField}
+                                        className="p-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer"
+                                        title="Cancel"
+                                    >
+                                        <X size={15} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="flex items-center gap-2 group/title flex-wrap">
+                                        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight break-words">
+                                            {shoot.title}
+                                        </h1>
+                                        {canEdit && (
+                                            <button
+                                                onClick={() => startEditSection('title')}
+                                                className="opacity-70 hover:opacity-100 sm:opacity-0 sm:group-hover/title:opacity-100 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all shrink-0 cursor-pointer"
+                                                title="Edit Title"
+                                            >
+                                                <Pencil size={13} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 sm:hidden mt-0.5">
+                                        Added by <strong className="font-semibold text-gray-700 dark:text-gray-300">{getUserName(shoot.createdBy)}</strong>
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Action Toolbar (Horizontal scroll on mobile, flex-wrap on desktop) */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1 sm:mx-0 sm:px-0 sm:flex-wrap shrink-0">
                             {/* Shoot Review Button */}
                             {(!pageDepartment || pageDepartment.slug === 'vp' || pageDepartment.enabledFeatures.includes('shoot_reviews')) && !shoot.isNonShoot && (() => {
                                 const isClosed = shoot.status === 'CLOSED';
@@ -1761,7 +1924,7 @@ export default function ShootDetailsPage() {
                                             type="button"
                                             onClick={handleAddToReview}
                                             disabled={isTogglingReview}
-                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-xs whitespace-nowrap cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-xs whitespace-nowrap cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 disabled:opacity-50 shrink-0"
                                             title="Add this closed shoot to Shoot Reviews for team feedback"
                                         >
                                             {isTogglingReview ? (
@@ -1775,7 +1938,7 @@ export default function ShootDetailsPage() {
                                 }
 
                                 return (
-                                    <div className="inline-flex items-center gap-1">
+                                    <div className="inline-flex items-center gap-1 shrink-0">
                                         <button
                                             type="button"
                                             onClick={() => setIsReviewModalOpen(true)}
@@ -1822,7 +1985,7 @@ export default function ShootDetailsPage() {
                                     }
                                     setIsWhatsAppModalOpen(true);
                                 }}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-white text-xs whitespace-nowrap cursor-pointer ${
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all shadow-xs active:scale-95 text-white text-xs whitespace-nowrap cursor-pointer shrink-0 ${
                                     assignmentsForMessage.length === 0
                                         ? 'bg-gray-400 dark:bg-gray-600 hover:bg-gray-500'
                                         : 'bg-[#25D366] hover:bg-[#22bf5b]'
@@ -1857,7 +2020,7 @@ export default function ShootDetailsPage() {
                                         console.error('Failed to copy', err);
                                     }
                                 }}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-medium transition-all shadow-2xs bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 text-xs whitespace-nowrap cursor-pointer ${
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-medium transition-all shadow-2xs bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 text-xs whitespace-nowrap cursor-pointer shrink-0 ${
                                     assignmentsForMessage.length === 0
                                         ? 'text-gray-400 dark:text-gray-500 hover:text-amber-500'
                                         : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800'
@@ -1870,408 +2033,296 @@ export default function ShootDetailsPage() {
                                 <span>Copy Info</span>
                             </button>
 
+                            {/* In-Place Quick Edit Button */}
                             {canEdit && (
-                                <>
-                                    {/* In-Place Quick Edit Button */}
-                                    <button
-                                        onClick={openQuickEditModal}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-medium transition-all shadow-2xs bg-white dark:bg-zinc-800/80 hover:bg-gray-50 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-200 text-xs whitespace-nowrap cursor-pointer"
-                                        title="Quick Edit Shoot Details"
-                                    >
-                                        <Edit className="w-3.5 h-3.5 text-gray-500" />
-                                        <span>Edit</span>
-                                    </button>
-
-                                    {/* Status Change Dropdown */}
-                                    <div className="relative" ref={actionStatusMenuRef}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsActionStatusMenuOpen(!isActionStatusMenuOpen)}
-                                            disabled={isUpdatingStatus}
-                                            style={{
-                                                backgroundColor: currentStatusStyle.bg,
-                                                color: currentStatusStyle.text,
-                                                borderColor: currentStatusStyle.border,
-                                            }}
-                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap border transition-all shadow-2xs hover:opacity-90 active:scale-95 cursor-pointer"
-                                            title="Change shoot status"
-                                        >
-                                            {isUpdatingStatus ? (
-                                                <Loader2 size={13} className="animate-spin" />
-                                            ) : (
-                                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: currentStatusStyle.text }} />
-                                            )}
-                                            <span>{currentStatusStyle.label || shoot.status.replace(/_/g, ' ')}</span>
-                                            <ChevronDown size={13} className={`transition-transform duration-200 opacity-70 ${isActionStatusMenuOpen ? 'rotate-180' : ''}`} />
-                                        </button>
-
-                                        {isActionStatusMenuOpen && (
-                                            <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-[60] p-1.5 max-h-[80vh] overflow-y-auto scrollbar-thin">
-                                                <div className="px-3 py-1.5 mb-1 border-b border-gray-100 dark:border-gray-800">
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Change Status</span>
-                                                </div>
-                                                <div className="space-y-0.5">
-                                                    {STATUS_OPTIONS.map((opt) => {
-                                                        const isActive = shoot.status === opt.key || (opt.key === 'READY_FOR_SHOOT' && shoot.status === 'CONFIRMED');
-                                                        return (
-                                                            <button
-                                                                key={opt.key}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setIsActionStatusMenuOpen(false);
-                                                                    handleUpdateStatus(opt.key);
-                                                                }}
-                                                                className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                                                                    isActive
-                                                                        ? 'bg-primary/10 text-primary font-bold'
-                                                                        : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200'
-                                                                }`}
-                                                            >
-                                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: opt.text }} />
-                                                                    <p className="font-semibold truncate text-xs">{opt.label}</p>
-                                                                </div>
-                                                                {isActive && <CheckCircle2 size={14} className="text-primary shrink-0 ml-1" />}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
+                                <button
+                                    onClick={openQuickEditModal}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-medium transition-all shadow-2xs bg-white dark:bg-zinc-800/80 hover:bg-gray-50 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-200 text-xs whitespace-nowrap cursor-pointer shrink-0"
+                                    title="Quick Edit Shoot Details"
+                                >
+                                    <Edit className="w-3.5 h-3.5 text-gray-500" />
+                                    <span>Edit</span>
+                                </button>
                             )}
                         </div>
-                    </div>
-
-                    {/* Title Section */}
-                    <div>
-                        {editingSection === 'title' ? (
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="text"
-                                    value={formTitle}
-                                    onChange={(e) => setFormTitle(e.target.value)}
-                                    className="flex-1 text-base sm:text-xl font-bold rounded-xl border border-primary/50 bg-white dark:bg-zinc-800 px-3 py-1.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40 shadow-xs"
-                                    placeholder="Shoot Title"
-                                    autoFocus
-                                />
-                                <button
-                                    onClick={() => saveEditSection('title')}
-                                    disabled={isSavingField}
-                                    className="p-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shrink-0 shadow-xs cursor-pointer"
-                                    title="Save Title"
-                                >
-                                    {isSavingField ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                                </button>
-                                <button
-                                    onClick={cancelEditSection}
-                                    disabled={isSavingField}
-                                    className="p-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer"
-                                    title="Cancel"
-                                >
-                                    <X size={15} />
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2 group/title flex-wrap">
-                                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight break-words">
-                                    {shoot.title}
-                                </h1>
-                                {shoot.isNonShoot && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shadow-2xs">
-                                        Non-Shoot Activity
-                                    </span>
-                                )}
-                                {canEdit && (
-                                    <button
-                                        onClick={() => startEditSection('title')}
-                                        className="opacity-0 group-hover/title:opacity-100 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all shrink-0 cursor-pointer"
-                                        title="Edit Title"
-                                    >
-                                        <Pencil size={13} />
-                                    </button>
-                                )}
-                            </div>
-                        )}
                     </div>
                 </div>
 
                 {/* 4-Tile Quick Info Grid (Card layout, high density, no truncation) */}
-                <div className="p-3 sm:p-3.5 bg-gray-50/70 dark:bg-zinc-900/50 rounded-b-2xl border-t border-gray-100 dark:border-gray-800/60">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                <div className="p-2.5 sm:p-3.5 bg-gray-50/70 dark:bg-zinc-900/50 rounded-b-2xl border-t border-gray-100 dark:border-gray-800/60">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                         {/* 1. Schedule Tile */}
-                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 relative group/tile hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all shadow-2xs">
-                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-                                <Calendar size={16} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1 mb-0.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Schedule</span>
-                                    {canEdit && editingSection !== 'schedule' && (
-                                        <button
-                                            onClick={() => startEditSection('schedule')}
-                                            className="opacity-0 group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
-                                            title="Edit Schedule Date & Time"
-                                        >
-                                            <Pencil size={11} />
-                                        </button>
-                                    )}
+                        <div className={`bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 relative group/tile hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all shadow-2xs ${editingSection === 'schedule' ? 'col-span-2 sm:col-span-1 lg:col-span-1' : ''}`}>
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className="w-6 h-6 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                                        <Calendar size={13} />
+                                    </div>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 truncate">Schedule</span>
                                 </div>
+                                {canEdit && editingSection !== 'schedule' && (
+                                    <button
+                                        onClick={() => startEditSection('schedule')}
+                                        className="opacity-70 hover:opacity-100 sm:opacity-0 sm:group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer shrink-0"
+                                        title="Edit Schedule Date & Time"
+                                    >
+                                        <Pencil size={11} />
+                                    </button>
+                                )}
+                            </div>
 
-                                {editingSection === 'schedule' ? (
-                                    <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
-                                        <div className="space-y-0.5">
-                                            <label className="text-[9px] font-bold text-gray-500 uppercase">Start Date & Time</label>
-                                            <div className="grid grid-cols-2 gap-1">
-                                                <input
-                                                    type="date"
-                                                    value={formStartDate}
-                                                    onChange={(e) => setFormStartDate(e.target.value)}
-                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
-                                                />
-                                                <input
-                                                    type="time"
-                                                    value={formStartTime}
-                                                    onChange={(e) => setFormStartTime(e.target.value)}
-                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <label className="text-[9px] font-bold text-gray-500 uppercase">End Date & Time</label>
-                                            <div className="grid grid-cols-2 gap-1">
-                                                <input
-                                                    type="date"
-                                                    value={formEndDate}
-                                                    onChange={(e) => setFormEndDate(e.target.value)}
-                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
-                                                />
-                                                <input
-                                                    type="time"
-                                                    value={formEndTime}
-                                                    onChange={(e) => setFormEndTime(e.target.value)}
-                                                    className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-1 pt-0.5">
-                                            <button
-                                                onClick={() => saveEditSection('schedule')}
-                                                disabled={isSavingField}
-                                                className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
-                                            >
-                                                {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                                                Save
-                                            </button>
-                                            <button
-                                                onClick={cancelEditSection}
-                                                disabled={isSavingField}
-                                                className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
-                                            >
-                                                Cancel
-                                            </button>
+                            {editingSection === 'schedule' ? (
+                                <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
+                                    <div className="space-y-0.5">
+                                        <label className="text-[9px] font-bold text-gray-500 uppercase">Start Date & Time</label>
+                                        <div className="grid grid-cols-2 gap-1">
+                                            <input
+                                                type="date"
+                                                value={formStartDate}
+                                                onChange={(e) => setFormStartDate(e.target.value)}
+                                                className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                            />
+                                            <input
+                                                type="time"
+                                                value={formStartTime}
+                                                onChange={(e) => setFormStartTime(e.target.value)}
+                                                className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                            />
                                         </div>
                                     </div>
-                                ) : (
-                                    <>
-                                        <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight" title={(() => {
+                                    <div className="space-y-0.5">
+                                        <label className="text-[9px] font-bold text-gray-500 uppercase">End Date & Time</label>
+                                        <div className="grid grid-cols-2 gap-1">
+                                            <input
+                                                type="date"
+                                                value={formEndDate}
+                                                onChange={(e) => setFormEndDate(e.target.value)}
+                                                className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                            />
+                                            <input
+                                                type="time"
+                                                value={formEndTime}
+                                                onChange={(e) => setFormEndTime(e.target.value)}
+                                                className="text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 pt-0.5">
+                                        <button
+                                            onClick={() => saveEditSection('schedule')}
+                                            disabled={isSavingField}
+                                            className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
+                                        >
+                                            {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                                            Save
+                                        </button>
+                                        <button
+                                            onClick={cancelEditSection}
+                                            disabled={isSavingField}
+                                            className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={(() => {
+                                        if (!shoot.startTime) return 'Date Not Set';
+                                        const startDate = parseISO(shoot.startTime);
+                                        const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
+                                        if (endDate && !isSameDay(startDate, endDate)) {
+                                            return `${format(startDate, 'MMM d, yyyy')} – ${format(endDate, 'MMM d, yyyy')}`;
+                                        }
+                                        return format(startDate, 'MMM d, yyyy');
+                                    })()}>
+                                        {(() => {
                                             if (!shoot.startTime) return 'Date Not Set';
                                             const startDate = parseISO(shoot.startTime);
                                             const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
                                             if (endDate && !isSameDay(startDate, endDate)) {
+                                                if (isSameMonth(startDate, endDate) && isSameYear(startDate, endDate)) {
+                                                    return `${format(startDate, 'MMM d')} – ${format(endDate, 'd, yyyy')}`;
+                                                }
+                                                if (isSameYear(startDate, endDate)) {
+                                                    return `${format(startDate, 'MMM d')} – ${format(endDate, 'MMM d, yyyy')}`;
+                                                }
                                                 return `${format(startDate, 'MMM d, yyyy')} – ${format(endDate, 'MMM d, yyyy')}`;
                                             }
                                             return format(startDate, 'MMM d, yyyy');
-                                        })()}>
-                                            {(() => {
-                                                if (!shoot.startTime) return 'Date Not Set';
-                                                const startDate = parseISO(shoot.startTime);
-                                                const endDate = shoot.endTime ? parseISO(shoot.endTime) : null;
-                                                if (endDate && !isSameDay(startDate, endDate)) {
-                                                    if (isSameMonth(startDate, endDate) && isSameYear(startDate, endDate)) {
-                                                        return `${format(startDate, 'MMM d')} – ${format(endDate, 'd, yyyy')}`;
-                                                    }
-                                                    if (isSameYear(startDate, endDate)) {
-                                                        return `${format(startDate, 'MMM d')} – ${format(endDate, 'MMM d, yyyy')}`;
-                                                    }
-                                                    return `${format(startDate, 'MMM d, yyyy')} – ${format(endDate, 'MMM d, yyyy')}`;
-                                                }
-                                                return format(startDate, 'MMM d, yyyy');
-                                            })()}
-                                        </p>
-                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
-                                            {(() => {
-                                                if (!shoot.startTime) return 'Time not set';
-                                                const start = format(parseISO(shoot.startTime), 'h:mm a');
-                                                const end = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : '';
-                                                return end ? `${start} – ${end}` : start;
-                                            })()}
-                                        </p>
-                                    </>
-                                )}
-                            </div>
+                                        })()}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate">
+                                        {(() => {
+                                            if (!shoot.startTime) return 'Time not set';
+                                            const start = format(parseISO(shoot.startTime), 'h:mm a');
+                                            const end = shoot.endTime ? format(parseISO(shoot.endTime), 'h:mm a') : '';
+                                            return end ? `${start} – ${end}` : start;
+                                        })()}
+                                    </p>
+                                </>
+                            )}
                         </div>
 
                         {/* 2. Location Tile */}
-                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 relative group/tile hover:border-purple-400/50 dark:hover:border-purple-500/40 transition-all shadow-2xs">
-                            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
-                                <MapPin size={16} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1 mb-0.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Location</span>
-                                    {canEdit && editingSection !== 'location' && (
-                                        <button
-                                            onClick={() => startEditSection('location')}
-                                            className="opacity-0 group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
-                                            title="Edit Location"
-                                        >
-                                            <Pencil size={11} />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {editingSection === 'location' ? (
-                                    <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
-                                        <div>
-                                            <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
-                                                Event Location
-                                            </label>
-                                            <select
-                                                value={formEventLocation}
-                                                onChange={(e) => setFormEventLocation(e.target.value)}
-                                                className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white cursor-pointer"
-                                            >
-                                                {EVENT_LOCATION_OPTIONS.map((opt) => (
-                                                    <option key={opt} value={opt}>{opt}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
-                                                Event Venue
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formEventVenue}
-                                                onChange={(e) => setFormEventVenue(e.target.value)}
-                                                placeholder="e.g. Adiyogi, Spanda Hall..."
-                                                className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-1 pt-0.5">
-                                            <button
-                                                onClick={() => saveEditSection('location')}
-                                                disabled={isSavingField}
-                                                className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
-                                            >
-                                                {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                                                Save
-                                            </button>
-                                            <button
-                                                onClick={cancelEditSection}
-                                                disabled={isSavingField}
-                                                className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
+                        <div className={`bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 relative group/tile hover:border-purple-400/50 dark:hover:border-purple-500/40 transition-all shadow-2xs ${editingSection === 'location' ? 'col-span-2 sm:col-span-1 lg:col-span-1' : ''}`}>
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className="w-6 h-6 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                                        <MapPin size={13} />
                                     </div>
-                                ) : (
-                                    <>
-                                        <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={shoot.location || 'Location TBD'}>
-                                            {shoot.location ? shoot.location.split('•')[0].trim() : 'Location TBD'}
-                                        </p>
-                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate" title={shoot.location && shoot.location.includes('•') ? shoot.location.split('•').slice(1).join('•').trim() : (jiraDetails?.eventVenue || jiraDetails?.indoorOutdoor || 'Venue TBD')}>
-                                            {shoot.location && shoot.location.includes('•') ? shoot.location.split('•').slice(1).join('•').trim() : (jiraDetails?.eventVenue || jiraDetails?.indoorOutdoor || 'Venue TBD')}
-                                            {jiraDetails?.indoorOutdoor && !shoot.location?.includes(jiraDetails.indoorOutdoor) ? ` • ${jiraDetails.indoorOutdoor}` : ''}
-                                        </p>
-                                    </>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 truncate">Location</span>
+                                </div>
+                                {canEdit && editingSection !== 'location' && (
+                                    <button
+                                        onClick={() => startEditSection('location')}
+                                        className="opacity-70 hover:opacity-100 sm:opacity-0 sm:group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer shrink-0"
+                                        title="Edit Location"
+                                    >
+                                        <Pencil size={11} />
+                                    </button>
                                 )}
                             </div>
+
+                            {editingSection === 'location' ? (
+                                <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
+                                    <div>
+                                        <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
+                                            Event Location
+                                        </label>
+                                        <select
+                                            value={formEventLocation}
+                                            onChange={(e) => setFormEventLocation(e.target.value)}
+                                            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white cursor-pointer"
+                                        >
+                                            {EVENT_LOCATION_OPTIONS.map((opt) => (
+                                                <option key={opt} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">
+                                            Event Venue
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formEventVenue}
+                                            onChange={(e) => setFormEventVenue(e.target.value)}
+                                            placeholder="e.g. Adiyogi, Spanda Hall..."
+                                            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1 pt-0.5">
+                                        <button
+                                            onClick={() => saveEditSection('location')}
+                                            disabled={isSavingField}
+                                            className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
+                                        >
+                                            {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                                            Save
+                                        </button>
+                                        <button
+                                            onClick={cancelEditSection}
+                                            disabled={isSavingField}
+                                            className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={shoot.location || 'Location TBD'}>
+                                        {shoot.location ? shoot.location.split('•')[0].trim() : 'Location TBD'}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium truncate" title={shoot.location && shoot.location.includes('•') ? shoot.location.split('•').slice(1).join('•').trim() : (jiraDetails?.eventVenue || jiraDetails?.indoorOutdoor || 'Venue TBD')}>
+                                        {shoot.location && shoot.location.includes('•') ? shoot.location.split('•').slice(1).join('•').trim() : (jiraDetails?.eventVenue || jiraDetails?.indoorOutdoor || 'Venue TBD')}
+                                        {jiraDetails?.indoorOutdoor && !shoot.location?.includes(jiraDetails.indoorOutdoor) ? ` • ${jiraDetails.indoorOutdoor}` : ''}
+                                    </p>
+                                </>
+                            )}
                         </div>
 
                         {/* 3. Point of Contact Tile */}
-                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 relative group/tile hover:border-emerald-400/50 dark:hover:border-emerald-500/40 transition-all shadow-2xs">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                                <UserIcon size={16} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1 mb-0.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">Point of Contact</span>
-                                    {canEdit && editingSection !== 'poc' && (
-                                        <button
-                                            onClick={() => startEditSection('poc')}
-                                            className="opacity-0 group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer"
-                                            title="Edit Point of Contact"
-                                        >
-                                            <Pencil size={11} />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {editingSection === 'poc' ? (
-                                    <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
-                                        <input
-                                            type="text"
-                                            value={formPocName}
-                                            onChange={(e) => setFormPocName(e.target.value)}
-                                            placeholder="POC Name"
-                                            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={formPocContact}
-                                            onChange={(e) => setFormPocContact(e.target.value)}
-                                            placeholder="POC Contact Number"
-                                            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
-                                        />
-                                        <div className="flex items-center gap-1 pt-0.5">
-                                            <button
-                                                onClick={() => saveEditSection('poc')}
-                                                disabled={isSavingField}
-                                                className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
-                                            >
-                                                {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                                                Save
-                                            </button>
-                                            <button
-                                                onClick={cancelEditSection}
-                                                disabled={isSavingField}
-                                                className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
+                        <div className={`bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 relative group/tile hover:border-emerald-400/50 dark:hover:border-emerald-500/40 transition-all shadow-2xs ${editingSection === 'poc' ? 'col-span-2 sm:col-span-1 lg:col-span-1' : ''}`}>
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className="w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                        <UserIcon size={13} />
                                     </div>
-                                ) : (
-                                    <>
-                                        <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={shoot.pocName || jiraDetails?.pocName || 'No POC'}>
-                                            {shoot.pocName || jiraDetails?.pocName || 'No POC'}
-                                        </p>
-                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title={shoot.pocContact || jiraDetails?.pocContact || '-'}>
-                                            {shoot.pocContact || jiraDetails?.pocContact || '-'}
-                                        </p>
-                                    </>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 truncate">Contact (POC)</span>
+                                </div>
+                                {canEdit && editingSection !== 'poc' && (
+                                    <button
+                                        onClick={() => startEditSection('poc')}
+                                        className="opacity-70 hover:opacity-100 sm:opacity-0 sm:group-hover/tile:opacity-100 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all cursor-pointer shrink-0"
+                                        title="Edit Point of Contact"
+                                    >
+                                        <Pencil size={11} />
+                                    </button>
                                 )}
                             </div>
+
+                            {editingSection === 'poc' ? (
+                                <div className="space-y-1.5 mt-1 animate-in fade-in duration-150">
+                                    <input
+                                        type="text"
+                                        value={formPocName}
+                                        onChange={(e) => setFormPocName(e.target.value)}
+                                        placeholder="POC Name"
+                                        className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={formPocContact}
+                                        onChange={(e) => setFormPocContact(e.target.value)}
+                                        placeholder="POC Contact Number"
+                                        className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-zinc-800 p-1 text-gray-900 dark:text-white"
+                                    />
+                                    <div className="flex items-center gap-1 pt-0.5">
+                                        <button
+                                            onClick={() => saveEditSection('poc')}
+                                            disabled={isSavingField}
+                                            className="px-2 py-0.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 flex items-center gap-1 cursor-pointer"
+                                        >
+                                            {isSavingField ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                                            Save
+                                        </button>
+                                        <button
+                                            onClick={cancelEditSection}
+                                            disabled={isSavingField}
+                                            className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={shoot.pocName || jiraDetails?.pocName || 'No POC'}>
+                                        {shoot.pocName || jiraDetails?.pocName || 'No POC'}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title={shoot.pocContact || jiraDetails?.pocContact || '-'}>
+                                        {shoot.pocContact || jiraDetails?.pocContact || '-'}
+                                    </p>
+                                </>
+                            )}
                         </div>
 
                         {/* 4. Reporter Details Tile */}
-                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 hover:border-indigo-400/50 dark:hover:border-indigo-500/40 transition-all shadow-2xs">
-                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-                                <UserCheck size={16} />
+                        <div className="bg-white dark:bg-zinc-800/80 border border-gray-200/70 dark:border-zinc-700/60 rounded-xl p-2.5 sm:p-3 hover:border-indigo-400/50 dark:hover:border-indigo-500/40 transition-all shadow-2xs">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                                <div className="w-6 h-6 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                    <UserCheck size={13} />
+                                </div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 truncate">Reporter</span>
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block mb-0.5">Reporter Details</span>
-                                <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={jiraDetails?.reporter || 'Not Available'}>
-                                    {jiraDetails?.reporter || 'Not Available'}
-                                </p>
-                                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={jiraDetails?.reporterEmail || (jiraDetails?.assignee ? `Assignee: ${jiraDetails.assignee}` : '') || '-'}>
-                                    {jiraDetails?.reporterEmail || (jiraDetails?.assignee ? `Assignee: ${jiraDetails.assignee}` : '-')}
-                                </p>
-                            </div>
+                            <p className="font-bold text-xs sm:text-[13px] text-gray-900 dark:text-white leading-tight truncate" title={jiraDetails?.reporter || 'Not Available'}>
+                                {jiraDetails?.reporter || 'Not Available'}
+                            </p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={jiraDetails?.reporterEmail || (jiraDetails?.assignee ? `Assignee: ${jiraDetails.assignee}` : '') || '-'}>
+                                {jiraDetails?.reporterEmail || (jiraDetails?.assignee ? `Assignee: ${jiraDetails.assignee}` : '-')}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -2295,7 +2346,8 @@ export default function ShootDetailsPage() {
                             <div className="flex items-center gap-2">
                                 <MessageSquare size={15} className="text-primary" />
                                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                    Requester Notes & Requirements
+                                    <span className="sm:hidden">Requester Notes</span>
+                                    <span className="hidden sm:inline">Requester Notes & Requirements</span>
                                 </span>
                             </div>
                             {canEdit && editingSection !== 'description' && (
@@ -2452,7 +2504,7 @@ export default function ShootDetailsPage() {
                                                 {canEdit && (
                                                     <button
                                                         onClick={() => handleRemoveSingleCrew(assignment.id, assignedUser.name)}
-                                                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all cursor-pointer"
+                                                        className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all cursor-pointer"
                                                         title={`Remove ${assignedUser.name}`}
                                                     >
                                                         <Trash2 size={12} />
