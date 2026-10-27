@@ -584,6 +584,7 @@ export default function ReturnsPage() {
 
                 // Recording the condition is what lets the transaction close — it is the key
                 // every closing path checks. Managers record it themselves on verification.
+                const matchedTxnForReturn = relevantTransactions.find(t => t.items.includes(id)); if (matchedTxnForReturn) patchFor(matchedTxnForReturn);
                 if (disposition.conditionToRecord) {
                     const txn = relevantTransactions.find(t => t.items.includes(id));
                     if (txn) patchFor(txn).conditions[id] = disposition.conditionToRecord;
@@ -684,6 +685,8 @@ export default function ReturnsPage() {
                 if (Object.keys(patch.conditions).length > 0) updates.postReturnConditions = nextConditions;
                 if (patch.manualItems) updates.manualItems = patch.manualItems;
                 if (patch.dataReport) updates.dataReport = patch.dataReport;
+                const allCrewReturned = txn.items.every(itemId => selectedItems.includes(itemId) || nextConditions[itemId] !== undefined || allItems.find(i => i.id === itemId)?.status !== 'CHECKED_OUT') && (nextManualItems || []).every(m => !m.returnRequired || m.status !== 'OUT');
+                if (allCrewReturned && !txn.timestampIn) updates.timestampIn = now;
                 if (complete) {
                     updates.status = 'CLOSED';
                     updates.timestampIn = now;

@@ -132,7 +132,7 @@ export function useVerifyReturnedItem() {
                 const updates: Partial<Transaction> = { postReturnConditions: nextConditions };
                 if (complete) {
                     updates.status = 'CLOSED';
-                    updates.timestampIn = now;
+                    updates.timestampIn = txn.timestampIn || now;
                 }
                 await storage.updateTransaction(txn.id, updates);
 

@@ -574,7 +574,7 @@ export default function VerificationPage() {
 
                 if (allItemsReturned) {
                     txnUpdates.status = 'CLOSED';
-                    txnUpdates.timestampIn = new Date().toISOString();
+                    txnUpdates.timestampIn = relatedTransaction.timestampIn || new Date().toISOString();
                 }
 
                 await storage.updateTransaction(relatedTransaction.id, txnUpdates);
@@ -639,7 +639,7 @@ export default function VerificationPage() {
 
             if (inventoryComplete && areManualItemsComplete(updatedManualItems)) {
                 txnUpdates.status = 'CLOSED';
-                txnUpdates.timestampIn = new Date().toISOString();
+                txnUpdates.timestampIn = row.transaction.timestampIn || new Date().toISOString();
             }
 
             await storage.updateTransaction(row.transaction.id, txnUpdates);

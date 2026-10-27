@@ -401,13 +401,13 @@ class StorageService {
             return {
                 ...t,
                 userId: t.user_id,
-                timestampOut: t.timestamp_out,
+                timestampOut: t.timestamp_out, timestampIn: t.timestamp_in || undefined,
                 preCheckoutConditions: t.pre_checkout_conditions,
                 postReturnConditions: t.post_return_conditions,
                 additionalUsers: t.additional_users,
                 notes: decodedNotes.notes,
                 manualItems: decodedNotes.manualItems,
-                shootId: t.shoot_id,
+                shootId: t.shoot_id, departmentId: t.department_id,
                 dataReport: t.data_report || undefined
             };
         }) as Transaction[];
@@ -463,13 +463,13 @@ class StorageService {
         return {
             ...t,
             userId: t.user_id,
-            timestampOut: t.timestamp_out,
+            timestampOut: t.timestamp_out, timestampIn: t.timestamp_in || undefined,
             preCheckoutConditions: t.pre_checkout_conditions,
             postReturnConditions: t.post_return_conditions,
             additionalUsers: t.additional_users,
             notes: decodedNotes.notes,
             manualItems: decodedNotes.manualItems,
-            shootId: t.shoot_id,
+            shootId: t.shoot_id, departmentId: t.department_id,
             dataReport: t.data_report || undefined
         } as Transaction;
     }
@@ -479,7 +479,7 @@ class StorageService {
             id: transaction.id,
             user_id: transaction.userId,
             items: transaction.items,
-            timestamp_out: transaction.timestampOut,
+            timestamp_out: transaction.timestampOut, ...(transaction.timestampIn ? { timestamp_in: transaction.timestampIn } : {}),
             project: transaction.project,
             shoot_id: transaction.shootId || null,
             pre_checkout_conditions: transaction.preCheckoutConditions,
@@ -566,7 +566,15 @@ class StorageService {
     // `console.error(msg, error)` prints an unhelpful `{}` and the real cause — a denied RLS
     // policy, a bad column, a range past the end of the table — never surfaces. Pull the
     // fields out explicitly wherever a query failure is only logged.
-    async getLogs(page?: number, limit?: number, search?: string, departmentId?: string | null, actionFilter?: string): Promise<Log[]> {
+    async getLogs(
+        page?: number,
+        limit?: number,
+        search?: string,
+        departmentId?: string | null,
+        actionFilter?: string,
+        fromDate?: string,
+        toDate?: string
+    ): Promise<Log[]> {
         // No `count: 'exact'` here. The count was never consumed — this returns Log[] and the
         // page paginates on `rows.length < limit` — but asking for it made Postgres evaluate
         // the whole table, and the logs RLS policy runs an EXISTS subquery against `users` for
@@ -583,6 +591,14 @@ class StorageService {
 
         if (actionFilter) {
             query = query.eq('action', actionFilter);
+        }
+
+        if (fromDate) {
+            query = query.gte('timestamp', fromDate);
+        }
+
+        if (toDate) {
+            query = query.lte('timestamp', `${toDate}T23:59:59.999Z`);
         }
 
         if (search) {
